@@ -336,7 +336,7 @@ the setting for one start of the game. It has priority over the file.
 | `debug.gpu_flush_draws` | `-1` | `HALO_GPU_FLUSH_DRAWS` | Flush the GPU's pipeline every this many draws. `-1`: every 3 on Intel graphics with Mesa's driver, which can otherwise hang in the game's long runs of small draws and reset the desktop's graphics too. `0`: never. |
 | `display.interpolation` | `true` | `HALO_INTERPOLATION` | `true`: one frame for each refresh of the display. `false`: 30 frames each second, as on the Xbox. Refer to "Frame rate". |
 | `display.direct_camera` | `true` | `HALO_DIRECT_CAMERA` | `true`: in first person, on foot, the view points where the player aims in each frame, not where the last tick left it. Refer to "Frame rate". |
-| `display.fov` | `0.0` | `HALO_FOV` | The first-person view's field of view on foot, in degrees across at 16:9, from 20 to 150. `0`: the stock view. Refer to "Field of view". |
+| `display.fov` | `0.0` | `HALO_FOV` | The view's field of view on foot, in vehicles and after death, in degrees across at 16:9, from 20 to 150. `0`: the stock view. Refer to "Field of view". |
 | `display.viewmodel_fov` | `0.0` | `HALO_VIEWMODEL_FOV` | The first-person weapon's and hands' field of view, in degrees across at 16:9, from 20 to 150. `0`: the weapon's stock view, also when `display.fov` widens the world. Refer to "Field of view". |
 | `display.viewmodel_visible` | `true` | `HALO_VIEWMODEL_VISIBLE` | `true`: the first-person weapon, hands and what is attached to them are drawn. `false`: they are not; firing, animation, sound and lights go on, and other players' models are drawn. |
 | `display.viewmodel_shield` | `false` | `HALO_VIEWMODEL_SHIELD` | `true`: the energy shield's flare (its hits, its charging, its fall) is drawn on the first-person arms too, as on the body, with the unit's own shield shader, kept closer to the arms than to the body. The stock game draws it on the body only. |
@@ -502,8 +502,12 @@ keeps the stock view. `config.toml` takes any angle from 20 to 150.
 
 - An angle is across the screen at 16:9. Another shape keeps the same
   angle up and down, as the stock view does.
-- The field of view applies on foot in first person only. Vehicles, death,
-  cinematics and scripted cameras keep their own view.
+- The field of view applies on foot in first person, in a vehicle's seat
+  (the camera behind the vehicle) and after death. The seat's and death's
+  cameras are 70 degrees, as the stock first-person view is, and widen in
+  the same ratio, so that the view keeps its width, and its transitions,
+  from one to the other. Cinematics and scripted cameras keep their own
+  view.
 - A scope's zoom levels keep their stock view: the extra width fades out as
   the zoom comes in. A view narrower than the stock one narrows the zoom
   too.
