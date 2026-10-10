@@ -43,9 +43,13 @@ unsigned long config_changes(void);
 static real reticle_scales[MAXIMUM_LOCAL_PLAYERS];
 static real authored_vertical[MAXIMUM_LOCAL_PLAYERS];
 
-/* the view's vertical angle for display.fov: the game's own in a vehicle,
-dead, in a cinematic, a scripted camera or a view the director holds, and
-at a scope's full zoom; between, the zoom's own transition */
+/* the view's vertical angle for display.fov: the game's own in a cinematic,
+a scripted camera, a view the director holds, the other neutral cameras
+(flying, editor, bored), and at a scope's full zoom; between, the zoom's own
+transition. A vehicle's seat (the following camera) and the dead camera are
+authored at 70 degrees, the stock first-person view, and widen by the same
+ratio as it: the same width as on foot, and the observer's transitions
+between them (a seat, a death, a respawn) stay continuous */
 static real render_fov_adjust(short local_player_index, real native_vertical_field_of_view)
 {
 	static boolean initialized;
@@ -54,6 +58,7 @@ static real render_fov_adjust(short local_player_index, real native_vertical_fie
 	unsigned long changes = config_changes();
 	long unit_index, weapon_index;
 	struct unit_datum *unit;
+	director_perspective perspective;
 	real unzoomed_angle, unzoomed_tangent, native_tangent, adjusted_tangent;
 
 	if (!initialized || read_at != changes)
@@ -67,24 +72,34 @@ static real render_fov_adjust(short local_player_index, real native_vertical_fie
 	}
 	if (!requested_tangent || local_player_index < 0 || local_player_index >= MAXIMUM_LOCAL_PLAYERS ||
 		cinematic_in_progress() || (director_camera_scripted && *director_camera_scripted) ||
-		director_get_perspective(local_player_index) != _director_perspective_first_person ||
-		director_inhibited_facing(local_player_index))
-	{
-		return native_vertical_field_of_view;
-	}
-	unit_index = player_control_get_unit_index(local_player_index);
-	if (unit_index == NONE)
-		return native_vertical_field_of_view;
-	unit = unit_try_and_get(unit_index);
-	if (!unit || unit->object.parent_object_index != NONE || TEST_FLAG(unit->object.damage_flags, _object_dead_bit))
-		return native_vertical_field_of_view;
-
-	unzoomed_angle = unit_definition_get(unit->definition_index)->unit.camera_field_of_view;
-	if (!(unzoomed_angle >= 0.001f && unzoomed_angle <= _pi / 2.0f) ||
+		director_inhibited_facing(local_player_index) ||
 		!(native_vertical_field_of_view > 0.0f && native_vertical_field_of_view < _pi))
 	{
 		return native_vertical_field_of_view;
 	}
+	perspective = director_get_perspective(local_player_index);
+	unit_index = player_control_get_unit_index(local_player_index);
+	unit = unit_index == NONE ? NULL : unit_try_and_get(unit_index);
+	if (perspective != _director_perspective_first_person || !unit ||
+		unit->object.parent_object_index != NONE || TEST_FLAG(unit->object.damage_flags, _object_dead_bit))
+	{
+		real stock_tangent;
+
+		/* (a seat, the dead camera, and the frames between them and the
+		first-person camera; a neutral camera with a living unit is another) */
+		if (perspective == _director_perspective_scripted ||
+			(perspective == _director_perspective_neutral && unit_index != NONE))
+		{
+			return native_vertical_field_of_view;
+		}
+		stock_tangent = 0.75f * render_camera_get_adjusted_field_of_view_tangent(DEGREES_TO_RADIANS(70.f));
+		adjusted_tangent = tanf(native_vertical_field_of_view * 0.5f) * (requested_tangent / stock_tangent);
+		return 2.0f * atanf(adjusted_tangent);
+	}
+
+	unzoomed_angle = unit_definition_get(unit->definition_index)->unit.camera_field_of_view;
+	if (!(unzoomed_angle >= 0.001f && unzoomed_angle <= _pi / 2.0f))
+		return native_vertical_field_of_view;
 	unzoomed_tangent = 0.75f * render_camera_get_adjusted_field_of_view_tangent(unzoomed_angle);
 	native_tangent = tanf(native_vertical_field_of_view * 0.5f);
 	if (requested_tangent < unzoomed_tangent)
