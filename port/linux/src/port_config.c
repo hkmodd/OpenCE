@@ -155,8 +155,8 @@ static const struct config_setting config_settings[] =
 	{ "display.menu_language", _config_string, "\"maps\"", "HALO_MENU_LANGUAGE", _environment_value, _platform_all,
 		"The PC menus' language: \"maps\" for the language of the Custom Edition\n"
 		"whose loc.map is in custom_maps (as that edition shows them, its\n"
-		"pictures' words too where the port has them; English without one),\n"
-		"\"english\" for English. The port's own lines are English." },
+		"pictures' words and the port's own lines too where the port has\n"
+		"them; English without one), \"english\" for English." },
 	{ "display.player_names", _config_string, "\"all\"", "HALO_PLAYER_NAMES", _environment_value, _platform_all,
 		"In multiplayer, whose names are drawn above their heads: \"all\",\n"
 		"\"allies\", \"enemies\" or \"none\". An enemy's shows only within the\n"

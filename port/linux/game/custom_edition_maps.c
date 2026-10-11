@@ -48,6 +48,7 @@ Each map can have, beside it in its folder:
 #include "custom_edition_cache.h"
 #include "custom_edition_maps.h"
 #include "map_share.h"
+#include "menu_text.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -78,10 +79,11 @@ pictures (the campaign menu's, one frame per level in order). */
 #define CAMPAIGN_LEVEL_PICTURES_TAG_NAME "ui\\shell\\bitmaps\\sp_levels"
 static wchar_t campaign_level_names[NUMBER_OF_SINGLE_PLAYER_LEVELS][32] =
 {
-	L"The Pillar of Autumn", L"Halo", L"The Truth and Reconciliation", L"The Silent Cartographer",
-	L"Assault on the Control Room", L"343 Guilty Spark", L"The Library", L"Two Betrayals", L"Keyes", L"The Maw",
+	MENU_LINE(L"The Pillar of Autumn"), L"Halo", MENU_LINE(L"The Truth and Reconciliation"),
+	MENU_LINE(L"The Silent Cartographer"), MENU_LINE(L"Assault on the Control Room"), L"343 Guilty Spark",
+	MENU_LINE(L"The Library"), MENU_LINE(L"Two Betrayals"), L"Keyes", MENU_LINE(L"The Maw"),
 };
-static wchar_t campaign_level_description[] = L"A campaign level, played co-op";
+static wchar_t campaign_level_description[] = MENU_LINE(L"A campaign level, played co-op");
 
 /* The level pictures tag, the picture shape (140x114 in the menus' 640x480;
 the lobby's is 139x113), and the unknown level's frame
@@ -157,12 +159,13 @@ static struct
 	wchar_t const *name;
 } const stock_maps[] =
 {
-	{ "icefields", L"Ice Fields" }, { "deathisland", L"Death Island" }, { "dangercanyon", L"Danger Canyon" },
-	{ "infinity", L"Infinity" }, { "timberland", L"Timberland" }, { "gephyrophobia", L"Gephyrophobia" },
+	{ "icefields", MENU_LINE(L"Ice Fields") }, { "deathisland", MENU_LINE(L"Death Island") },
+	{ "dangercanyon", MENU_LINE(L"Danger Canyon") }, { "infinity", MENU_LINE(L"Infinity") },
+	{ "timberland", MENU_LINE(L"Timberland") }, { "gephyrophobia", MENU_LINE(L"Gephyrophobia") },
 };
 
 /* for a map without a description file */
-static wchar_t const default_description[] = L"Halo Custom\r\nEdition map";
+static wchar_t const default_description[] = MENU_LINE(L"Halo Custom\r\nEdition map");
 
 /* ---------- private code */
 
@@ -812,9 +815,15 @@ wchar_t *custom_edition_maps_name(
 	struct custom_edition_map *map = custom_edition_map_get(display_index);
 	short level = campaign_level_get(display_index);
 
+	/* (Halo's own levels' and maps' names in the language of the menus,
+	menu_text.c) */
 	if (level != NONE)
 	{
-		return campaign_level_names[level];
+		return (wchar_t *)menu_text(campaign_level_names[level]);
+	}
+	if (map && stock_map_index(map->name) != NONE)
+	{
+		return (wchar_t *)menu_text(map->display_name);
 	}
 
 	return map ? map->display_name : NULL;
@@ -827,10 +836,11 @@ wchar_t *custom_edition_maps_description(
 
 	if (campaign_level_get(display_index) != NONE)
 	{
-		return campaign_level_description;
+		return (wchar_t *)menu_text(campaign_level_description);
 	}
 
-	return map ? map->description : NULL;
+	/* (the description of a map without one in the language of the menus) */
+	return map ? (wchar_t *)menu_text(map->description) : NULL;
 }
 
 struct bitmap_data *custom_edition_maps_picture(

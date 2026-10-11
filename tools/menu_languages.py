@@ -17,6 +17,19 @@ white with a blue glow; words wider than the English ones have room for are
 drawn smaller, as the editions drew them. Only Pillow, NumPy and SciPy are
 needed (not the PC tags, nor rsvg-convert). menus.json lists the files.
 
+It holds the port's own lines too (those of the menus' files no string of
+the PC version's says, and those of the port's code that menu_text shows,
+port/linux/game/menu_text.c): a <line> for each that a loc.map string says,
+which the menus show in any edition's language (REFERENCES), and, for each
+language, a <line language=...> for each of the others, as its
+tools/menu_lines_<language>.py has them. Every line with words must be in
+one or the other, or be the same in the language. The port's titles
+(port_settings.TITLES) are lines too, and drawn as the headers are in the
+language's words for them. A language's line is
+shown before a loc.map's, so a language may say a line of REFERENCES
+itself where the edition's words are wider than the port's screen has room
+for (the controls' names, in their narrower columns).
+
 A language's words are those of its edition's own pictures (LANGUAGES):
 
     python tools/menu_languages.py --extract <bitmaps.map> <folder>
@@ -26,8 +39,10 @@ PNGs, to read them from.
 """
 
 import argparse
+import importlib
 import io
 import json
+import re
 import struct
 import sys
 import xml.etree.ElementTree as ElementTree
@@ -129,6 +144,100 @@ LANGUAGES = {
     },
 }
 
+# the port's lines a loc.map string says (in every edition's language): the
+# English, the list, the string's index and whether it is shown in capitals
+# (the list's words are not); the list's words for the controls' keys and
+# mouse buttons are for SDL's names of them (xinput_sdl.c's halo_input_name)
+SHELL = "ui\\shell\\main_menu\\"
+COMMON = "ui\\shell\\strings\\common_button_captions"
+PROFILE = SHELL + "settings_select\\player_setup\\player_profile_edit\\"
+MULTIPLAYER = SHELL + "settings_select\\multiplayer_setup\\"
+CONTROLS = PROFILE + "controls_setup\\"
+KEYS = CONTROLS + "controls_keyboard_button_names"
+MOUSE = CONTROLS + "controls_mouse_button_names"
+COLORS = PROFILE + "color_edit\\colors_list"
+GAMETYPES = MULTIPLAYER + "playlist_edit\\game_type_select\\gametype_select_list_options"
+TEAMPLAY = MULTIPLAYER + "teamplay_options_edit\\"
+INDICATORS = MULTIPLAYER + "indicator_options_edit\\"
+REFERENCES = {
+    "BACK": (COMMON, 0, False),
+    "DEFAULT": (COMMON, 3, False),
+    "ACTIONS": (CONTROLS + "var_command_groups", 2, False),
+    "MOVEMENT": (CONTROLS + "var_command_groups", 0, False),
+    "MOVE FORWARD": (CONTROLS + "controls_binding_labels", 1, False),
+    "MOVE BACKWARD": (CONTROLS + "controls_binding_labels", 2, False),
+    "STRAFE LEFT": (CONTROLS + "controls_binding_labels", 3, False),
+    "STRAFE RIGHT": (CONTROLS + "controls_binding_labels", 4, False),
+    "FIRE": (CONTROLS + "controls_binding_labels", 9, False),
+    "THROW GRENADE": (CONTROLS + "controls_binding_labels", 10, False),
+    "SWITCH GRENADE": (CONTROLS + "controls_binding_labels", 11, False),
+    "SWITCH WEAPON": (CONTROLS + "controls_binding_labels", 12, False),
+    "RELOAD": (CONTROLS + "controls_binding_labels", 13, False),
+    "MELEE": (CONTROLS + "controls_binding_labels", 14, False),
+    "JUMP": (CONTROLS + "controls_binding_labels", 16, False),
+    "CROUCH": (CONTROLS + "controls_binding_labels", 17, False),
+    "FLASHLIGHT": (CONTROLS + "controls_binding_labels", 18, False),
+    "ZOOM": (CONTROLS + "controls_binding_labels", 19, False),
+    "ACTION": (CONTROLS + "controls_binding_labels", 20, False),
+    "SHOW SCORES": (CONTROLS + "controls_binding_labels", 26, False),
+    "SCREENSHOT": (CONTROLS + "controls_binding_labels", 27, False),
+    "MASTER VOLUME:": (PROFILE + "audio_settings\\audio_option_labels", 0, False),
+    "MUSIC VOLUME:": (PROFILE + "audio_settings\\audio_option_labels", 1, False),
+    "EFFECTS VOLUME:": (PROFILE + "audio_settings\\audio_option_labels", 6, False),
+    "HORIZONTAL SENSITIVITY:": (PROFILE + "mouse_settings\\mouse_option_labels", 0, False),
+    "VERTICAL SENSITIVITY:": (PROFILE + "mouse_settings\\mouse_option_labels", 1, False),
+    "INVERT VERTICAL AXIS:": (PROFILE + "mouse_settings\\mouse_option_labels", 2, False),
+    "RESOLUTION:": (PROFILE + "video_settings\\video_option_labels", 0, False),
+    "FRIENDLY FIRE:": (TEAMPLAY + "teamplay_options_labels", 0, False),
+    "SHIELD ONLY": (TEAMPLAY + "var_friendly_fire", 2, False),
+    "EXPLOSIVES ONLY": (TEAMPLAY + "var_friendly_fire", 3, False),
+    "ON": (TEAMPLAY + "var_friendly_fire", 1, False),
+    "OFF": (TEAMPLAY + "var_friendly_fire", 0, False),
+    "YES": (INDICATORS + "var_friends_on_screen", 0, False),
+    "NO": (INDICATORS + "var_friends_on_screen", 1, False),
+    "NONE": (INDICATORS + "var_radar display", 2, False),
+    "ALL": (INDICATORS + "var_others_on_radar", 0, False),
+    "CUSTOM": (SHELL + "gametype_select\\var_gametype_banks", 2, False),
+    "JOIN GAME": (SHELL + "multiplayer_type_select\\join_game\\join_game_buttons", 4, False),
+    "START GAME": (SHELL + "multiplayer_type_select\\server_settings\\server_settings_options", 4, False),
+    "MULTIPLAYER": (SHELL + "main_menu_options", 2, False),
+    "CTF": (GAMETYPES, 0, False),
+    "KING OF THE HILL": (GAMETYPES, 1, False),
+    "SLAYER": (GAMETYPES, 2, False),
+    "ODDBALL": (GAMETYPES, 3, False),
+    "RACE": (GAMETYPES, 4, False),
+    "The Pillar of Autumn": (SHELL + "map_list_oneline", 0, False),
+    "The Truth and Reconciliation": (SHELL + "map_list_oneline", 2, False),
+    "The Silent Cartographer": (SHELL + "map_list_oneline", 3, False),
+    "Assault on the Control Room": (SHELL + "map_list_oneline", 4, False),
+    "The Library": (SHELL + "map_list_oneline", 6, False),
+    "Two Betrayals": (SHELL + "map_list_oneline", 7, False),
+    "The Maw": (SHELL + "map_list_oneline", 9, False),
+    "Ice Fields": (SHELL + "mp_map_list", 13, False),
+    "Death Island": (SHELL + "mp_map_list", 14, False),
+    "Danger Canyon": (SHELL + "mp_map_list", 15, False),
+    "Infinity": (SHELL + "mp_map_list", 16, False),
+    "Timberland": (SHELL + "mp_map_list", 17, False),
+    "Gephyrophobia": (SHELL + "mp_map_list", 18, False),
+    **{english.upper(): (COLORS, index, True) for index, english in enumerate((
+        "White", "Black", "Red", "Blue", "Gray", "Yellow", "Green", "Pink", "Purple", "Cyan", "Cobalt", "Orange",
+        "Teal", "Sage", "Brown", "Tan", "Maroon", "Salmon"))},
+    **{name: (KEYS, index, False) for index, name in (
+        (0, "Escape"), (13, "PrintScreen"), (14, "ScrollLock"), (15, "Pause"), (29, "Backspace"), (30, "Tab"),
+        (44, "CapsLock"), (56, "Return"), (57, "Left Shift"), (65, "Comma"), (68, "Right Shift"), (69, "Left Ctrl"),
+        (70, "Left GUI"), (71, "Left Alt"), (72, "Space"), (73, "Right Alt"), (74, "Right GUI"), (75, "Application"),
+        (76, "Right Ctrl"), (77, "Up"), (78, "Down"), (79, "Left"), (80, "Right"), (81, "Insert"), (82, "Home"),
+        (83, "PageUp"), (84, "Delete"), (85, "End"), (86, "PageDown"), (87, "Numlock"), (88, "Keypad /"),
+        (89, "Keypad *"), (100, "Keypad -"), (101, "Keypad +"), (102, "Keypad Enter"), (103, "Keypad ."),
+        *((90 + digit, f"Keypad {digit}") for digit in range(10)))},
+    **{name: (MOUSE, index, False) for index, name in (
+        (0, "Mouse Left"), (1, "Mouse Middle"), (2, "Mouse Right"), (3, "Mouse 4"), (4, "Mouse 5"), (5, "Mouse 6"),
+        (6, "Mouse 7"), (7, "Mouse 8"), (10, "Wheel"))},
+}
+# the controls' keys and buttons (SDL's names, not the port's lines) a
+# language may say as no loc.map string does
+KEY_LINES = {"Keypad Comma", "Wheel Up", "Wheel Down"}
+
 # the PC headers' backdrop (port_settings.title_backdrop): a box of their
 # dark blue, blurred, cut off at the bottom
 BACKDROP_LEFT, BACKDROP_TOP, BACKDROP_PADDING, BACKDROP_HEIGHT = 29.08, 28.05, 28, 40.95
@@ -194,12 +303,12 @@ def backdrop(width: float, picture_width: int, scale: int) -> Image.Image:
     return Image.fromarray(image, "RGBA")
 
 
-def header(text: str, width: int = 512) -> Image.Image:
+def header(text: str, width: int = 512, room: int = 0) -> Image.Image:
     """as ce_menus.py's Art.title draws the port's titles, in a picture width
-    wide; the text's widest is as far from the right as it starts from the
-    left"""
+    wide, shown in room of it (all of it if 0); the text's widest is as far
+    from the right as it starts from the left"""
     scale = scale_for(width)
-    font = font_for(port_settings.TITLE_CAP, text, width - 2 * port_settings.TITLE_LEFT, scale)
+    font = font_for(port_settings.TITLE_CAP, text, (room or width) - 2 * port_settings.TITLE_LEFT, scale)
     left, cap_top, right, cap_bottom = font.getbbox("H")
     image = backdrop(font.getlength(text) / scale, width, scale)
     # (a smaller text centred on the capitals' line)
@@ -253,14 +362,102 @@ def attributes(pairs: list) -> str:
     return "".join(f" {key}={quoteattr(str(value))}" for key, value in pairs if value is not None)
 
 
+# ---------- the port's lines
+
+FORMAT = re.compile(r"%[-+ #0-9.]*l?[a-zA-Z%]")
+SOURCE_LINE = re.compile(r'\b(?:menu_text|MENU_LINE)\(L?"((?:[^"\\]|\\.)*)"\)')
+
+
+def has_words(text: str) -> bool:
+    """a line to say in a language: two letters in a row, but in its line
+    breaks and formats"""
+    return re.search(r"[A-Za-z]{2}", FORMAT.sub(" ", text.replace("\\n", " "))) is not None
+
+
+def port_lines() -> list:
+    """the port's own lines, as the menus' files write them (a line break
+    a backslash and n): their <string>s without a map= string, widgets'
+    text= and spinners' strings=, the port's code's menu_text and
+    MENU_LINE lines, and its titles' words"""
+    found = {}
+    for path in sorted(MENUS.rglob("*.xml")):
+        if path.name == LANGUAGES_XML:
+            continue
+        for element in ElementTree.parse(path).getroot().iter():
+            if element.tag == "string" and element.get("map") is None:
+                found.setdefault(element.get("text"), path.name)
+            if element.tag == "widget":
+                if element.get("text"):
+                    found.setdefault(element.get("text"), path.name)
+                for piece in (element.get("strings") or "").split("|"):
+                    if piece:
+                        found.setdefault(piece, path.name)
+    for path in sorted((ROOT / "port/linux/game").glob("*.c")):
+        for literal in SOURCE_LINE.findall(path.read_text(encoding="latin-1")):
+            found.setdefault(literal.replace("\\r\\n", "\\n").replace('\\"', '"'), path.name)
+    for text in port_settings.TITLES.values():
+        found.setdefault(text, "port_settings.py")
+    return sorted(line for line in found if line and has_words(line))
+
+
+def language_lines(language: str) -> tuple:
+    """a language's lines (English to its words) and those the same in it"""
+    try:
+        module = importlib.import_module(f"menu_lines_{language}")
+    except ModuleNotFoundError:
+        return {}, set()
+    return module.LINES, set(module.SAME)
+
+
+def check_lines() -> dict:
+    """each language's lines, checked: every port line is said (a
+    reference, a line of its own or the same), none is said twice (a line of
+    its own for a reference is kept before it), none is not a port line,
+    and a line's formats are the English's, in order"""
+    lines = set(port_lines())
+    problems = [f"REFERENCES: {english!r} is not one of the port's lines"
+                for english in REFERENCES if english not in lines and REFERENCES[english][0] not in (KEYS, MOUSE)]
+    languages = {}
+    for language in sorted(LANGUAGES):
+        own, same = language_lines(language)
+        for english, words in own.items():
+            if english not in lines and english not in KEY_LINES and \
+                    REFERENCES.get(english, ("",))[0] not in (KEYS, MOUSE):
+                problems.append(f"{language}: {english!r} is not one of the port's lines")
+            if english in same:
+                problems.append(f"{language}: {english!r} is said twice")
+            if FORMAT.findall(english) != FORMAT.findall(words):
+                problems.append(f"{language}: {english!r} and {words!r} have different formats")
+            if english.count("\\n") and not words.count("\\n") and len(words) > 40:
+                problems.append(f"{language}: {words!r} has no line breaks")
+        problems += [f"{language}: {english!r} is not said" for english in sorted(lines)
+                     if english not in REFERENCES and english not in own and english not in same]
+        problems += [f"{language}: {english!r} (the same) is not one of the port's lines"
+                     for english in sorted(same - lines)]
+        languages[language] = own
+    if problems:
+        sys.exit("\n".join(problems))
+    return languages
+
+
 def write() -> None:
     english = english_bitmaps()
-    for name in HEADERS + ITEMS:
+    own_lines = check_lines()
+    titles = sorted(port_settings.TITLES.items())
+    # (the port's titles are shown in their widgets' width, not all 512 of
+    # the picture)
+    rooms = {}
+    for path in sorted((MENUS / "ce").glob("*.xml")):
+        for widget in ElementTree.parse(path).getroot().iter("widget"):
+            if widget.get("bitmap") in port_settings.TITLES and widget.get("width"):
+                rooms[widget.get("bitmap")] = min(int(widget.get("width")), rooms.get(widget.get("bitmap"), 512))
+    for name in HEADERS + ITEMS + [name for name, _ in titles]:
         frames = english.get(name, [])
-        if not (len(frames) == 1 and frames[0][1] == 64 if name in HEADERS else frames == [(256, 64)] * 2):
+        if not (frames == [(256, 64)] * 2 if name in ITEMS else len(frames) == 1 and frames[0][1] == 64):
             sys.exit(f"{name}: bitmaps.xml has {frames}, not a header's frame or an item's two")
     lines = ['<?xml version="1.0" encoding="UTF-8"?>',
-             "<!-- Written by tools/menu_languages.py: the menus' pictures with words in each edition's language -->",
+             "<!-- Written by tools/menu_languages.py: the menus' pictures with words and the port's own lines in "
+             "each edition's language -->",
              "<menus>"]
     pngs = []
     for language, data in sorted(LANGUAGES.items()):
@@ -282,6 +479,22 @@ def write() -> None:
                 pngs.append(png)
                 lines.append(f"\t\t<frame{attributes([('png', png), ('width', english[name][frame][0]), ('height', english[name][frame][1])])}/>")
             lines.append("\t</bitmap>")
+        # (the port's titles, but those the same in the language)
+        for name, text in titles:
+            if text not in own_lines[language]:
+                continue
+            png = f"languages/{language}/{name}__0.png"
+            (MENUS / png).parent.mkdir(parents=True, exist_ok=True)
+            header(own_lines[language][text], english[name][0][0], rooms.get(name, 0)).save(MENUS / png,
+                                                                                          optimize=True)
+            pngs.append(png)
+            lines.append(f"\t<bitmap{attributes([('name', name), ('language', language)])}>")
+            lines.append(f"\t\t<frame{attributes([('png', png), ('width', english[name][0][0]), ('height', 64)])}/>")
+            lines.append("\t</bitmap>")
+        for text, words in sorted(own_lines[language].items()):
+            lines.append(f"\t<line{attributes([('text', text), ('language', language), ('translation', words)])}/>")
+    for text, (strings, index, upper) in sorted(REFERENCES.items()):
+        lines.append(f"\t<line{attributes([('text', text), ('strings', strings), ('index', index), ('case', 'upper' if upper else None)])}/>")
     lines.append("</menus>")
     (MENUS / LANGUAGES_XML).write_text("\n".join(lines) + "\n", encoding="utf-8")
     # (menus.json: ce_menus.py's files, the XML sorted and then the PNGs,
@@ -293,7 +506,8 @@ def write() -> None:
         [name for name in others if not name.endswith(".xml")] + pngs
     listing.write_text(json.dumps(data, indent=1) + "\n")
     size = sum((MENUS / name).stat().st_size for name in pngs)
-    print(f"{len(LANGUAGES)} languages, {len(pngs)} frames, {size // 1024} KB")
+    print(f"{len(LANGUAGES)} languages, {len(pngs)} frames, {size // 1024} KB, {len(REFERENCES)} lines from "
+          f"the loc.map, " + ", ".join(f"{len(own)} in {language}" for language, own in sorted(own_lines.items())))
 
 
 def picture_files() -> list:
@@ -354,8 +568,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--extract", nargs=2, metavar=("BITMAPS_MAP", "FOLDER"), type=Path,
                         help="write an edition's pictures with words as PNGs")
+    parser.add_argument("--lines", action="store_true", help="list the port's lines with words")
     arguments = parser.parse_args()
-    if arguments.extract:
+    if arguments.lines:
+        print("\n".join(port_lines()))
+    elif arguments.extract:
         extract(*arguments.extract)
     else:
         write()
