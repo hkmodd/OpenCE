@@ -43,6 +43,7 @@ menu gets FRIENDLY FIRE too.
 
 #include "halo_menus.h"
 #include "custom_edition_cache.h"
+#include "menu_text.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -461,10 +462,12 @@ static struct
 	boolean game_map;
 	/* a single-player campaign's map's, whose screens pause the game */
 	boolean campaign;
-	/* the strings taken from the Custom Edition's loc.map */
+	/* the strings taken from the Custom Edition's loc.map, and the port's
+	own lines in its language (menu_text.c) */
 	long map_strings;
 	/* a network co-op game's map's: its pause menu gets FRIENDLY FIRE too */
 	boolean coop;
+	long port_lines;
 } build;
 
 /* ---------- private code */
@@ -728,7 +731,7 @@ static void parse_bounds(char const *text, rectangle2d *bounds, char const *file
 
 /* a 'ustr' of the strings; each with an index in the list `map` (the
 Custom Edition's in its language, or NULL) given by maps is its string
-there */
+there, and each other in the menus' language if it has it (menu_text_line) */
 static void *string_list_build(char const *const *strings, long const *maps, long count,
 	struct custom_edition_string_list const *map)
 {
@@ -744,6 +747,7 @@ static void *string_list_build(char const *const *strings, long const *maps, lon
 	{
 		long length = (long)strlen(strings[index]);
 		unsigned short *characters;
+		unsigned short const *translated;
 		long written;
 
 		if (map && maps[index] != HALO_MENU_NONE && maps[index] < map->count)
@@ -758,6 +762,19 @@ static void *string_list_build(char const *const *strings, long const *maps, lon
 			build.map_strings++;
 			continue;
 		}
+		translated = menu_text_line(strings[index], &length);
+		if (translated)
+		{
+			characters = allocate(length * sizeof(unsigned short));
+			if (!characters)
+				return list;
+			memcpy(characters, translated, length * sizeof(unsigned short));
+			entries[index].string.size = length * (long)sizeof(unsigned short);
+			entries[index].string.address = characters;
+			build.port_lines++;
+			continue;
+		}
+		length = (long)strlen(strings[index]);
 		characters = allocate((length * 2 + 2) * sizeof(unsigned short));
 		if (!characters)
 			return list;
@@ -1640,15 +1657,15 @@ static long pause_list_patch(struct cache_file_tag_instance *instances, struct u
 		return 0;
 	names[0] = "pause/settings_button";
 	tags[0] = next_tag();
-	buttons[0] = pause_button(instances, model, names[0], "SETTINGS",
+	buttons[0] = pause_button(instances, model, names[0], MENU_LINE("SETTINGS"),
 		function_index("profile set edit begin", "pause", 0), build.widget_tags[settings_widget], NULL, NONE);
 	names[1] = build.coop ? "pause/friendly_fire_button" : "pause/end_game_button";
 	tags[1] = added > 1 ? next_tag() : NONE;
 	buttons[1] = build.coop ?
-		pause_button(instances, model, names[1], "FRIENDLY FIRE ON",
-			function_index("port coop friendly fire", "pause", 0), NONE, "FRIENDLY FIRE OFF",
+		pause_button(instances, model, names[1], MENU_LINE("FRIENDLY FIRE ON"),
+			function_index("port coop friendly fire", "pause", 0), NONE, MENU_LINE("FRIENDLY FIRE OFF"),
 			game_data_input_index("port coop friendly fire text", "pause", 0)) :
-		host ? pause_button(instances, model, names[1], "END GAME",
+		host ? pause_button(instances, model, names[1], MENU_LINE("END GAME"),
 			function_index("port pause end game", "pause", 0), NONE, NULL, NONE) : NULL;
 	if (!buttons[0] || (added > 1 && !buttons[1]))
 		return 0;
@@ -2300,10 +2317,11 @@ void menu_tags_loaded(
 	for (index = 0; index < menus->bitmap_count; index++)
 		build.bitmap_tags[index] = menus->bitmaps[index].language ? NONE : next_tag();
 	/* (the PC version's strings and pictures with words in the language of
-	the Custom Edition the maps come from, its loc.map's, unless English is
-	chosen) */
+	the Custom Edition the maps come from, its loc.map's, and the port's own
+	lines, unless English is chosen) */
 	locale = menus_language_maps() && custom_edition_locale_open();
 	language = locale ? menus_language() : NULL;
+	menu_text_build(menus, language, locale);
 	/* the tags: the bitmaps and strings first, which the widgets name; the
 	widgets' names in the table before any is built, which they find there */
 	for (index = 0; index < menus->bitmap_count && !build.failed; index++)
@@ -2324,14 +2342,7 @@ void menu_tags_loaded(
 			free(map);
 	}
 	if (locale)
-	{
 		custom_edition_locale_close();
-		if (!game_map)
-		{
-			platform_log("menus: %ld strings from the Custom Edition's loc.map; its pictures' words in %s",
-				build.map_strings, language ? language : "English (no <language> has its strings)");
-		}
-	}
 	for (index = 0; index < widget_count && !build.failed; index++)
 	{
 		struct halo_menu_widget const *widget = &menus->widgets[index];
@@ -2350,6 +2361,12 @@ void menu_tags_loaded(
 				string_list_build(pieces, NULL, count, NULL));
 		}
 		instance_set(instances, UI_WIDGET_DEFINITION_TAG, build.widget_tags[index], widget->name, "", NULL);
+	}
+	if (locale && !game_map)
+	{
+		platform_log("menus: %ld strings from the Custom Edition's loc.map, %ld of the port's own lines in its "
+			"language; its pictures' words in %s", build.map_strings, build.port_lines,
+			language ? language : "English (no <language> has its strings)");
 	}
 	if (build.failed)
 		goto failed;

@@ -27,6 +27,7 @@ It also draws the line telling players about the vote to skip a cutscene
 #include "units/units.h"
 
 #include "coop_spectate.h"
+#include "menu_text.h"
 #include "network_coop.h"
 
 #include <math.h>
@@ -254,14 +255,14 @@ void coop_spectate_draw(
 	if (watched == NONE || !player_try_and_get(watched))
 	{
 		if (coop_spectate_nothing_to_watch(local_player_index))
-			draw_bottom_text(L"JOINING THE GAME\r\nYou spawn beside a teammate once it is safe");
+			draw_bottom_text(menu_text(L"JOINING THE GAME\r\nYou spawn beside a teammate once it is safe"));
 		return;
 	}
 	if (!players_coop_waiting_to_start(local_player_get_player_index(local_player_index)))
-		hint = L"You come back beside them once it is safe";
+		hint = menu_text(L"You come back beside them once it is safe");
 	else
-		hint = L"You join them when they're on foot";
-	usnprintf(text, NUMBEROF(text) - 1, L"SPECTATING %.12s   (A: NEXT)\r\n%s", player_get(watched)->name, hint);
+		hint = menu_text(L"You join them when they're on foot");
+	usnprintf(text, NUMBEROF(text) - 1, menu_text(L"SPECTATING %.12s   (A: NEXT)\r\n%s"), player_get(watched)->name, hint);
 	text[NUMBEROF(text) - 1] = 0;
 	draw_bottom_text(text);
 }
@@ -277,9 +278,9 @@ void coop_skip_vote_draw(
 	if (local_player_index != local_player_get_next(NONE) || !network_coop_skip_vote_status(&votes, &voters, &voted))
 		return;
 	if (voted)
-		usnprintf(text, NUMBEROF(text) - 1, L"VOTED TO SKIP   %d OF %d", votes, voters);
+		usnprintf(text, NUMBEROF(text) - 1, menu_text(L"VOTED TO SKIP   %d OF %d"), votes, voters);
 	else
-		usnprintf(text, NUMBEROF(text) - 1, L"PRESS SPACE OR A TO VOTE TO SKIP   %d OF %d", votes, voters);
+		usnprintf(text, NUMBEROF(text) - 1, menu_text(L"PRESS SPACE OR A TO VOTE TO SKIP   %d OF %d"), votes, voters);
 	text[NUMBEROF(text) - 1] = 0;
 	draw_bottom_text(text);
 }
