@@ -245,8 +245,13 @@ LINES = {
     "OPEN MIC": "MICROFONO APERTO",
     "ORIGINAL": "ORIGINALE",
     "OUTPUT DEVICE:": "DISPOSITIVO DI USCITA:",
-    "On foot, horizontal at 16:9, in degrees.\\nDefault keeps the stock view.":
-        "A piedi, orizzontale in 16:9, in gradi.\\nPredefinito mantiene la visuale originale.",
+    "HDR DISPLAY:": "SCHERMO HDR:",
+    "Keep the light of explosions, plasma and the sun\\npast white, and roll it off instead of clipping.":
+        "Tiene la luce di esplosioni, plasma e sole oltre\\nil bianco, e la attenua invece di tagliarla.",
+    "With HDR, on an HDR display, show that light\\nbrighter than white. From the next start.":
+        "Con l'HDR, su schermo HDR, mostra quella luce\\npiù brillante del bianco. Dal prossimo avvio.",
+    "On foot, in vehicles and after death, in\\ndegrees at 16:9. Default keeps the stock view.":
+        "In gradi a 16:9, a piedi, sui veicoli e da\\nmorto. Predefinito: la visuale originale.",
     "Only players with your invite link can join.": "Solo chi ha il tuo link d'invito può entrare.",
     "PASTE LINK": "INCOLLA LINK",
     "PAUSE MENU": "MENU PAUSA",
@@ -369,7 +374,7 @@ LINES = {
         "Parla nelle partite in rete: tenendo PREMI PER PARLARE\\n(Controlli), ogni volta che parli, o mai.",
     "Teams": "Squadre",
     "That is not the game's password. Try again.": "Non è la password della partita. Riprova.",
-    "The HUD, text, anti-aliasing, shadows and\\nlighting.": "HUD, testo, anti-aliasing, ombre e\\nilluminazione.",
+    "The HUD, text, anti-aliasing, shadows,\\nlighting and HDR.": "HUD, testo, anti-aliasing, ombre,\\nilluminazione e HDR.",
     "The energy shield's flare on your first-person\\narms too, as on your body.":
         "Il lampo dello scudo energetico anche sulle braccia\\nin prima persona, come sul corpo.",
     "The field of view and the first-person\\nweapon. Their defaults keep the stock view.":
@@ -500,8 +505,8 @@ LINES = {
 # lines Italian says as English does
 SAME = {
     "12 KBPS", "16 KBPS", "24 KBPS", "32 KBPS", "48 KBPS", "64 KBPS", "8 KBPS", "1 MB/S", "128 KB/S", "2 MB/S",
-    "256 KB/S", "4 MB/S", "512 KB/S", "64 KB/S", "8 MB/S", "ANTI-ALIASING:", "AUTO", "CO-OP", "FOV:", "FXAA", "MSAA 2X",
-    "MSAA 4X", "MSAA 8X", "PASSWORD", "PASSWORD:", "SMAA", "SSAA 2X", "V-SYNC:", ", password",
+    "256 KB/S", "4 MB/S", "512 KB/S", "64 KB/S", "8 MB/S", "ANTI-ALIASING:", "AUTO", "CO-OP", "FOV:", "FXAA", "HDR:",
+    "MSAA 2X", "MSAA 4X", "MSAA 8X", "PASSWORD", "PASSWORD:", "SMAA", "SSAA 2X", "V-SYNC:", ", password",
 }
 
 # the PC version's strings the Italian edition's loc.map says wider than

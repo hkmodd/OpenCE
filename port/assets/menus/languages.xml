@@ -255,6 +255,7 @@
 	<line text="GAME TYPE:" language="it" translation="TIPO PARTITA:"/>
 	<line text="GLOW INTENSITY:" language="it" translation="INTENSITÀ BAGLIORE:"/>
 	<line text="GRAPHICS:" language="it" translation="GRAFICA:"/>
+	<line text="HDR DISPLAY:" language="it" translation="SCHERMO HDR:"/>
 	<line text="HELP SEND MAPS:" language="it" translation="AIUTA A INVIARE:"/>
 	<line text="HIGH-RES HUD:" language="it" translation="HUD ALTA RISOLUZIONE:"/>
 	<line text="HIGH-RES TEXT:" language="it" translation="TESTO ALTA RISOLUZIONE:"/>
@@ -288,6 +289,7 @@
 	<line text="Join a game by its invite link,\nor one a Discord invite\nreached." language="it" translation="Entra in una partita col suo\nlink d'invito o con un invito\nDiscord."/>
 	<line text="Join the game of an invite link copied before\nswitching to the game." language="it" translation="Entra nella partita di un link d'invito copiato\nprima di passare al gioco."/>
 	<line text="Joining a game on a Custom Edition map you do not\nhave: download it from the players (if shared)." language="it" translation="Entrando in una partita su una mappa Custom Edition\nche non hai: scaricala dai giocatori (se condivisa)."/>
+	<line text="Keep the light of explosions, plasma and the sun\npast white, and roll it off instead of clipping." language="it" translation="Tiene la luce di esplosioni, plasma e sole oltre\nil bianco, e la attenua invece di tagliarla."/>
 	<line text="Keypad Comma" language="it" translation="TASTIERINO ,"/>
 	<line text="Keypad Enter" language="it" translation="TAST. INVIO"/>
 	<line text="LEAVE" language="it" translation="ESCI"/>
@@ -341,7 +343,7 @@
 	<line text="OPEN MIC" language="it" translation="MICROFONO APERTO"/>
 	<line text="ORIGINAL" language="it" translation="ORIGINALE"/>
 	<line text="OUTPUT DEVICE:" language="it" translation="DISPOSITIVO DI USCITA:"/>
-	<line text="On foot, horizontal at 16:9, in degrees.\nDefault keeps the stock view." language="it" translation="A piedi, orizzontale in 16:9, in gradi.\nPredefinito mantiene la visuale originale."/>
+	<line text="On foot, in vehicles and after death, in\ndegrees at 16:9. Default keeps the stock view." language="it" translation="In gradi a 16:9, a piedi, sui veicoli e da\nmorto. Predefinito: la visuale originale."/>
 	<line text="Only players with your invite link can join." language="it" translation="Solo chi ha il tuo link d'invito può entrare."/>
 	<line text="PASTE LINK" language="it" translation="INCOLLA LINK"/>
 	<line text="PAUSE MENU" language="it" translation="MENU PAUSA"/>
@@ -447,7 +449,7 @@
 	<line text="Talk in network games: while PUSH TO TALK is held\n(Controls), whenever you speak, or never." language="it" translation="Parla nelle partite in rete: tenendo PREMI PER PARLARE\n(Controlli), ogni volta che parli, o mai."/>
 	<line text="Teams" language="it" translation="Squadre"/>
 	<line text="That is not the game's password. Try again." language="it" translation="Non è la password della partita. Riprova."/>
-	<line text="The HUD, text, anti-aliasing, shadows and\nlighting." language="it" translation="HUD, testo, anti-aliasing, ombre e\nilluminazione."/>
+	<line text="The HUD, text, anti-aliasing, shadows,\nlighting and HDR." language="it" translation="HUD, testo, anti-aliasing, ombre,\nilluminazione e HDR."/>
 	<line text="The energy shield's flare on your first-person\narms too, as on your body." language="it" translation="Il lampo dello scudo energetico anche sulle braccia\nin prima persona, come sul corpo."/>
 	<line text="The field of view and the first-person\nweapon. Their defaults keep the stock view." language="it" translation="Il campo visivo e l'arma in prima persona.\nI predefiniti mantengono la visuale originale."/>
 	<line text="The game is full." language="it" translation="La partita è piena."/>
@@ -508,6 +510,7 @@
 	<line text="Where the game's sound and the voices play." language="it" translation="Dove si sentono l'audio del gioco e le voci."/>
 	<line text="Which of the controller's buttons does what (not\nthe keyboard's: Controls Setup sets those)." language="it" translation="Cosa fa ogni pulsante del controller (non quelli\ndella tastiera: li imposta Impostazioni controlli)."/>
 	<line text="Which stick moves and which looks." language="it" translation="Quale levetta muove e quale guarda."/>
+	<line text="With HDR, on an HDR display, show that light\nbrighter than white. From the next start." language="it" translation="Con l'HDR, su schermo HDR, mostra quella luce\npiù brillante del bianco. Dal prossimo avvio."/>
 	<line text="With V-Sync off, the most frames a second. Auto:\ntwice the display's refresh rate." language="it" translation="Senza V-Sync, il massimo di fotogrammi al secondo.\nAuto: il doppio della frequenza dello schermo."/>
 	<line text="You come back beside them once it is safe" language="it" translation="Tornerai al suo fianco appena sarà sicuro"/>
 	<line text="You join them when they're on foot" language="it" translation="Ti unirai quando sarà a piedi"/>
