@@ -458,7 +458,7 @@
 	<line text="OUTPUT DEVICE:" language="it" translation="DISPOSITIVO DI USCITA:"/>
 	<line text="OVERSHIELD" language="it" translation="SOVRASCUDO"/>
 	<line text="OVERSHIELD:" language="it" translation="SOVRASCUDO:"/>
-	<line text="On foot, horizontal at 16:9, in degrees.\nDefault keeps the stock view." language="it" translation="A piedi, orizzontale in 16:9, in gradi.\nPredefinito mantiene la visuale originale."/>
+	<line text="On foot, in vehicles and after death, in\ndegrees at 16:9. Default keeps the stock view." language="it" translation="In gradi a 16:9, a piedi, sui veicoli e da\nmorto. Predefinito: la visuale originale."/>
 	<line text="Only flag captures score." language="it" translation="Contano solo le catture della bandiera."/>
 	<line text="Only players with your invite link can join." language="it" translation="Solo chi ha il tuo link d'invito può entrare."/>
 	<line text="P2P GAMES" language="it" translation="PARTITE P2P"/>
