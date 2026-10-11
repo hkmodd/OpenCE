@@ -296,6 +296,14 @@
   "languages/it/main_menu/campaign_select/item_load_game__0.png",
   "languages/it/main_menu/campaign_select/item_load_game__1.png",
   "languages/it/main_menu/campaign_select/item_new_campaign__0.png",
-  "languages/it/main_menu/campaign_select/item_new_campaign__1.png"
+  "languages/it/main_menu/campaign_select/item_new_campaign__1.png",
+  "languages/it/main_menu/multiplayer_type_select/coop/header_player_2__0.png",
+  "languages/it/main_menu/multiplayer_type_select/join_game/header_direct_link__0.png",
+  "languages/it/main_menu/multiplayer_type_select/join_game/header_server_browser__0.png",
+  "languages/it/main_menu/multiplayer_type_select/lobby/header_add_player__0.png",
+  "languages/it/main_menu/multiplayer_type_select/lobby/header_lobby__0.png",
+  "languages/it/main_menu/multiplayer_type_select/server_settings/coop_options/header_coop_options__0.png",
+  "languages/it/main_menu/multiplayer_type_select/server_settings/map_share_options/header_map_share_options__0.png",
+  "languages/it/main_menu/multiplayer_type_select/server_settings/voice_options/header_voice_options__0.png"
  ]
 }

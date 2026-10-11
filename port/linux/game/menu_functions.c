@@ -82,6 +82,7 @@ their handlers open opens.
 #include "custom_edition_cache.h"
 #include "custom_edition_maps.h"
 #include "game_modes.h"
+#include "menu_text.h"
 #include "network_voice.h"
 #include "text/draw_string.h"
 /* (internet play's server browser: the platform layer's) */
@@ -2020,7 +2021,7 @@ static boolean coop_player2_choose(short controller)
 	}
 	if (controller == player_ui_get_single_player_local_player_controller(0))
 	{
-		display_error_text_deferred(L"Player 2 chooses their\r\nprofile with their own\r\ncontroller.",
+		display_error_text_deferred(menu_text(L"Player 2 chooses their\r\nprofile with their own\r\ncontroller."),
 			NONE);
 		return campaign_fail();
 	}
@@ -2044,27 +2045,27 @@ static struct
 	short group;
 } const controls[] =
 {
-	{ "controls.move_forward", L"MOVE FORWARD", 0 },
-	{ "controls.move_backward", L"MOVE BACKWARD", 0 },
-	{ "controls.strafe_left", L"STRAFE LEFT", 0 },
-	{ "controls.strafe_right", L"STRAFE RIGHT", 0 },
-	{ "controls.jump", L"JUMP", 0 },
-	{ "controls.crouch", L"CROUCH", 0 },
-	{ "controls.fire", L"FIRE", 1 },
-	{ "controls.throw_grenade", L"THROW GRENADE", 1 },
-	{ "controls.melee", L"MELEE", 1 },
-	{ "controls.reload", L"RELOAD", 1 },
-	{ "controls.zoom", L"ZOOM", 1 },
-	{ "controls.switch_weapon", L"SWITCH WEAPON", 1 },
-	{ "controls.switch_grenade", L"SWITCH GRENADE", 1 },
-	{ "controls.action", L"ACTION", 2 },
-	{ "controls.flashlight", L"FLASHLIGHT", 2 },
-	{ "controls.scoreboard", L"SHOW SCORES", 2 },
-	{ "controls.pause", L"PAUSE MENU", 2 },
-	{ "controls.screenshot", L"SCREENSHOT", 2 },
-	{ "controls.push_to_talk", L"PUSH TO TALK", 3 },
-	{ "controls.chat", L"CHAT", 3 },
-	{ "controls.team_chat", L"TEAM CHAT", 3 },
+	{ "controls.move_forward", MENU_LINE(L"MOVE FORWARD"), 0 },
+	{ "controls.move_backward", MENU_LINE(L"MOVE BACKWARD"), 0 },
+	{ "controls.strafe_left", MENU_LINE(L"STRAFE LEFT"), 0 },
+	{ "controls.strafe_right", MENU_LINE(L"STRAFE RIGHT"), 0 },
+	{ "controls.jump", MENU_LINE(L"JUMP"), 0 },
+	{ "controls.crouch", MENU_LINE(L"CROUCH"), 0 },
+	{ "controls.fire", MENU_LINE(L"FIRE"), 1 },
+	{ "controls.throw_grenade", MENU_LINE(L"THROW GRENADE"), 1 },
+	{ "controls.melee", MENU_LINE(L"MELEE"), 1 },
+	{ "controls.reload", MENU_LINE(L"RELOAD"), 1 },
+	{ "controls.zoom", MENU_LINE(L"ZOOM"), 1 },
+	{ "controls.switch_weapon", MENU_LINE(L"SWITCH WEAPON"), 1 },
+	{ "controls.switch_grenade", MENU_LINE(L"SWITCH GRENADE"), 1 },
+	{ "controls.action", MENU_LINE(L"ACTION"), 2 },
+	{ "controls.flashlight", MENU_LINE(L"FLASHLIGHT"), 2 },
+	{ "controls.scoreboard", MENU_LINE(L"SHOW SCORES"), 2 },
+	{ "controls.pause", MENU_LINE(L"PAUSE MENU"), 2 },
+	{ "controls.screenshot", MENU_LINE(L"SCREENSHOT"), 2 },
+	{ "controls.push_to_talk", MENU_LINE(L"PUSH TO TALK"), 3 },
+	{ "controls.chat", MENU_LINE(L"CHAT"), 3 },
+	{ "controls.team_chat", MENU_LINE(L"TEAM CHAT"), 3 },
 };
 
 static struct
@@ -2251,29 +2252,31 @@ static void controls_update(struct widget_instance *list)
 				focus_row(list, 0);
 			continue;
 		}
-		text_set(named(row, "command_label", 0), controls[control].label);
+		text_set(named(row, "command_label", 0), menu_text(controls[control].label));
 		for (slot = 0; slot < CONTROL_BINDINGS; slot++)
 		{
 			char const *binding = controls_screen.bindings[control][slot];
+			wchar_t name[CONTROL_NAME_LENGTH];
 			wchar_t text[ROW_TEXT_LENGTH];
-			char name[CONTROL_NAME_LENGTH];
-			char shown[64];
+			char shown[CONTROL_NAME_LENGTH];
 			short index;
 
-			/* (the key as the keyboard's layout labels it: xinput_sdl.c) */
+			/* (the key as the keyboard's layout labels it, xinput_sdl.c, then
+			its name as the loc.map has it; the setting keeps SDL's) */
 			if (*binding)
-				halo_input_shown_name(binding, name, sizeof(name));
+				halo_input_shown_name(binding, shown, sizeof(shown));
 			else
-				snprintf(name, sizeof(name), "%s", "-");
+				shown[0] = 0;
+			for (index = 0; shown[index] && index < CONTROL_NAME_LENGTH - 1; index++)
+				name[index] = (wchar_t)(unsigned char)shown[index];
+			name[index] = 0;
 			if (controls_screen.capturing_control == control && controls_screen.capturing_slot == slot)
-				snprintf(shown, sizeof(shown), "%s", "PRESS A KEY");
+				usnprintf(text, ROW_TEXT_LENGTH - 1, L"%s", menu_text(L"PRESS A KEY"));
 			else if (row == focused_row && controls_screen.slot == slot)
-				snprintf(shown, sizeof(shown), "> %s <", name);
+				usnprintf(text, ROW_TEXT_LENGTH - 1, L"> %s <", *binding ? menu_text(name) : L"-");
 			else
-				snprintf(shown, sizeof(shown), "%s", name);
-			for (index = 0; shown[index] && index < ROW_TEXT_LENGTH - 1; index++)
-				text[index] = (wchar_t)(unsigned char)shown[index];
-			text[index] = 0;
+				usnprintf(text, ROW_TEXT_LENGTH - 1, L"%s", *binding ? menu_text(name) : L"-");
+			text[ROW_TEXT_LENGTH - 1] = 0;
 			text_set(named(row, "command_binding", slot), text);
 		}
 	}
@@ -2863,7 +2866,7 @@ void platform_text_field(int typing, int password);
 int config_boolean(char const *name);
 void ui_widget_port_post_button(short controller_index, short button_index);
 
-static wchar_t const *const engine_names[] = { L"", L"CTF", L"SLAYER", L"ODDBALL", L"KING OF THE HILL", L"RACE" };
+static wchar_t const *const engine_names[] = { L"", MENU_LINE(L"CTF"), MENU_LINE(L"SLAYER"), MENU_LINE(L"ODDBALL"), MENU_LINE(L"KING OF THE HILL"), MENU_LINE(L"RACE") };
 static short const maximum_players[] = { 2, 4, 8, 12, 16, 24, 32, 48, 64, 96, 128 };
 
 static struct
@@ -3025,7 +3028,8 @@ static void text_field_show(struct widget_instance *value, char const *text, boo
 	if (editing && (system_milliseconds() / 500) % 2)
 		shown[index++] = L'_';
 	shown[index] = 0;
-	text_set(value, shown);
+	/* (a field not being edited may show one of the port's lines: "NONE") */
+	text_set(value, editing ? shown : menu_text(shown));
 	/* (what is being typed shown as it is: streamer mode hides nothing of it,
 	text_filter.c) */
 	if (editing && value)
@@ -3314,16 +3318,19 @@ static void gametype_rules_text(long profile_index, wchar_t *text, short size)
 	{
 	case _game_mode_infection:
 		if (options.time_limit > 0)
-			usnprintf(text, size - 1, L"%s\r\nTeams\r\nRound time: %d min", kind, options.time_limit);
+			usnprintf(text, size - 1, menu_text(L"%s\r\nTeams\r\nRound time: %d min"), menu_text(kind),
+				options.time_limit);
 		else
-			usnprintf(text, size - 1, L"%s\r\nTeams\r\nUntil no human is left", kind);
+			usnprintf(text, size - 1, menu_text(L"%s\r\nTeams\r\nUntil no human is left"), menu_text(kind));
 		break;
 	case _game_mode_gun_game:
-		usnprintf(text, size - 1, L"%s\r\nFree for all\r\nA kill with each weapon", kind);
+		usnprintf(text, size - 1, menu_text(L"%s\r\nFree for all\r\nA kill with each weapon"), menu_text(kind));
 		break;
 	default:
-		usnprintf(text, size - 1, L"%s\r\n%s\r\nScore to win: %ld", kind ? kind : engine_names[engine],
-			variant.universal_variant.teams ? L"Teams" : L"Free for all", variant.universal_variant.score_to_win);
+		usnprintf(text, size - 1, menu_text(L"%s\r\n%s\r\nScore to win: %ld"),
+			menu_text(kind ? kind : engine_names[engine]),
+			variant.universal_variant.teams ? menu_text(L"Teams") : menu_text(L"Free for all"),
+			variant.universal_variant.score_to_win);
 		break;
 	}
 	text[size - 1] = 0;
@@ -3618,11 +3625,11 @@ static void server_settings_update(struct widget_instance *list)
 	wide_to_text(multiplayer.game_name, text, sizeof(text));
 	text_field_show(named(list, "server_name_value", 0), text, text_field_editing(row));
 	if (multiplayer.mode != _multiplayer_mode_host_internet)
-		snprintf(text, sizeof(text), "NONE: A LAN GAME");
+		snprintf(text, sizeof(text), MENU_LINE("NONE: A LAN GAME"));
 	else if (!config_boolean("network.online"))
-		snprintf(text, sizeof(text), "INTERNET PLAY IS OFF (SETTINGS)");
+		snprintf(text, sizeof(text), MENU_LINE("INTERNET PLAY IS OFF (SETTINGS)"));
 	else if (!p2p_invite_link(text, sizeof(text)))
-		snprintf(text, sizeof(text), "MADE WHEN THE GAME STARTS");
+		snprintf(text, sizeof(text), MENU_LINE("MADE WHEN THE GAME STARTS"));
 	text_field_show(named(list, "invite_value", 0), text, FALSE);
 	{
 		wchar_t type[ROW_TEXT_LENGTH];
@@ -3687,7 +3694,7 @@ static void server_settings_update(struct widget_instance *list)
 		for (index = 0; multiplayer.game_password[index] && index < (short)sizeof(text) - 1; index++)
 			text[index] = '*';
 		text[index] = 0;
-		text_field_show(named(list, "password_value", 0), index ? text : "NONE", text_field_editing(row));
+		text_field_show(named(list, "password_value", 0), index ? text : MENU_LINE("NONE"), text_field_editing(row));
 		if (help && list->focused_child == row)
 			help->parameters.text_box.string_list_index = SERVER_PASSWORD_HELP;
 	}
@@ -4031,7 +4038,7 @@ static short campaign_level_of(char const *map_name)
 CO-OP for one with none (network co-op: ui_widget_port_cooperative_level_choose) */
 static wchar_t const *game_type_name(long engine_type)
 {
-	return engine_type == 0 ? L"CO-OP" : engine_names[PIN(engine_type, 0, 5)];
+	return engine_type == 0 ? menu_text(L"CO-OP") : menu_text(engine_names[PIN(engine_type, 0, 5)]);
 }
 
 /* ... or its OpenCE gametype's kind (its advertisement's or listing's:
@@ -5310,7 +5317,7 @@ static void browser_update(struct widget_instance *list)
 		browser_row_pings[index] = (short)ping;
 		browser_row_marked[index] = browser_row_greyed[index] = FALSE;
 		usnprintf(text, ROW_TEXT_LENGTH - 1, L"%d", ping);
-		text_set(named(row, "server_item_ping", 0), ping >= 0 ? text : advertised_in_progress(game) ? L"LIVE" : L"");
+		text_set(named(row, "server_item_ping", 0), ping >= 0 ? text : advertised_in_progress(game) ? menu_text(L"LIVE") : L"");
 		visible_set(named(row, "server_item_locked", 0), FALSE);
 		visible_set(named(row, "server_item_dedicated", 0), FALSE);
 		visible_set(named(row, "server_item_classic", 0), FALSE);
@@ -5323,15 +5330,15 @@ static void browser_update(struct widget_instance *list)
 		else if (!multiplayer.game_count)
 		{
 			usnprintf(text, NUMBEROF(text) - 1, L"%s", multiplayer.mode == _multiplayer_mode_direct_link ?
-				L"Copy an invite link and PASTE LINK, or accept a Discord invite" :
-				L"Looking for games on your LAN...");
+				menu_text(L"Copy an invite link and PASTE LINK, or accept a Discord invite") :
+				menu_text(L"Looking for games on your LAN..."));
 		}
 		else
 		{
 			struct advertised_game *game = multiplayer.games[multiplayer.game_chosen];
 
-			usnprintf(text, NUMBEROF(text) - 1, L"%d players of %d, on %d machines%s", game->player_count,
-				game->maximum_player_count, game->machine_count, advertised_in_progress(game) ? L": under way" : L"");
+			usnprintf(text, NUMBEROF(text) - 1, menu_text(L"%d players of %d, on %d machines%s"), game->player_count,
+				game->maximum_player_count, game->machine_count, advertised_in_progress(game) ? menu_text(L": under way") : L"");
 		}
 		text[NUMBEROF(text) - 1] = 0;
 		text_set_length(named(list, "ticker_player_info", 0), text, TICKER_TEXT_LENGTH);
@@ -5623,7 +5630,7 @@ static boolean lobby_join_start(struct widget_instance *widget, short controller
 		return campaign_fail();
 	if (lobby_player_count >= game->maximum_players)
 	{
-		display_error_text_deferred(L"The game is full.", NONE);
+		display_error_text_deferred(menu_text(L"The game is full."), NONE);
 		return campaign_fail();
 	}
 	lobby_join.controller = controller;
@@ -5699,14 +5706,14 @@ static void lobby_join_help(struct widget_instance *list)
 
 	if (lobby_join.adding)
 	{
-		text = L"New player: press START.";
+		text = menu_text(L"New player: press START.");
 	}
 	else if (lobby_local_player_count() < MAXIMUM_LOCAL_PLAYERS)
 	{
 		for (controller = 0; controller < MAXIMUM_LOCAL_PLAYERS; controller++)
 		{
 			if (input_has_gamepad(controller) && !lobby_controller_playing(controller))
-				text = L"Another controller: START joins.";
+				text = menu_text(L"Another controller: START joins.");
 		}
 	}
 	text_set(help, text);
@@ -5721,7 +5728,7 @@ static void lobby_row_text(short row, wchar_t *text)
 	ustrncpy(name, player->name, NUMBEROF(player->name));
 	name[NUMBEROF(player->name)] = 0;
 	if (game && game->variant.universal_variant.teams)
-		usnprintf(text, ROW_TEXT_LENGTH - 1, L"%s  (%s)", name, player->team_index ? L"BLUE" : L"RED");
+		usnprintf(text, ROW_TEXT_LENGTH - 1, L"%s  (%s)", name, player->team_index ? menu_text(L"BLUE") : menu_text(L"RED"));
 	else
 		usnprintf(text, ROW_TEXT_LENGTH - 1, L"%s", name);
 	/* (this machine's players, when it has more than one: their controllers) */
@@ -5912,10 +5919,10 @@ static void lobby_update(struct widget_instance *list)
 		}
 		ustrncpy(gametype, game->variant.human_readable_game_description, NUMBEROF(gametype) - 1);
 		gametype[NUMBEROF(gametype) - 1] = 0;
-		usnprintf(text, NUMBEROF(text) - 1, L"%s%s\r\n%s\r\n%d of %d players\r\n\r\n%s", name, gametype,
-			kind ? kind : engine_names[PIN(game->variant.game_engine_index, 0, 5)], lobby_player_count,
+		usnprintf(text, NUMBEROF(text) - 1, menu_text(L"%s%s\r\n%s\r\n%d of %d players\r\n\r\n%s"), name, gametype,
+			menu_text(kind ? kind : engine_names[PIN(game->variant.game_engine_index, 0, 5)]), lobby_player_count,
 			game->maximum_players,
-			seconds > 0 ? L"Starting in:" : game->machine_count < 2 || dedicated ? L"Waiting for players" : L"");
+			seconds > 0 ? menu_text(L"Starting in:") : game->machine_count < 2 || dedicated ? menu_text(L"Waiting for players") : L"");
 		text[NUMBEROF(text) - 1] = 0;
 		if (seconds > 0)
 		{
@@ -5927,7 +5934,7 @@ static void lobby_update(struct widget_instance *list)
 		{
 			size_t length = ustrlen(text);
 
-			usnprintf(text + length, NUMBEROF(text) - 1 - length, L"\r\n\r\nInvite link copied:\r\npaste it to friends");
+			usnprintf(text + length, NUMBEROF(text) - 1 - length, menu_text(L"\r\n\r\nInvite link copied:\r\npaste it to friends"));
 		}
 		text_set_length(named(description, "lobby_game_data", 0), text, LOBBY_TEXT_LENGTH);
 	}
@@ -5969,7 +5976,7 @@ static void preview_players_text(wchar_t *text, short size)
 	if (lobby_local_player_count() < 2)
 		return;
 	length = ustrlen(text);
-	usnprintf(text + length, size - 1 - length, L"\r\n\r\nJoining from here:");
+	usnprintf(text + length, size - 1 - length, menu_text(L"\r\n\r\nJoining from here:"));
 	for (controller = 0; controller < MAXIMUM_LOCAL_PLAYERS; controller++)
 	{
 		struct player_profile profile;
@@ -5999,7 +6006,7 @@ static void preview_update(struct widget_instance *list)
 	if (valid)
 	{
 		lobby_map_show(description, game->map_name);
-		usnprintf(text, NUMBEROF(text) - 1, L"%s\r\n%d of %d players\r\non %d machines",
+		usnprintf(text, NUMBEROF(text) - 1, menu_text(L"%s\r\n%d of %d players\r\non %d machines"),
 			game_kind_name(game->engine_type, advertised_game_kind(game), FALSE), game->player_count,
 			game->maximum_player_count, game->machine_count);
 		text[NUMBEROF(text) - 1] = 0;
@@ -6007,14 +6014,14 @@ static void preview_update(struct widget_instance *list)
 		ustrncpy(name, game->game_name, NUMBEROF(game->game_name));
 		name[NUMBEROF(game->game_name)] = 0;
 		/* (the text box does not wrap: lines of up to 28 characters) */
-		usnprintf(text, NUMBEROF(text) - 1, L"%s\r\n\r\nThis game is under way.\r\n\r\n%s", name,
-			game->open ? L"JOIN GAME joins it now;\r\nits players show then." :
-			L"It cannot be joined now:\r\nit is loading, over or full.");
+		usnprintf(text, NUMBEROF(text) - 1, menu_text(L"%s\r\n\r\nThis game is under way.\r\n\r\n%s"), name,
+			game->open ? menu_text(L"JOIN GAME joins it now;\r\nits players show then.") :
+			menu_text(L"It cannot be joined now:\r\nit is loading, over or full."));
 		text[NUMBEROF(text) - 1] = 0;
 		preview_players_text(text, NUMBEROF(text));
 	}
 	else
-		usnprintf(text, NUMBEROF(text) - 1, L"The game is gone.");
+		usnprintf(text, NUMBEROF(text) - 1, menu_text(L"The game is gone."));
 	text[NUMBEROF(text) - 1] = 0;
 	text_set_length(named(list, "preview_status", 0), text, LOBBY_TEXT_LENGTH);
 	lobby_join_help(list);
@@ -6038,7 +6045,7 @@ static boolean preview_add(struct widget_instance *widget, short controller, boo
 		return campaign_fail();
 	if (game->player_count + count >= game->maximum_player_count)
 	{
-		display_error_text_deferred(L"The game is full.", NONE);
+		display_error_text_deferred(menu_text(L"The game is full."), NONE);
 		return campaign_fail();
 	}
 	lobby_join.controller = controller;
@@ -6707,8 +6714,8 @@ static void gametype_setup_type(wchar_t *text)
 	name[NUMBEROF(name) - 1] = 0;
 	kind = game_modes_variant_kind_name(&gametype_edit.setup_variant, &gametype_edit.setup_options);
 	usnprintf(text, ROW_TEXT_LENGTH - 1, L"%s (%s%s)", name,
-		kind ? kind : engine_names[PIN(gametype_edit.setup_variant.game_engine_index, 0, 5)],
-		gametype_edit.setup_variant.universal_variant.teams ? L", TEAMS" : L"");
+		menu_text(kind ? kind : engine_names[PIN(gametype_edit.setup_variant.game_engine_index, 0, 5)]),
+		gametype_edit.setup_variant.universal_variant.teams ? menu_text(L", TEAMS") : L"");
 	text[ROW_TEXT_LENGTH - 1] = 0;
 }
 

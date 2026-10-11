@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Written by tools/menu_languages.py: the menus' pictures with words in each edition's language -->
+<!-- Written by tools/menu_languages.py: the menus' pictures with words and the port's own lines in each edition's language -->
 <menus>
 	<language name="it" strings="ui\shell\main_menu\multiplayer_type_select\multiplayer_options" index="0" text="PARTECIPA A PARTITA"/>
 	<bitmap name="main_menu/campaign_select/header_load_game" language="it">
@@ -131,4 +131,522 @@
 		<frame png="languages/it/main_menu/campaign_select/item_new_campaign__0.png" width="256" height="64"/>
 		<frame png="languages/it/main_menu/campaign_select/item_new_campaign__1.png" width="256" height="64"/>
 	</bitmap>
+	<bitmap name="main_menu/multiplayer_type_select/coop/header_player_2" language="it">
+		<frame png="languages/it/main_menu/multiplayer_type_select/coop/header_player_2__0.png" width="512" height="64"/>
+	</bitmap>
+	<bitmap name="main_menu/multiplayer_type_select/join_game/header_direct_link" language="it">
+		<frame png="languages/it/main_menu/multiplayer_type_select/join_game/header_direct_link__0.png" width="512" height="64"/>
+	</bitmap>
+	<bitmap name="main_menu/multiplayer_type_select/join_game/header_server_browser" language="it">
+		<frame png="languages/it/main_menu/multiplayer_type_select/join_game/header_server_browser__0.png" width="512" height="64"/>
+	</bitmap>
+	<bitmap name="main_menu/multiplayer_type_select/lobby/header_add_player" language="it">
+		<frame png="languages/it/main_menu/multiplayer_type_select/lobby/header_add_player__0.png" width="512" height="64"/>
+	</bitmap>
+	<bitmap name="main_menu/multiplayer_type_select/lobby/header_lobby" language="it">
+		<frame png="languages/it/main_menu/multiplayer_type_select/lobby/header_lobby__0.png" width="512" height="64"/>
+	</bitmap>
+	<bitmap name="main_menu/multiplayer_type_select/server_settings/coop_options/header_coop_options" language="it">
+		<frame png="languages/it/main_menu/multiplayer_type_select/server_settings/coop_options/header_coop_options__0.png" width="512" height="64"/>
+	</bitmap>
+	<bitmap name="main_menu/multiplayer_type_select/server_settings/map_share_options/header_map_share_options" language="it">
+		<frame png="languages/it/main_menu/multiplayer_type_select/server_settings/map_share_options/header_map_share_options__0.png" width="512" height="64"/>
+	</bitmap>
+	<bitmap name="main_menu/multiplayer_type_select/server_settings/voice_options/header_voice_options" language="it">
+		<frame png="languages/it/main_menu/multiplayer_type_select/server_settings/voice_options/header_voice_options__0.png" width="512" height="64"/>
+	</bitmap>
+	<line text="%d players of %d, on %d machines%s" language="it" translation="%d di %d giocatori, su %d computer%s"/>
+	<line text="%s: %d %s of %d%s%s" language="it" translation="%s: %d %s su %d%s%s"/>
+	<line text="%s\n%d of %d players\non %d machines" language="it" translation="%s\n%d di %d giocatori\nsu %d computer"/>
+	<line text="%s\n%s\n%d of %d players\n\n%s" language="it" translation="%s\n%s\n%d di %d giocatori\n\n%s"/>
+	<line text="%s\n%s\nScore to win: %ld" language="it" translation="%s\n%s\nPunti per vincere: %ld"/>
+	<line text="%s\n\nThis game is under way.\n\n%s" language="it" translation="%s\n\nQuesta partita è in corso.\n\n%s"/>
+	<line text=", TEAMS" language="it" translation=", SQUADRE"/>
+	<line text=", full or starting" language="it" translation=", piena o in avvio"/>
+	<line text=", under way" language="it" translation=", in corso"/>
+	<line text=": under way" language="it" translation=": in corso"/>
+	<line text="A campaign level, played co-op" language="it" translation="Un livello della campagna, in cooperativa"/>
+	<line text="A hundred and fifty kills to win. Only a crowded\nserver gets there." language="it" translation="Centocinquanta uccisioni per vincere. Ci arriva\nsolo un server affollato."/>
+	<line text="A hundred kills to win. Made for big games." language="it" translation="Cento uccisioni per vincere. Per partite grandi."/>
+	<line text="A random primary weapon, of those the map has,\neach time you spawn." language="it" translation="Un'arma principale a caso, tra quelle della mappa,\na ogni riapparizione."/>
+	<line text="A random secondary weapon, of those the map has,\neach time you spawn." language="it" translation="Un'arma secondaria a caso, tra quelle della mappa,\na ogni riapparizione."/>
+	<line text="A team game's scoreboard: a column for each team,\nor every player in order of score." language="it" translation="Il punteggio a squadre: una colonna per squadra,\no tutti i giocatori in ordine di punteggio."/>
+	<line text="ADD PLAYER" language="it" translation="+ GIOCATORE"/>
+	<line text="AIM ASSIST:" language="it" translation="MIRA ASSISTITA:"/>
+	<line text="ALLIES" language="it" translation="ALLEATI"/>
+	<line text="ANYONE NEAR" language="it" translation="CHIUNQUE VICINO"/>
+	<line text="ARM SHIELDS:" language="it" translation="SCUDI SULLE BRACCIA:"/>
+	<line text="ASSAULT RIFLE" language="it" translation="FUCILE D'ASSALTO"/>
+	<line text="AUTO-CENTER LOOK:" language="it" translation="CENTRA VISUALE:"/>
+	<line text="Adjust the mouse's sensitivity\nand aiming.\n\nProfile:" language="it" translation="Regola la sensibilità del mouse\ne la mira.\n\nProfilo:"/>
+	<line text="Adjust the volume of the music\nand of everything else.\n\nProfile:" language="it" translation="Regola il volume della musica\ne di tutto il resto.\n\nProfilo:"/>
+	<line text="Another controller: START joins." language="it" translation="Un altro controller: START per unirsi."/>
+	<line text="Anyone can see and join your game: it is listed\nin everyone's Server Browser." language="it" translation="Chiunque può vedere la partita e unirsi: appare\nnell'elenco server di tutti."/>
+	<line text="BORDERLESS" language="it" translation="SENZA BORDI"/>
+	<line text="BUTTON LAYOUT:" language="it" translation="DISPOSIZIONE PULSANTI:"/>
+	<line text="BY SCORE" language="it" translation="PER PUNTEGGIO"/>
+	<line text="CATEGORY" language="it" translation="CATEGORIA"/>
+	<line text="CHECK FOR UPDATES:" language="it" translation="CERCA AGGIORNAMENTI:"/>
+	<line text="CLOSED" language="it" translation="CHIUSA"/>
+	<line text="CO-OP CAMPAIGN" language="it" translation="CAMPAGNA CO-OP"/>
+	<line text="CO-OP OPTIONS" language="it" translation="OPZIONI COOPERATIVA"/>
+	<line text="CO-OP OPTIONS:" language="it" translation="OPZIONI CO-OP:"/>
+	<line text="CUSTOM MULTIPLAYER" language="it" translation="MULTIGIOCATORE PERSONALIZZATO"/>
+	<line text="CUSTOM SINGLEPLAYER" language="it" translation="CAMPAGNA PERSONALIZZATA"/>
+	<line text="Choose a window or the full\nscreen, the frame rate and more.\n\nProfile:" language="it" translation="Scegli finestra o schermo intero,\nfrequenza fotogrammi e altro.\n\nProfilo:"/>
+	<line text="Choose the keys and mouse\nbuttons for each action.\n\nProfile:" language="it" translation="Scegli i tasti e i pulsanti\ndel mouse per ogni azione.\n\nProfilo:"/>
+	<line text="Choose what to show, with left and right." language="it" translation="Scegli cosa mostrare con sinistra e destra."/>
+	<line text="Connecting to %s..." language="it" translation="Connessione a %s..."/>
+	<line text="Copy an invite link and PASTE LINK, or accept a Discord invite" language="it" translation="Copia un link d'invito e INCOLLA LINK, o accetta un invito Discord"/>
+	<line text="Could not join the game." language="it" translation="Impossibile unirsi alla partita."/>
+	<line text="Could not reach %s" language="it" translation="Impossibile raggiungere %s"/>
+	<line text="DIRECT LINK" language="it" translation="LINK DIRETTO"/>
+	<line text="DISPLAY MODE:" language="it" translation="MODALITÀ SCHERMO:"/>
+	<line text="DOWNLOAD MAPS:" language="it" translation="SCARICA MAPPE:"/>
+	<line text="Damage from the other players will only reduce\nshields. Health will be unaffected." language="it" translation="I danni degli altri giocatori ridurranno solo\ngli scudi. La salute non ne risentirà."/>
+	<line text="Downloading Custom Edition maps you do not have,\nand helping send them to other players." language="it" translation="Scaricare le mappe Custom Edition che non hai,\ne aiutare a inviarle agli altri giocatori."/>
+	<line text="Draw a frame for every display refresh, blending\nbetween the game's 30 ticks a second." language="it" translation="Un fotogramma a ogni aggiornamento dello schermo,\nfondendo i 30 tick al secondo del gioco."/>
+	<line text="Draw a panel behind the scoreboard, for clearer\ntext." language="it" translation="Un pannello dietro il punteggio, per un testo\npiù leggibile."/>
+	<line text="Draw first-person weapons, hands and attached\nvisuals. Gameplay and sound continue when off." language="it" translation="Disegna armi, mani ed effetti in prima persona.\nGioco e suono continuano se disattivato."/>
+	<line text="Draw text and titles with high-res fonts; off\ndraws the game's own." language="it" translation="Testi e titoli con caratteri ad alta risoluzione;\nse disattivato, quelli del gioco."/>
+	<line text="Draw the HUD from the high-res redraws; off\ndraws the game's own pictures." language="it" translation="L'HUD dai ridisegni ad alta risoluzione; se\ndisattivato, le immagini del gioco."/>
+	<line text="END GAME" language="it" translation="TERMINA PARTITA"/>
+	<line text="ENEMIES" language="it" translation="NEMICI"/>
+	<line text="EXTRA ENEMIES:" language="it" translation="NEMICI AGGIUNTIVI:"/>
+	<line text="Each enemy squad is this many times as large." language="it" translation="Ogni squadra nemica è moltiplicata per questo valore."/>
+	<line text="Each team's vehicles and their respawn time, for\nthis game." language="it" translation="I veicoli di ogni squadra e il loro tempo di\nriapparizione, per questa partita."/>
+	<line text="Echo sounds as the place you are in does, and\nmuffle those behind walls, as the Xbox did." language="it" translation="L'eco dei suoni come nel luogo in cui sei, e quelli\ndietro i muri attutiti, come su Xbox."/>
+	<line text="Enemy squads are as the campaign has them." language="it" translation="Le squadre nemiche sono quelle della campagna."/>
+	<line text="Enemy squads are the amount below times as large,\nhowever many players there are." language="it" translation="Le squadre nemiche sono moltiplicate per il valore\nsotto, qualunque sia il numero di giocatori."/>
+	<line text="Enemy squads grow with the players: by the amount\nbelow for each player past the first." language="it" translation="Le squadre nemiche crescono con i giocatori: del\nvalore sotto per ogni giocatore oltre il primo."/>
+	<line text="Enter sets the key chosen; left and right choose\nwhich of two. Then press the new key or button." language="it" translation="Invio imposta il tasto scelto; sinistra e destra\nscelgono quale dei due. Poi premi tasto o pulsante."/>
+	<line text="Everyone has a limitless supply of grenades, which\nmakes for loud, explosive and occasionally messy fun." language="it" translation="Tutti hanno granate illimitate, per un divertimento\nrumoroso, esplosivo e a volte caotico."/>
+	<line text="Everyone hears everyone in the lobby, before and\nafter the game." language="it" translation="Nella lobby tutti sentono tutti, prima e dopo\nla partita."/>
+	<line text="Everyone spawns with a assault rifle as their primary\nweapon (where the map has one)." language="it" translation="Tutti riappaiono con un fucile d'assalto come arma\nprincipale (se la mappa ne ha)."/>
+	<line text="Everyone spawns with a assault rifle as their secondary\nweapon (where the map has one)." language="it" translation="Tutti riappaiono con un fucile d'assalto come arma\nsecondaria (se la mappa ne ha)."/>
+	<line text="Everyone spawns with a needler as their primary\nweapon (where the map has one)." language="it" translation="Tutti riappaiono con una pistola ad aghi come arma\nprincipale (se la mappa ne ha)."/>
+	<line text="Everyone spawns with a needler as their secondary\nweapon (where the map has one)." language="it" translation="Tutti riappaiono con una pistola ad aghi come arma\nsecondaria (se la mappa ne ha)."/>
+	<line text="Everyone spawns with a pistol as their primary\nweapon (where the map has one)." language="it" translation="Tutti riappaiono con una pistola come arma\nprincipale (se la mappa ne ha)."/>
+	<line text="Everyone spawns with a pistol as their secondary\nweapon (where the map has one)." language="it" translation="Tutti riappaiono con una pistola come arma\nsecondaria (se la mappa ne ha)."/>
+	<line text="Everyone spawns with a plasma pistol as their primary\nweapon (where the map has one)." language="it" translation="Tutti riappaiono con una pistola al plasma come arma\nprincipale (se la mappa ne ha)."/>
+	<line text="Everyone spawns with a plasma pistol as their secondary\nweapon (where the map has one)." language="it" translation="Tutti riappaiono con una pistola al plasma come arma\nsecondaria (se la mappa ne ha)."/>
+	<line text="Everyone spawns with a plasma rifle as their primary\nweapon (where the map has one)." language="it" translation="Tutti riappaiono con un fucile al plasma come arma\nprincipale (se la mappa ne ha)."/>
+	<line text="Everyone spawns with a plasma rifle as their secondary\nweapon (where the map has one)." language="it" translation="Tutti riappaiono con un fucile al plasma come arma\nsecondaria (se la mappa ne ha)."/>
+	<line text="Everyone spawns with a rocket launcher as their primary\nweapon (where the map has one)." language="it" translation="Tutti riappaiono con un lanciarazzi come arma\nprincipale (se la mappa ne ha)."/>
+	<line text="Everyone spawns with a rocket launcher as their secondary\nweapon (where the map has one)." language="it" translation="Tutti riappaiono con un lanciarazzi come arma\nsecondaria (se la mappa ne ha)."/>
+	<line text="Everyone spawns with a shotgun as their primary\nweapon (where the map has one)." language="it" translation="Tutti riappaiono con un fucile come arma\nprincipale (se la mappa ne ha)."/>
+	<line text="Everyone spawns with a shotgun as their secondary\nweapon (where the map has one)." language="it" translation="Tutti riappaiono con un fucile come arma\nsecondaria (se la mappa ne ha)."/>
+	<line text="Everyone spawns with a sniper rifle as their primary\nweapon (where the map has one)." language="it" translation="Tutti riappaiono con un fucile di precisione come\narma principale (se la mappa ne ha)."/>
+	<line text="Everyone spawns with a sniper rifle as their secondary\nweapon (where the map has one)." language="it" translation="Tutti riappaiono con un fucile di precisione come\narma secondaria (se la mappa ne ha)."/>
+	<line text="Everyone starts with the primary and secondary\nweapons below; the map's weapons are its own." language="it" translation="Tutti iniziano con le armi principale e secondaria\nsotto; le armi della mappa restano le sue."/>
+	<line text="FAILED" language="it" translation="ERRORE"/>
+	<line text="FOV AND VIEWMODELS:" language="it" translation="FOV E MODELLI ARMA:"/>
+	<line text="FRAME RATE LIMIT:" language="it" translation="LIMITE FOTOGRAMMI:"/>
+	<line text="FULLSCREEN" language="it" translation="SCHERMO INTERO"/>
+	<line text="Five hundred kills to win. You'll be here a while." language="it" translation="Cinquecento uccisioni per vincere. Ci vorrà un po'."/>
+	<line text="Flying vehicles pitch as aircraft do: pushing up\nflies down." language="it" translation="I veicoli volanti beccheggiano come gli aerei:\nspingendo su si scende."/>
+	<line text="For each player past the first, enemy squads get\nthis much more of themselves (100%: as many again)." language="it" translation="Per ogni giocatore oltre il primo, le squadre nemiche\ncrescono di tanto (100%: il doppio)."/>
+	<line text="Free for all" language="it" translation="Tutti contro tutti"/>
+	<line text="Friendly fire and team balance, for this game." language="it" translation="Fuoco amico e bilanciamento squadre, per questa partita."/>
+	<line text="Friendly fire, the enemies and player collisions,\nfor this game." language="it" translation="Fuoco amico, nemici e collisioni tra giocatori,\nper questa partita."/>
+	<line text="Fullscreen takes the display; borderless covers it\nwith a window. F11 switches to the window." language="it" translation="Schermo intero occupa lo schermo; senza bordi lo\ncopre con una finestra. F11 passa alla finestra."/>
+	<line text="GAME LOBBY" language="it" translation="LOBBY PARTITA"/>
+	<line text="GAME NAME:" language="it" translation="NOME PARTITA:"/>
+	<line text="GAME TYPE:" language="it" translation="TIPO PARTITA:"/>
+	<line text="GLOW INTENSITY:" language="it" translation="INTENSITÀ BAGLIORE:"/>
+	<line text="GRAPHICS:" language="it" translation="GRAFICA:"/>
+	<line text="HELP SEND MAPS:" language="it" translation="AIUTA A INVIARE:"/>
+	<line text="HIGH-RES HUD:" language="it" translation="HUD ALTA RISOLUZIONE:"/>
+	<line text="HIGH-RES TEXT:" language="it" translation="TESTO ALTA RISOLUZIONE:"/>
+	<line text="Halo Custom\nEdition map" language="it" translation="Mappa di Halo\nCustom Edition"/>
+	<line text="Halo: Combat Evolved, the Xbox\ngame, on this computer.\n\nProfile:" language="it" translation="Halo: Combat Evolved, il gioco\nper Xbox, su questo computer.\n\nProfilo:"/>
+	<line text="Host a game on the Internet:\nplayers join by its invite\nlink or Discord." language="it" translation="Ospita una partita su Internet:\ni giocatori entrano col link\nd'invito o con Discord."/>
+	<line text="Host and join games over the internet by invite\nlinks; off keeps to the local network." language="it" translation="Ospita partite su Internet ed entra con i link\nd'invito; se disattivato, solo la rete locale."/>
+	<line text="How fast the right stick turns the view." language="it" translation="Velocità della visuale con la levetta destra."/>
+	<line text="How fast the view turns side to side for the\nmouse's movement." language="it" translation="Velocità con cui la visuale gira di lato al\nmovimento del mouse."/>
+	<line text="How fast the view turns up and down; Same\nturns it as fast as side to side." language="it" translation="Velocità con cui la visuale gira in alto e in basso;\nUguale la gira come di lato."/>
+	<line text="How large the players' names are drawn." language="it" translation="La dimensione dei nomi dei giocatori."/>
+	<line text="IN-GAME HELP:" language="it" translation="AIUTO IN GIOCO:"/>
+	<line text="INDICATOR OPTIONS:" language="it" translation="OPZIONI INDICATORE:"/>
+	<line text="INPUT DEVICE:" language="it" translation="DISPOSITIVO DI INGRESSO:"/>
+	<line text="INSTANT AIM:" language="it" translation="MIRA ISTANTANEA:"/>
+	<line text="INTERNET PLAY IS OFF (SETTINGS)" language="it" translation="INTERNET DISATTIVATO (IMPOSTAZIONI)"/>
+	<line text="INTERNET PLAY:" language="it" translation="GIOCO SU INTERNET:"/>
+	<line text="INVERT FLIGHT:" language="it" translation="INVERTI VOLO:"/>
+	<line text="INVERT LOOK:" language="it" translation="INVERTI VISUALE:"/>
+	<line text="INVITE LINK:" language="it" translation="LINK D'INVITO:"/>
+	<line text="ITEM OPTIONS:" language="it" translation="OPZIONI OGGETTI:"/>
+	<line text="In another's game, send its map to players who\njoin without it, as a torrent's peers do." language="it" translation="Nella partita di un altro, invia la sua mappa a chi\nentra senza, come fanno i peer di un torrent."/>
+	<line text="In first person, turn the view the moment the\nmouse moves, not up to two ticks later." language="it" translation="In prima persona, gira la visuale appena il mouse\nsi muove, non fino a due tick dopo."/>
+	<line text="In multiplayer, whose names are drawn above their\nheads." language="it" translation="In multigiocatore, di chi mostrare il nome sopra\nla testa."/>
+	<line text="Internet play is off (Settings)" language="it" translation="Il gioco su Internet è disattivato (Impostazioni)"/>
+	<line text="Internet play, updates and the\nmultiplayer HUD.\n\nProfile:" language="it" translation="Gioco su Internet, aggiornamenti\ne HUD multigiocatore.\n\nProfilo:"/>
+	<line text="It cannot be joined now:\nit is loading, over or full." language="it" translation="Ora non è possibile entrare:\nsta caricando, è finita o è piena."/>
+	<line text="JOIN FROM CLIPBOARD:" language="it" translation="ENTRA DAGLI APPUNTI:"/>
+	<line text="JOIN GAME joins it now;\nits players show then." language="it" translation="PARTECIPA per entrare ora;\npoi appariranno i giocatori."/>
+	<line text="JOINING THE GAME\nYou spawn beside a teammate once it is safe" language="it" translation="INGRESSO IN PARTITA\nRiapparirai accanto a un compagno appena sarà sicuro"/>
+	<line text="Join a game by its invite link,\nor one a Discord invite\nreached." language="it" translation="Entra in una partita col suo\nlink d'invito o con un invito\nDiscord."/>
+	<line text="Join the game of an invite link copied before\nswitching to the game." language="it" translation="Entra nella partita di un link d'invito copiato\nprima di passare al gioco."/>
+	<line text="Joining a game on a Custom Edition map you do not\nhave: download it from the players (if shared)." language="it" translation="Entrando in una partita su una mappa Custom Edition\nche non hai: scaricala dai giocatori (se condivisa)."/>
+	<line text="Keypad Comma" language="it" translation="TASTIERINO ,"/>
+	<line text="Keypad Enter" language="it" translation="TAST. INVIO"/>
+	<line text="LEAVE" language="it" translation="ESCI"/>
+	<line text="LEGACY" language="it" translation="CLASSICA"/>
+	<line text="LEGACY SOUTHPAW" language="it" translation="CLASSICA MANCINA"/>
+	<line text="LEGS:" language="it" translation="GAMBE:"/>
+	<line text="LIGHT SHOW" language="it" translation="SPETTACOLO DI LUCI"/>
+	<line text="LISTING:" language="it" translation="VISIBILITÀ:"/>
+	<line text="LIVE" language="it" translation="IN CORSO"/>
+	<line text="LOADOUT:" language="it" translation="DOTAZIONE:"/>
+	<line text="LOBBY VOICE CHAT:" language="it" translation="CHAT VOCALE LOBBY:"/>
+	<line text="LOOK SENSITIVITY:" language="it" translation="SENSIBILITÀ VISUALE:"/>
+	<line text="Left" language="it" translation="FRECCIA SX"/>
+	<line text="Left Alt" language="it" translation="ALT SX"/>
+	<line text="Left Ctrl" language="it" translation="CTRL SX"/>
+	<line text="Left GUI" language="it" translation="WINDOWS SX"/>
+	<line text="Left Shift" language="it" translation="MAIUSC SX"/>
+	<line text="Let internet play ask the router to forward its\nport, for networks that stop connections." language="it" translation="Il gioco su Internet chiede al router di inoltrare\nla porta, per le reti che bloccano le connessioni."/>
+	<line text="Level the view while walking." language="it" translation="Livella la visuale mentre cammini."/>
+	<line text="Light Show: the shield glow three times as far,\nat full from a third of the flare." language="it" translation="Spettacolo di luci: bagliore dello scudo tre volte\npiù ampio, pieno da un terzo del lampo."/>
+	<line text="Light models for each pixel, without the facets\nof the Xbox's lighting for each vertex." language="it" translation="Illumina i modelli per pixel, senza le sfaccettature\ndell'illuminazione per vertice di Xbox."/>
+	<line text="Lives, health, shields and respawning, for this game." language="it" translation="Vite, salute, scudi e riapparizione, per questa partita."/>
+	<line text="Look for a new version when the game starts." language="it" translation="Cerca una nuova versione all'avvio del gioco."/>
+	<line text="Looking for games on your LAN..." language="it" translation="Ricerca partite sulla tua LAN..."/>
+	<line text="Looking for public games..." language="it" translation="Ricerca partite pubbliche..."/>
+	<line text="MADE WHEN THE GAME STARTS" language="it" translation="CREATO ALL'AVVIO DELLA PARTITA"/>
+	<line text="MAP SHARING" language="it" translation="CONDIVISIONE MAPPE"/>
+	<line text="MAP SHARING:" language="it" translation="CONDIVISIONE MAPPE:"/>
+	<line text="MAP WEAPONS:" language="it" translation="ARMI DELLA MAPPA:"/>
+	<line text="MAXIMUM PLAYERS:" language="it" translation="GIOCATORI MAX:"/>
+	<line text="MELEE" language="it" translation="CORPO A CORPO"/>
+	<line text="MOVE BACKWARD" language="it" translation="INDIETREGGIA"/>
+	<line text="MOVE FORWARD" language="it" translation="AVANZA"/>
+	<line text="MULTIPLIER:" language="it" translation="MOLTIPLICATORE:"/>
+	<line text="Mouse Left" language="it" translation="PULSANTE SX"/>
+	<line text="Mouse Middle" language="it" translation="CLIC RUOTA"/>
+	<line text="Mouse Right" language="it" translation="PULSANTE DX"/>
+	<line text="Moving the mouse forward looks down." language="it" translation="Spostando il mouse in avanti si guarda in basso."/>
+	<line text="NATIVE" language="it" translation="NATIVA"/>
+	<line text="NEEDLER" language="it" translation="PISTOLA AD AGHI"/>
+	<line text="NO GRENADES" language="it" translation="NIENTE GRANATE"/>
+	<line text="NONE: A LAN GAME" language="it" translation="NESSUNO: PARTITA IN LAN"/>
+	<line text="Native draws at the resolution; Original draws\nthe Xbox's 640x480 and scales it up." language="it" translation="Nativa disegna alla risoluzione; Originale disegna\na 640x480 come Xbox e ingrandisce."/>
+	<line text="New player: press START." language="it" translation="Nuovo giocatore: premi START."/>
+	<line text="No primary weapon." language="it" translation="Nessuna arma principale."/>
+	<line text="No public games found" language="it" translation="Nessuna partita pubblica trovata"/>
+	<line text="No secondary weapon." language="it" translation="Nessuna arma secondaria."/>
+	<line text="No voice chat during the game." language="it" translation="Nessuna chat vocale durante la partita."/>
+	<line text="No voice chat in the lobby." language="it" translation="Nessuna chat vocale nella lobby."/>
+	<line text="No weapons appear on the map: with a loadout of\nNONE and NONE, melee and grenades only." language="it" translation="Nessuna arma nella mappa: con dotazione NESSUNO\ne NESSUNO, solo corpo a corpo e granate."/>
+	<line text="OPEN MIC" language="it" translation="MICROFONO APERTO"/>
+	<line text="ORIGINAL" language="it" translation="ORIGINALE"/>
+	<line text="OUTPUT DEVICE:" language="it" translation="DISPOSITIVO DI USCITA:"/>
+	<line text="On foot, horizontal at 16:9, in degrees.\nDefault keeps the stock view." language="it" translation="A piedi, orizzontale in 16:9, in gradi.\nPredefinito mantiene la visuale originale."/>
+	<line text="Only players with your invite link can join." language="it" translation="Solo chi ha il tuo link d'invito può entrare."/>
+	<line text="PASTE LINK" language="it" translation="INCOLLA LINK"/>
+	<line text="PAUSE MENU" language="it" translation="MENU PAUSA"/>
+	<line text="PER PLAYER" language="it" translation="PER GIOCATORE"/>
+	<line text="PER PLAYER:" language="it" translation="PER GIOCATORE:"/>
+	<line text="PER-PIXEL LIGHTING:" language="it" translation="ILLUMINAZIONE PER PIXEL:"/>
+	<line text="PISTOL" language="it" translation="PISTOLA"/>
+	<line text="PLASMA PISTOL" language="it" translation="PISTOLA AL PLASMA"/>
+	<line text="PLASMA RIFLE" language="it" translation="FUCILE AL PLASMA"/>
+	<line text="PLAYER 2 PROFILE" language="it" translation="PROFILO GIOCATORE 2"/>
+	<line text="PLAYER COLLISIONS:" language="it" translation="COLLISIONI GIOCATORI:"/>
+	<line text="PLAYER NAME SIZE:" language="it" translation="DIMENSIONE NOMI:"/>
+	<line text="PLAYER NAMES:" language="it" translation="NOMI GIOCATORI:"/>
+	<line text="PLAYER OPTIONS:" language="it" translation="OPZIONI GIOCATORI:"/>
+	<line text="PRESS A KEY" language="it" translation="PREMI UN TASTO"/>
+	<line text="PRESS SPACE OR A TO VOTE TO SKIP   %d OF %d" language="it" translation="PREMI SPAZIO O A PER VOTARE IL SALTO   %d SU %d"/>
+	<line text="PRIMARY WEAPON:" language="it" translation="ARMA PRINCIPALE:"/>
+	<line text="PRIVATE" language="it" translation="PRIVATA"/>
+	<line text="PUBLIC" language="it" translation="PUBBLICA"/>
+	<line text="PUSH TO TALK" language="it" translation="PREMI E PARLA"/>
+	<line text="Play sound at all; from the next time the game\nstarts." language="it" translation="Riproduce l'audio; dal prossimo avvio del\ngioco."/>
+	<line text="Play the campaign with a\nfriend in split screen:\nplayer 2 on a gamepad." language="it" translation="Gioca la campagna con un\namico a schermo diviso:\ngiocatore 2 col gamepad."/>
+	<line text="Player 2 chooses their\nprofile with their own\ncontroller." language="it" translation="Il giocatore 2 sceglie\nil suo profilo con il\nproprio controller."/>
+	<line text="Player 2: choose with your controller." language="it" translation="Giocatore 2: scegli con il tuo controller."/>
+	<line text="Players 15 metres apart or less are near\nfor voice chat." language="it" translation="I giocatori a 15 metri o meno sono vicini\nper la chat vocale."/>
+	<line text="Players 150 metres apart or less are near\nfor voice chat." language="it" translation="I giocatori a 150 metri o meno sono vicini\nper la chat vocale."/>
+	<line text="Players 30 metres apart or less are near\nfor voice chat." language="it" translation="I giocatori a 30 metri o meno sono vicini\nper la chat vocale."/>
+	<line text="Players 45 metres apart or less are near\nfor voice chat." language="it" translation="I giocatori a 45 metri o meno sono vicini\nper la chat vocale."/>
+	<line text="Players 60 metres apart or less are near\nfor voice chat." language="it" translation="I giocatori a 60 metri o meno sono vicini\nper la chat vocale."/>
+	<line text="Players 90 metres apart or less are near\nfor voice chat." language="it" translation="I giocatori a 90 metri o meno sono vicini\nper la chat vocale."/>
+	<line text="Players bump into each other, as in the campaign." language="it" translation="I giocatori si urtano, come nella campagna."/>
+	<line text="Players can be hurt by damage from explosives\nfired by the other players." language="it" translation="I giocatori possono subire danni dagli esplosivi\nutilizzati dagli altri giocatori."/>
+	<line text="Players can be hurt by weapons or explosives\nfired by the other players." language="it" translation="I giocatori possono essere colpiti da armi ed esplosivi\nutilizzati dagli altri giocatori."/>
+	<line text="Players can not be hurt by weapons and explosives\nfired by the other players." language="it" translation="I giocatori non possono essere colpiti da armi ed esplosivi\nutilizzati dagli altri giocatori."/>
+	<line text="Players can vote to kick a player, from the\nscoreboard." language="it" translation="I giocatori possono votare per espellere un\ngiocatore, dal punteggio."/>
+	<line text="Players cannot vote to kick anyone." language="it" translation="I giocatori non possono votare espulsioni."/>
+	<line text="Players from the Server Browser must type it to\njoin (an invite link needs none). Enter sets it." language="it" translation="Chi arriva dall'elenco server deve digitarla per\nentrare (col link d'invito no). Invio la imposta."/>
+	<line text="Players hear all their teammates, and the enemies\nwho are near them." language="it" translation="I giocatori sentono tutti i compagni di squadra e\ni nemici vicini."/>
+	<line text="Players hear all their teammates, wherever they\nare." language="it" translation="I giocatori sentono tutti i compagni di squadra,\novunque siano."/>
+	<line text="Players hear everyone who is near them." language="it" translation="I giocatori sentono chiunque sia vicino."/>
+	<line text="Players hear their teammates who are near them." language="it" translation="I giocatori sentono i compagni di squadra vicini."/>
+	<line text="Players join this game by its invite link, or your\nDiscord invite. Enter copies the link again." language="it" translation="Si entra in questa partita col link d'invito o il tuo\ninvito Discord. Invio copia di nuovo il link."/>
+	<line text="Players walk through each other, so that no one\nblocks a doorway. The AI's characters still block." language="it" translation="I giocatori si attraversano, così nessuno blocca\nuna porta. I personaggi dell'IA bloccano ancora."/>
+	<line text="Players who join without the map cannot play." language="it" translation="Chi entra senza la mappa non può giocare."/>
+	<line text="Players who join without the map download it\nfrom you and the other players." language="it" translation="Chi entra senza la mappa la scarica\nda te e dagli altri giocatori."/>
+	<line text="Press a key, a mouse button or turn the wheel...\nEscape cancels, Delete clears it." language="it" translation="Premi un tasto, un pulsante del mouse o gira la\nrotella... Esc annulla, Canc lo cancella."/>
+	<line text="Pushing the right stick up looks down." language="it" translation="Spingendo in su la levetta destra si guarda in basso."/>
+	<line text="RANDOM" language="it" translation="CASUALE"/>
+	<line text="RESOLUTION SCALING:" language="it" translation="SCALA RISOLUZIONE:"/>
+	<line text="REVERB:" language="it" translation="RIVERBERO:"/>
+	<line text="ROCKET LAUNCHER" language="it" translation="LANCIARAZZI"/>
+	<line text="Right" language="it" translation="FRECCIA DX"/>
+	<line text="Right Alt" language="it" translation="ALT DX"/>
+	<line text="Right Ctrl" language="it" translation="CTRL DX"/>
+	<line text="Right GUI" language="it" translation="WINDOWS DX"/>
+	<line text="Right Shift" language="it" translation="MAIUSC DX"/>
+	<line text="Rumble the controller." language="it" translation="Fa vibrare il controller."/>
+	<line text="SAME" language="it" translation="UGUALE"/>
+	<line text="SCOREBOARD LAYOUT:" language="it" translation="DISPOSIZIONE PUNTEGGI:"/>
+	<line text="SCOREBOARD PANEL:" language="it" translation="PANNELLO PUNTEGGI:"/>
+	<line text="SECONDARY WEAPON:" language="it" translation="ARMA SECONDARIA:"/>
+	<line text="SERVER BROWSER" language="it" translation="ELENCO SERVER"/>
+	<line text="SETTINGS" language="it" translation="IMPOSTAZIONI"/>
+	<line text="SHADOW RESOLUTION:" language="it" translation="RISOLUZIONE OMBRE:"/>
+	<line text="SHARE MAPS:" language="it" translation="CONDIVIDI MAPPE:"/>
+	<line text="SHIELD COLOR:" language="it" translation="COLORE SCUDO:"/>
+	<line text="SHIELD GLOW:" language="it" translation="BAGLIORE SCUDO:"/>
+	<line text="SHOTGUN" language="it" translation="FUCILE"/>
+	<line text="SHOW:" language="it" translation="MOSTRA:"/>
+	<line text="SINGLEPLAYER" language="it" translation="GIOCATORE SINGOLO"/>
+	<line text="SMOOTH MOTION:" language="it" translation="MOVIMENTO FLUIDO:"/>
+	<line text="SNIPER RIFLE" language="it" translation="FUCILE DI PRECISIONE"/>
+	<line text="SOUND:" language="it" translation="AUDIO:"/>
+	<line text="SOUTHPAW" language="it" translation="MANCINA"/>
+	<line text="SPECTATING %.12s   (A: NEXT)\n%s" language="it" translation="OSSERVI %.12s   (A: SUCCESSIVO)\n%s"/>
+	<line text="START GAME" language="it" translation="INIZIA PARTITA"/>
+	<line text="START NOW" language="it" translation="INIZIA ORA"/>
+	<line text="STATIC MULTIPLIER" language="it" translation="MOLTIPLICATORE FISSO"/>
+	<line text="STICK LAYOUT:" language="it" translation="DISPOSIZIONE LEVETTE:"/>
+	<line text="STRAFE LEFT" language="it" translation="PASSO A SINISTRA"/>
+	<line text="STRAFE RIGHT" language="it" translation="PASSO A DESTRA"/>
+	<line text="SWAP A, L TRIGGER" language="it" translation="SCAMBIA A, GRILLETTO SX"/>
+	<line text="SWAP B, L TRIGGER" language="it" translation="SCAMBIA B, GRILLETTO SX"/>
+	<line text="SWAP B, R STICK" language="it" translation="SCAMBIA B, LEVETTA DX"/>
+	<line text="SWAP TRIGGERS" language="it" translation="SCAMBIA GRILLETTI"/>
+	<line text="SWITCH TEAM" language="it" translation="CAMBIA SQUADRA"/>
+	<line text="SYSTEM DEFAULT" language="it" translation="PREDEFINITO"/>
+	<line text="Sending players who join without the game's\nCustom Edition map the map, and how fast." language="it" translation="Inviare la mappa Custom Edition della partita\na chi entra senza, e a che velocità."/>
+	<line text="Set this profile's controller\nsensitivity and layouts.\n\nProfile:" language="it" translation="Imposta sensibilità e disposizione\ndel controller di questo profilo.\n\nProfilo:"/>
+	<line text="Seventy-five kills to win. Settle in for a long\nfight." language="it" translation="Settantacinque uccisioni per vincere. Preparati a\nuna lunga battaglia."/>
+	<line text="Shields light their surroundings as they flare,\nin the shield's own color." language="it" translation="Gli scudi illuminano ciò che li circonda quando\nbrillano, nel colore dello scudo."/>
+	<line text="Show the game's hints about its controls." language="it" translation="Mostra i suggerimenti del gioco sui controlli."/>
+	<line text="Slow and drag the view along with a target while\naiming with the mouse, as with a controller." language="it" translation="Rallenta e trascina la visuale col bersaglio mentre\nmiri col mouse, come con un controller."/>
+	<line text="Smooth jagged edges, which the Xbox did not. FXAA\nand SMAA are cheap; SSAA and MSAA are sharper." language="it" translation="Smussa i bordi seghettati, cosa che Xbox non faceva.\nFXAA e SMAA sono leggeri; SSAA e MSAA più nitidi."/>
+	<line text="Smooth jagged edges, which the Xbox did not. FXAA\nis cheap; MSAA is sharper." language="it" translation="Smussa i bordi seghettati, cosa che Xbox non faceva.\nFXAA è leggero; MSAA è più nitido."/>
+	<line text="Space" language="it" translation="SPAZIO"/>
+	<line text="Starting in:" language="it" translation="Inizio tra:"/>
+	<line text="TEAM" language="it" translation="SQUADRA"/>
+	<line text="TEAM NEAR" language="it" translation="SQUADRA VICINA"/>
+	<line text="TEAM, ENEMIES NEAR" language="it" translation="SQUADRA E NEMICI"/>
+	<line text="TEAMPLAY OPTIONS:" language="it" translation="OPZIONI SQUADRE:"/>
+	<line text="TEAMS" language="it" translation="SQUADRE"/>
+	<line text="Talk in network games: while PUSH TO TALK is held\n(Controls), whenever you speak, or never." language="it" translation="Parla nelle partite in rete: tenendo PREMI PER PARLARE\n(Controlli), ogni volta che parli, o mai."/>
+	<line text="Teams" language="it" translation="Squadre"/>
+	<line text="That is not the game's password. Try again." language="it" translation="Non è la password della partita. Riprova."/>
+	<line text="The HUD, text, anti-aliasing, shadows and\nlighting." language="it" translation="HUD, testo, anti-aliasing, ombre e\nilluminazione."/>
+	<line text="The energy shield's flare on your first-person\narms too, as on your body." language="it" translation="Il lampo dello scudo energetico anche sulle braccia\nin prima persona, come sul corpo."/>
+	<line text="The field of view and the first-person\nweapon. Their defaults keep the stock view." language="it" translation="Il campo visivo e l'arma in prima persona.\nI predefiniti mantengono la visuale originale."/>
+	<line text="The game is full." language="it" translation="La partita è piena."/>
+	<line text="The game is gone." language="it" translation="La partita non c'è più."/>
+	<line text="The gametype and its rules, for this game." language="it" translation="Il tipo di partita e le sue regole, per questa partita."/>
+	<line text="The map's weapons appear where its designers\nplaced them." language="it" translation="Le armi della mappa appaiono dove i suoi autori\nle hanno messe."/>
+	<line text="The map's weapons, without any grenades." language="it" translation="Le armi della mappa, senza granate."/>
+	<line text="The microphone voice chat listens to." language="it" translation="Il microfono usato dalla chat vocale."/>
+	<line text="The most players the game takes (up to 128)." language="it" translation="Il massimo di giocatori della partita (fino a 128)."/>
+	<line text="The most you send of maps to other players, so\nthat the game keeps the rest of your upload." language="it" translation="Il massimo che invii di mappe agli altri giocatori,\nperché il gioco tenga il resto del tuo upload."/>
+	<line text="The most you send of maps, so that the game\nkeeps the rest of your upload." language="it" translation="Il massimo che invii di mappe, perché il gioco\ntenga il resto del tuo upload."/>
+	<line text="The motion tracker and nav points, for this game." language="it" translation="Rilevatore di movimento e punti di navigazione,\nper questa partita."/>
+	<line text="The music's volume." language="it" translation="Il volume della musica."/>
+	<line text="The name the game shows in the lists of games.\nEnter changes it." language="it" translation="Il nome della partita negli elenchi delle partite.\nInvio lo cambia."/>
+	<line text="The new player's profile." language="it" translation="Il profilo del nuovo giocatore."/>
+	<line text="The other players' voices." language="it" translation="Le voci degli altri giocatori."/>
+	<line text="The server browser is off (network.public_lobby)" language="it" translation="L'elenco server è disattivato (network.public_lobby)"/>
+	<line text="The size objects' shadows are drawn at: 128 as on\nthe Xbox; larger for smoother, as soft, edges." language="it" translation="La risoluzione delle ombre degli oggetti: 128 come\nsu Xbox; di più per bordi più lisci, ugualmente morbidi."/>
+	<line text="The volume of every other sound: effects and\nspeech." language="it" translation="Il volume di ogni altro suono: effetti e\ndialoghi."/>
+	<line text="The volume of everything." language="it" translation="Il volume di tutto."/>
+	<line text="The weapon and hands, horizontal at 16:9.\nDefault keeps the weapon's stock view." language="it" translation="L'arma e le mani, orizzontale in 16:9.\nPredefinito mantiene la visuale originale dell'arma."/>
+	<line text="The weapons follow the weapon set above." language="it" translation="Le armi seguono il set di armi sopra."/>
+	<line text="The window's size: 4:3, then 16:10, 16:9 and 21:9\n(its edges can also be dragged)." language="it" translation="La dimensione della finestra: 4:3, poi 16:10, 16:9 e\n21:9 (si possono anche trascinare i bordi)."/>
+	<line text="This game has a password. Type it, then press\nEnter to join." language="it" translation="Questa partita ha una password. Digitala, poi\npremi Invio per entrare."/>
+	<line text="Two hundred and fifty kills to win." language="it" translation="Duecentocinquanta uccisioni per vincere."/>
+	<line text="Two hundred kills to win. Bring friends. Lots of\nthem." language="it" translation="Duecento uccisioni per vincere. Porta degli amici.\nTanti amici."/>
+	<line text="UPLOAD LIMIT:" language="it" translation="LIMITE DI UPLOAD:"/>
+	<line text="UPNP PORT FORWARDING:" language="it" translation="INOLTRO PORTE UPNP:"/>
+	<line text="VEHICLE OPTIONS:" language="it" translation="OPZIONI VEICOLO:"/>
+	<line text="VIBRATION:" language="it" translation="VIBRAZIONE:"/>
+	<line text="VIEWMODEL FOV:" language="it" translation="FOV ARMA:"/>
+	<line text="VIEWMODELS:" language="it" translation="MODELLI ARMA:"/>
+	<line text="VOICE AND VOTING" language="it" translation="VOCE E VOTAZIONI"/>
+	<line text="VOICE AND VOTING:" language="it" translation="VOCE E VOTAZIONI:"/>
+	<line text="VOICE CHAT:" language="it" translation="CHAT VOCALE:"/>
+	<line text="VOICE NEAR DISTANCE:" language="it" translation="DISTANZA VOCE VICINA:"/>
+	<line text="VOICE QUALITY:" language="it" translation="QUALITÀ VOCE:"/>
+	<line text="VOICE VOLUME:" language="it" translation="VOLUME VOCE:"/>
+	<line text="VOTE KICK:" language="it" translation="VOTO ESPULSIONE:"/>
+	<line text="VOTED TO SKIP   %d OF %d" language="it" translation="VOTATO IL SALTO   %d SU %d"/>
+	<line text="Voice chat and votes to kick a player, for this\ngame." language="it" translation="Chat vocale e voti per espellere un giocatore, per\nquesta partita."/>
+	<line text="Voices at 12 kilobits a second, in the lobby\nand in the game." language="it" translation="Voci a 12 kilobit al secondo, nella lobby\ne in partita."/>
+	<line text="Voices at 16 kilobits a second, in the lobby\nand in the game." language="it" translation="Voci a 16 kilobit al secondo, nella lobby\ne in partita."/>
+	<line text="Voices at 24 kilobits a second, in the lobby\nand in the game." language="it" translation="Voci a 24 kilobit al secondo, nella lobby\ne in partita."/>
+	<line text="Voices at 32 kilobits a second, in the lobby\nand in the game." language="it" translation="Voci a 32 kilobit al secondo, nella lobby\ne in partita."/>
+	<line text="Voices at 48 kilobits a second, in the lobby\nand in the game." language="it" translation="Voci a 48 kilobit al secondo, nella lobby\ne in partita."/>
+	<line text="Voices at 64 kilobits a second, in the lobby\nand in the game." language="it" translation="Voci a 64 kilobit al secondo, nella lobby\ne in partita."/>
+	<line text="Voices at 8 kilobits a second, in the lobby\nand in the game." language="it" translation="Voci a 8 kilobit al secondo, nella lobby\ne in partita."/>
+	<line text="WEAPONS" language="it" translation="ARMI"/>
+	<line text="WINDOW SIZE:" language="it" translation="DIMENSIONE FINESTRA:"/>
+	<line text="WINDOWED" language="it" translation="FINESTRA"/>
+	<line text="Wait for the display between frames, so that the\npicture never tears." language="it" translation="Attende lo schermo tra i fotogrammi, perché\nl'immagine non si strappi mai."/>
+	<line text="Waiting for players" language="it" translation="In attesa di giocatori"/>
+	<line text="Weapons, grenades and starting equipment, for\nthis game." language="it" translation="Armi, granate e dotazione iniziale, per\nquesta partita."/>
+	<line text="What fullscreen and borderless draw at. Fullscreen\nsets the display to it; borderless scales it." language="it" translation="La risoluzione di schermo intero e senza bordi.\nSchermo intero la imposta; senza bordi la scala."/>
+	<line text="Wheel Down" language="it" translation="RUOTA GIÙ"/>
+	<line text="Wheel Up" language="it" translation="RUOTA SU"/>
+	<line text="Where the game's sound and the voices play." language="it" translation="Dove si sentono l'audio del gioco e le voci."/>
+	<line text="Which of the controller's buttons does what (not\nthe keyboard's: Controls Setup sets those)." language="it" translation="Cosa fa ogni pulsante del controller (non quelli\ndella tastiera: li imposta Impostazioni controlli)."/>
+	<line text="Which stick moves and which looks." language="it" translation="Quale levetta muove e quale guarda."/>
+	<line text="With V-Sync off, the most frames a second. Auto:\ntwice the display's refresh rate." language="it" translation="Senza V-Sync, il massimo di fotogrammi al secondo.\nAuto: il doppio della frequenza dello schermo."/>
+	<line text="You come back beside them once it is safe" language="it" translation="Tornerai al suo fianco appena sarà sicuro"/>
+	<line text="You join them when they're on foot" language="it" translation="Ti unirai quando sarà a piedi"/>
+	<line text="Your legs in first person, seen looking down,\nmoving as you run. Your body as others see it." language="it" translation="Le tue gambe in prima persona, guardando in basso,\nmentre corri. Il tuo corpo come lo vedono gli altri."/>
+	<line text="Your shield's flare in an armor color, whatever\nyour armor. Only you see it. Default: its own." language="it" translation="Il lampo dello scudo in un colore armatura, qualunque\nsia l'armatura. Lo vedi solo tu. Predefinito: il suo."/>
+	<line text="\n\nInvite link copied:\npaste it to friends" language="it" translation="\n\nLink d'invito copiato:\nincollalo agli amici"/>
+	<line text="\n\nJoining from here:" language="it" translation="\n\nEntra da qui:"/>
+	<line text="player" language="it" translation="giocatore"/>
+	<line text="players" language="it" translation="giocatori"/>
+	<line text="ACTION" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_binding_labels" index="20"/>
+	<line text="ACTIONS" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\var_command_groups" index="2"/>
+	<line text="ALL" strings="ui\shell\main_menu\settings_select\multiplayer_setup\indicator_options_edit\var_others_on_radar" index="0"/>
+	<line text="Application" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="75"/>
+	<line text="Assault on the Control Room" strings="ui\shell\main_menu\map_list_oneline" index="4"/>
+	<line text="BACK" strings="ui\shell\strings\common_button_captions" index="0"/>
+	<line text="BLACK" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\color_edit\colors_list" index="1" case="upper"/>
+	<line text="BLUE" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\color_edit\colors_list" index="3" case="upper"/>
+	<line text="BROWN" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\color_edit\colors_list" index="14" case="upper"/>
+	<line text="Backspace" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="29"/>
+	<line text="COBALT" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\color_edit\colors_list" index="10" case="upper"/>
+	<line text="CROUCH" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_binding_labels" index="17"/>
+	<line text="CTF" strings="ui\shell\main_menu\settings_select\multiplayer_setup\playlist_edit\game_type_select\gametype_select_list_options" index="0"/>
+	<line text="CUSTOM" strings="ui\shell\main_menu\gametype_select\var_gametype_banks" index="2"/>
+	<line text="CYAN" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\color_edit\colors_list" index="9" case="upper"/>
+	<line text="CapsLock" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="44"/>
+	<line text="Comma" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="65"/>
+	<line text="DEFAULT" strings="ui\shell\strings\common_button_captions" index="3"/>
+	<line text="Danger Canyon" strings="ui\shell\main_menu\mp_map_list" index="15"/>
+	<line text="Death Island" strings="ui\shell\main_menu\mp_map_list" index="14"/>
+	<line text="Delete" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="84"/>
+	<line text="Down" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="78"/>
+	<line text="EFFECTS VOLUME:" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\audio_settings\audio_option_labels" index="6"/>
+	<line text="EXPLOSIVES ONLY" strings="ui\shell\main_menu\settings_select\multiplayer_setup\teamplay_options_edit\var_friendly_fire" index="3"/>
+	<line text="End" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="85"/>
+	<line text="Escape" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="0"/>
+	<line text="FIRE" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_binding_labels" index="9"/>
+	<line text="FLASHLIGHT" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_binding_labels" index="18"/>
+	<line text="FRIENDLY FIRE:" strings="ui\shell\main_menu\settings_select\multiplayer_setup\teamplay_options_edit\teamplay_options_labels" index="0"/>
+	<line text="GRAY" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\color_edit\colors_list" index="4" case="upper"/>
+	<line text="GREEN" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\color_edit\colors_list" index="6" case="upper"/>
+	<line text="Gephyrophobia" strings="ui\shell\main_menu\mp_map_list" index="18"/>
+	<line text="HORIZONTAL SENSITIVITY:" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\mouse_settings\mouse_option_labels" index="0"/>
+	<line text="Home" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="82"/>
+	<line text="INVERT VERTICAL AXIS:" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\mouse_settings\mouse_option_labels" index="2"/>
+	<line text="Ice Fields" strings="ui\shell\main_menu\mp_map_list" index="13"/>
+	<line text="Infinity" strings="ui\shell\main_menu\mp_map_list" index="16"/>
+	<line text="Insert" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="81"/>
+	<line text="JOIN GAME" strings="ui\shell\main_menu\multiplayer_type_select\join_game\join_game_buttons" index="4"/>
+	<line text="JUMP" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_binding_labels" index="16"/>
+	<line text="KING OF THE HILL" strings="ui\shell\main_menu\settings_select\multiplayer_setup\playlist_edit\game_type_select\gametype_select_list_options" index="1"/>
+	<line text="Keypad *" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="89"/>
+	<line text="Keypad +" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="101"/>
+	<line text="Keypad -" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="100"/>
+	<line text="Keypad ." strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="103"/>
+	<line text="Keypad /" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="88"/>
+	<line text="Keypad 0" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="90"/>
+	<line text="Keypad 1" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="91"/>
+	<line text="Keypad 2" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="92"/>
+	<line text="Keypad 3" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="93"/>
+	<line text="Keypad 4" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="94"/>
+	<line text="Keypad 5" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="95"/>
+	<line text="Keypad 6" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="96"/>
+	<line text="Keypad 7" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="97"/>
+	<line text="Keypad 8" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="98"/>
+	<line text="Keypad 9" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="99"/>
+	<line text="Keypad Enter" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="102"/>
+	<line text="Left" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="79"/>
+	<line text="Left Alt" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="71"/>
+	<line text="Left Ctrl" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="69"/>
+	<line text="Left GUI" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="70"/>
+	<line text="Left Shift" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="57"/>
+	<line text="MAROON" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\color_edit\colors_list" index="16" case="upper"/>
+	<line text="MASTER VOLUME:" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\audio_settings\audio_option_labels" index="0"/>
+	<line text="MELEE" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_binding_labels" index="14"/>
+	<line text="MOVE BACKWARD" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_binding_labels" index="2"/>
+	<line text="MOVE FORWARD" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_binding_labels" index="1"/>
+	<line text="MOVEMENT" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\var_command_groups" index="0"/>
+	<line text="MULTIPLAYER" strings="ui\shell\main_menu\main_menu_options" index="2"/>
+	<line text="MUSIC VOLUME:" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\audio_settings\audio_option_labels" index="1"/>
+	<line text="Mouse 4" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_mouse_button_names" index="3"/>
+	<line text="Mouse 5" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_mouse_button_names" index="4"/>
+	<line text="Mouse 6" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_mouse_button_names" index="5"/>
+	<line text="Mouse 7" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_mouse_button_names" index="6"/>
+	<line text="Mouse 8" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_mouse_button_names" index="7"/>
+	<line text="Mouse Left" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_mouse_button_names" index="0"/>
+	<line text="Mouse Middle" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_mouse_button_names" index="1"/>
+	<line text="Mouse Right" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_mouse_button_names" index="2"/>
+	<line text="NO" strings="ui\shell\main_menu\settings_select\multiplayer_setup\indicator_options_edit\var_friends_on_screen" index="1"/>
+	<line text="NONE" strings="ui\shell\main_menu\settings_select\multiplayer_setup\indicator_options_edit\var_radar display" index="2"/>
+	<line text="Numlock" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="87"/>
+	<line text="ODDBALL" strings="ui\shell\main_menu\settings_select\multiplayer_setup\playlist_edit\game_type_select\gametype_select_list_options" index="3"/>
+	<line text="OFF" strings="ui\shell\main_menu\settings_select\multiplayer_setup\teamplay_options_edit\var_friendly_fire" index="0"/>
+	<line text="ON" strings="ui\shell\main_menu\settings_select\multiplayer_setup\teamplay_options_edit\var_friendly_fire" index="1"/>
+	<line text="ORANGE" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\color_edit\colors_list" index="11" case="upper"/>
+	<line text="PINK" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\color_edit\colors_list" index="7" case="upper"/>
+	<line text="PURPLE" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\color_edit\colors_list" index="8" case="upper"/>
+	<line text="PageDown" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="86"/>
+	<line text="PageUp" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="83"/>
+	<line text="Pause" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="15"/>
+	<line text="PrintScreen" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="13"/>
+	<line text="RACE" strings="ui\shell\main_menu\settings_select\multiplayer_setup\playlist_edit\game_type_select\gametype_select_list_options" index="4"/>
+	<line text="RED" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\color_edit\colors_list" index="2" case="upper"/>
+	<line text="RELOAD" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_binding_labels" index="13"/>
+	<line text="RESOLUTION:" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\video_settings\video_option_labels" index="0"/>
+	<line text="Return" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="56"/>
+	<line text="Right" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="80"/>
+	<line text="Right Alt" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="73"/>
+	<line text="Right Ctrl" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="76"/>
+	<line text="Right GUI" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="74"/>
+	<line text="Right Shift" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="68"/>
+	<line text="SAGE" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\color_edit\colors_list" index="13" case="upper"/>
+	<line text="SALMON" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\color_edit\colors_list" index="17" case="upper"/>
+	<line text="SCREENSHOT" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_binding_labels" index="27"/>
+	<line text="SHIELD ONLY" strings="ui\shell\main_menu\settings_select\multiplayer_setup\teamplay_options_edit\var_friendly_fire" index="2"/>
+	<line text="SHOW SCORES" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_binding_labels" index="26"/>
+	<line text="SLAYER" strings="ui\shell\main_menu\settings_select\multiplayer_setup\playlist_edit\game_type_select\gametype_select_list_options" index="2"/>
+	<line text="START GAME" strings="ui\shell\main_menu\multiplayer_type_select\server_settings\server_settings_options" index="4"/>
+	<line text="STRAFE LEFT" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_binding_labels" index="3"/>
+	<line text="STRAFE RIGHT" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_binding_labels" index="4"/>
+	<line text="SWITCH GRENADE" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_binding_labels" index="11"/>
+	<line text="SWITCH WEAPON" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_binding_labels" index="12"/>
+	<line text="ScrollLock" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="14"/>
+	<line text="Space" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="72"/>
+	<line text="TAN" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\color_edit\colors_list" index="15" case="upper"/>
+	<line text="TEAL" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\color_edit\colors_list" index="12" case="upper"/>
+	<line text="THROW GRENADE" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_binding_labels" index="10"/>
+	<line text="Tab" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="30"/>
+	<line text="The Library" strings="ui\shell\main_menu\map_list_oneline" index="6"/>
+	<line text="The Maw" strings="ui\shell\main_menu\map_list_oneline" index="9"/>
+	<line text="The Pillar of Autumn" strings="ui\shell\main_menu\map_list_oneline" index="0"/>
+	<line text="The Silent Cartographer" strings="ui\shell\main_menu\map_list_oneline" index="3"/>
+	<line text="The Truth and Reconciliation" strings="ui\shell\main_menu\map_list_oneline" index="2"/>
+	<line text="Timberland" strings="ui\shell\main_menu\mp_map_list" index="17"/>
+	<line text="Two Betrayals" strings="ui\shell\main_menu\map_list_oneline" index="7"/>
+	<line text="Up" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_keyboard_button_names" index="77"/>
+	<line text="VERTICAL SENSITIVITY:" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\mouse_settings\mouse_option_labels" index="1"/>
+	<line text="WHITE" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\color_edit\colors_list" index="0" case="upper"/>
+	<line text="Wheel" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_mouse_button_names" index="10"/>
+	<line text="YELLOW" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\color_edit\colors_list" index="5" case="upper"/>
+	<line text="YES" strings="ui\shell\main_menu\settings_select\multiplayer_setup\indicator_options_edit\var_friends_on_screen" index="0"/>
+	<line text="ZOOM" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_binding_labels" index="19"/>
 </menus>

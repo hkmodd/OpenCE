@@ -181,6 +181,7 @@ MENU_ATTRIBUTES = {
     "menus": {"root"},
     "bitmap": {"name", "width", "height", "frames", "language", "platform"},
     "language": {"name", "strings", "index", "text", "platform"},
+    "line": {"text", "language", "translation", "strings", "index", "case", "platform"},
     "frame": {"png", "map", "index", "width", "height", "x", "y", "platform"},
     "strings": {"name", "map", "platform"},
     "string": {"text", "map", "platform"},
@@ -229,7 +230,7 @@ def test_menus_are_well_formed():
     assert sorted(path.relative_to(MENUS).as_posix() for path in files) == \
         sorted(name for name in listed if name.endswith(".xml"))
     widgets, bitmaps, strings, references, roots = {}, {}, {}, [], []
-    languages, translated = {}, []
+    languages, translated, lines = {}, [], []
     for path in files:
         tree = ElementTree.parse(path)
         assert tree.getroot().tag == "menus", path
@@ -272,6 +273,18 @@ def test_menus_are_well_formed():
             elif element.tag == "language":
                 assert element.get("name") not in languages and element.get("strings") and                     element.get("text") and int(element.get("index")) >= 0, where
                 languages[element.get("name")] = element
+            elif element.tag == "line":
+                # (menu_files.c's read_line: a language's translation, or a
+                # loc.map string's)
+                assert element.get("text"), where
+                if element.get("language"):
+                    assert element.get("translation") and element.get("strings") is None and \
+                        element.get("index") is None, where
+                    lines.append((where, element))
+                else:
+                    assert element.get("translation") is None and "\\" in element.get("strings", "") and \
+                        int(element.get("index")) >= 0, where
+                assert element.get("case") in (None, "upper"), where
             elif element.tag == "strings":
                 strings[element.get("name")] = element
                 # (a string's map= is its number in the list's map list, menu_tags.c)
@@ -306,12 +319,36 @@ def test_menus_are_well_formed():
             elif element.tag == "data":
                 assert element.get("input") in inputs or element.get("input").startswith("unwired "), where
     assert all(root_name in widgets for root_name in roots)
+    for where, element in lines:
+        assert element.get("language") in languages, where
     for where, element in translated:
         assert element.get("language") in languages and element.get("name") in bitmaps, where
         assert len(element.findall("frame")) == len(bitmaps[element.get("name")].findall("frame")), where
     for where, names, name in references:
         if name and "\\" not in name:
             assert name in names, f"{where} {name}"
+
+
+def test_menu_lines_are_translated():
+    """Every line of the port's with words (its menus' files' and its
+    code's menu_text and MENU_LINE lines) is in each language of
+    languages.xml, with the English's formats, and languages.xml has them as
+    tools/menu_languages.py writes them."""
+    import xml.etree.ElementTree as ElementTree
+    pytest.importorskip("numpy")
+    pytest.importorskip("PIL")
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import menu_languages
+
+    own = menu_languages.check_lines()
+    written = {}
+    for element in ElementTree.parse(MENUS / "languages.xml").getroot().iter("line"):
+        key = element.get("language"), element.get("text")
+        written[key] = element.get("translation") or (element.get("strings"), int(element.get("index")),
+                                                       element.get("case") == "upper")
+    expected = {(language, text): words for language, lines in own.items() for text, words in lines.items()}
+    expected.update({(None, text): reference for text, reference in menu_languages.REFERENCES.items()})
+    assert written == expected
 
 
 def test_menu_settings_exist():
@@ -329,7 +366,7 @@ def test_menu_settings_exist():
             assert setting in known | profile, f"{path.name}: {setting}"
     controls = set(re.findall(r'"(controls\.[a-z_]+)"', (root / "port/linux/src/xinput_sdl.c").read_text()))
     assert controls == {name for name in known if name.startswith("controls.")}
-    assert controls == set(re.findall(r'\{ "(controls\.[a-z_]+)", L"', functions))
+    assert controls == set(re.findall(r'\{ "(controls\.[a-z_]+)", (?:MENU_LINE\()?L"', functions))
 
 
 def test_default_brokers_are_brokers_txt():
