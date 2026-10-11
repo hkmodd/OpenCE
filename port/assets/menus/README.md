@@ -10,6 +10,7 @@ controller, the keyboard and the mouse, on every port.
 | --- | --- |
 | `ce/*.xml` | The PC version's screens, one file for each folder of its tags, laid out as it has them; `ce/strings.xml` their text, `ce/bitmaps.xml` their pictures |
 | `ce/shell/...png` | The pictures, drawn from the high-res redraws in `svg/` (up to 4x), else a placeholder |
+| `languages.xml`, `languages/<language>/...png` | The pictures with words (the screens' headers, the main menu's items) in the languages of Halo's editions, drawn as the English ones are |
 | `NON_HANDDRAWN.md` | The pictures that are not redraws: those drawn from the Xbox's map (the player's own), and the placeholders, to be redrawn |
 | `UNWIRED.md` | The menus' functions that do nothing yet: the lists they fill are empty, and the settings they change do not change |
 | `menus.json` | The files the game embeds |
@@ -58,6 +59,20 @@ It needs `rsvg-convert`, Pillow, NumPy and SciPy. It writes every file, so
 `git status` should show only the screens meant to change; then
 `ninja linux` (or `ninja android`) embeds them in the game.
 
+The pictures with words in other languages are drawn for `ce/bitmaps.xml`'s,
+so they are written after it, by `tools/menu_languages.py` (Pillow, NumPy and
+SciPy only), which adds them to `menus.json`:
+
+```sh
+python3 tools/menu_languages.py
+```
+
+A language is added to its `LANGUAGES` with the words of its edition's own
+pictures, which `python3 tools/menu_languages.py --extract <bitmaps.map>
+<folder>` writes as PNGs from that edition's Custom Edition `bitmaps.map`,
+and the `loc.map` string that tells the edition (a text of the PC version's
+lists that no other edition has the same).
+
 A settings screen (Controls Setup, Gamepads, Mouse, Audio, Video or Network
 Setup) is changed in `tools/port_settings.py`, not in its XML, and written
 with the command above.
@@ -65,8 +80,8 @@ with the command above.
 ## Elements
 
 A file holds one `<menus>` element (`root` names the main menu's widget, in
-one file; `main_menu` if none does). It holds `<bitmap>`, `<strings>` and
-`<widget>` elements. All files share one set of names. Wherever a name is
+one file; `main_menu` if none does). It holds `<bitmap>`, `<language>`,
+`<strings>` and `<widget>` elements. All files share one set of names. Wherever a name is
 asked for, one with a backslash is a tag of the map instead
 (`ui\shell\bitmaps\white`).
 
@@ -88,6 +103,22 @@ A map's frame with a `width` and `height` is drawn scaled to that size
 instead, from `x` and `y` in the widget (0 if not given).
 A list's item shows frame 1 while it has the focus and frame 0 otherwise, if
 the bitmap has exactly two frames; the game's functions choose others.
+
+A `<bitmap>` with `language=` (a `<language>`'s name) is drawn in place of
+the one of its name without, which it has as many frames as, when the maps'
+Custom Edition is in that language and `display.menu_language` is `"maps"`.
+
+### `<language>`
+
+```xml
+<language name="it" strings="ui\shell\main_menu\multiplayer_type_select\multiplayer_options"
+	index="0" text="PARTECIPA A PARTITA"/>
+```
+
+A language of Halo's editions: the maps' Custom Edition is in it when the
+`loc.map` in `custom_maps` has `text` at `index` in the list `strings` (the
+PC version's tag). The first that matches is the language; with none, the
+pictures stay English (and the texts are still the `loc.map`'s).
 
 ### `<strings>`
 
