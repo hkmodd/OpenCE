@@ -559,14 +559,21 @@ static long find(char const *name, long count, char const *(*name_of)(long))
 
 	for (index = 0; name && index < count; index++)
 	{
-		if (!strcmp(name_of(index), name))
+		char const *other = name_of(index);
+
+		if (other && !strcmp(other, name))
 			return index;
 	}
 	return NONE;
 }
 
 static char const *widget_name(long index) { return build.menus->widgets[index].name; }
-static char const *bitmap_name(long index) { return build.menus->bitmaps[index].name; }
+/* (a language's bitmap is not found by its name: it is drawn for the one of
+no language that has it) */
+static char const *bitmap_name(long index)
+{
+	return build.menus->bitmaps[index].language ? NULL : build.menus->bitmaps[index].name;
+}
 static char const *strings_name(long index) { return build.menus->string_lists[index].name; }
 
 static long widget_named(char const *name)
@@ -2103,13 +2110,62 @@ static boolean menus_language_maps(void)
 	return FALSE;
 }
 
+/* the language of the maps' Custom Edition: the menus' <language> whose
+string its loc.map has (with it open); NULL for none of them */
+static char const *menus_language(void)
+{
+	long index;
+
+	for (index = 0; index < build.menus->language_count; index++)
+	{
+		struct halo_menu_language const *language = &build.menus->languages[index];
+		struct custom_edition_string_list *map = custom_edition_locale_strings(language->strings);
+		boolean same = FALSE;
+
+		if (map && language->index >= 0 && language->index < map->count)
+		{
+			unsigned short text[256];
+			unsigned short const *string = map->strings[language->index];
+			long character;
+
+			halo_menus_utf16(language->text, text, NUMBEROF(text));
+			for (character = 0; text[character] && text[character] == string[character]; character++);
+			same = text[character] == string[character];
+		}
+		if (map)
+			free(map);
+		if (same)
+			return language->name;
+	}
+	return NULL;
+}
+
+/* the bitmap drawn for one of no language: its own of the language, if it
+has one */
+static struct halo_menu_bitmap const *bitmap_in_language(long index, char const *language)
+{
+	struct halo_menus const *menus = build.menus;
+	long other;
+
+	for (other = 0; language && other < menus->bitmap_count; other++)
+	{
+		if (menus->bitmaps[other].language && !strcmp(menus->bitmaps[other].language, language) &&
+			!strcmp(menus->bitmaps[other].name, menus->bitmaps[index].name))
+		{
+			return &menus->bitmaps[other];
+		}
+	}
+	return &menus->bitmaps[index];
+}
+
 void menu_tags_loaded(
 	char const *map_name)
 {
 	struct halo_menus const *menus;
 	struct cache_file_tag_instance *instances;
-	long widget_count, own_lists = 0, total, index;
+	long widget_count, own_lists = 0, bitmap_count = 0, total, index;
 	boolean locale;
+	char const *language;
 
 	boolean game_map = strcmp(map_name, "ui") != 0;
 	boolean campaign = game_map && full_screen_campaign_map();
@@ -2146,7 +2202,10 @@ void menu_tags_loaded(
 			problem(menus->widgets[index].file, menus->widgets[index].line, "two widgets are named",
 				menus->widgets[index].name);
 	}
-	total = widget_count + own_lists + menus->string_list_count + menus->bitmap_count +
+	/* (the bitmaps of a language are drawn for those of none: no tags) */
+	for (index = 0; index < menus->bitmap_count; index++)
+		bitmap_count += menus->bitmaps[index].language == NULL;
+	total = widget_count + own_lists + menus->string_list_count + bitmap_count +
 		(game_map ? PAUSE_PATCH_TAGS : 0);
 	instances = build.failed ? NULL : instances_grow(total, &build.first_index, &build.first_salt);
 	if (!instances)
@@ -2161,17 +2220,21 @@ void menu_tags_loaded(
 	for (index = 0; index < menus->string_list_count; index++)
 		build.strings_tags[index] = next_tag();
 	for (index = 0; index < menus->bitmap_count; index++)
-		build.bitmap_tags[index] = next_tag();
+		build.bitmap_tags[index] = menus->bitmaps[index].language ? NONE : next_tag();
+	/* (the PC version's strings and pictures with words in the language of
+	the Custom Edition the maps come from, its loc.map's, unless English is
+	chosen) */
+	locale = menus_language_maps() && custom_edition_locale_open();
+	language = locale ? menus_language() : NULL;
 	/* the tags: the bitmaps and strings first, which the widgets name; the
 	widgets' names in the table before any is built, which they find there */
 	for (index = 0; index < menus->bitmap_count && !build.failed; index++)
 	{
+		if (build.bitmap_tags[index] == NONE)
+			continue;
 		instance_set(instances, BITMAP_GROUP_TAG, build.bitmap_tags[index], menus->bitmaps[index].name, "",
-			bitmap_build(&menus->bitmaps[index], build.bitmap_tags[index]));
+			bitmap_build(bitmap_in_language(index, language), build.bitmap_tags[index]));
 	}
-	/* (the PC version's strings in the language of the Custom Edition the
-	maps come from, its loc.map's, unless English is chosen) */
-	locale = menus_language_maps() && custom_edition_locale_open();
 	for (index = 0; index < menus->string_list_count && !build.failed; index++)
 	{
 		struct halo_menu_strings const *list = &menus->string_lists[index];
@@ -2186,7 +2249,10 @@ void menu_tags_loaded(
 	{
 		custom_edition_locale_close();
 		if (!game_map)
-			platform_log("menus: %ld strings from the Custom Edition's loc.map", build.map_strings);
+		{
+			platform_log("menus: %ld strings from the Custom Edition's loc.map; its pictures' words in %s",
+				build.map_strings, language ? language : "English (no <language> has its strings)");
+		}
 	}
 	for (index = 0; index < widget_count && !build.failed; index++)
 	{
@@ -2246,7 +2312,7 @@ void menu_tags_loaded(
 	}
 	menu_tags.loaded = TRUE;
 	platform_log("menus: %ld widgets, %ld string lists and %ld bitmaps added to the map's %ld tags",
-		widget_count, own_lists + menus->string_list_count, menus->bitmap_count, build.first_index);
+		widget_count, own_lists + menus->string_list_count, bitmap_count, build.first_index);
 	goto done;
 
 failed:
