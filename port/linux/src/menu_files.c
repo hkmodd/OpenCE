@@ -257,6 +257,7 @@ enum element
 	_element_bitmap,
 	_element_frame,
 	_element_language,
+	_element_line,
 	_element_strings,
 	_element_string,
 	_element_widget,
@@ -596,6 +597,33 @@ static void read_language(struct reader *reader, const XML_Char **attributes)
 	menus->languages[menus->language_count++] = language;
 }
 
+static void read_line(struct reader *reader, const XML_Char **attributes)
+{
+	struct halo_menus *menus = &reader->menus;
+	struct halo_menu_line line;
+	long given = 0;
+	struct attribute table[] =
+	{
+		{ "text", &line.text }, { "language", &line.language }, { "translation", &line.translation },
+		{ "strings", &line.strings }, { "index", NULL, &line.index, &given }, { "case", &line.casing },
+	};
+
+	memset(&line, 0, sizeof(line));
+	line.file = reader->file;
+	line.line = current_line(reader);
+	read_attributes(reader, "line", attributes, table, sizeof(table) / sizeof(*table));
+	if (!reader->failed && (!line.text ||
+		(line.language ? !line.translation || line.strings || given :
+			line.translation || !line.strings || !given || line.index < 0) ||
+		(line.casing && strcmp(line.casing, "upper"))))
+	{
+		reader_error(reader, "a <line> needs its text, and a language and translation, or the strings and "
+			"index that say it (and case=\"upper\" for capitals)");
+	}
+	GROW(reader, menus->lines, menus->line_count);
+	menus->lines[menus->line_count++] = line;
+}
+
 static void read_strings(struct reader *reader, const XML_Char **attributes)
 {
 	struct halo_menus *menus = &reader->menus;
@@ -864,6 +892,11 @@ static void XMLCALL element_start(void *data, const XML_Char *name, const XML_Ch
 	{
 		element = _element_language;
 		read_language(reader, attributes);
+	}
+	else if (!strcmp(name, "line") && parent == _element_menus)
+	{
+		element = _element_line;
+		read_line(reader, attributes);
 	}
 	else if (!strcmp(name, "strings") && parent == _element_menus)
 	{

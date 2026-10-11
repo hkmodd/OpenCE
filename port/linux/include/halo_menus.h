@@ -8,8 +8,8 @@ for the game, which builds them into widget tags when ui.map loads
 its attributes as written, and the file and line it came from; the game reads
 their meaning.
 
-A file holds <menus> with <bitmap> (holding <frame>s), <language>, <strings>
-(holding <string>s) and <widget> elements; a <widget> holds <widget> and <child>
+A file holds <menus> with <bitmap> (holding <frame>s), <language>, <line>,
+<strings> (holding <string>s) and <widget> elements; a <widget> holds <widget> and <child>
 (its children), <on> (an event handler), <data> (a game data input),
 <conditional> and <replace> elements. port/assets/menus/README.md describes
 them.
@@ -54,6 +54,17 @@ its loc.map's list strings (the PC version's tag's name) has text at index */
 struct halo_menu_language
 {
 	char const *name, *strings, *text;
+	long index;
+	char const *file;
+	long line;
+};
+
+/* a line of the port's own (text, in English) in a language: written for
+it (language, translation), or for any whose loc.map's list strings (the PC
+version's tag's name) says it at index, in capitals if casing is "upper" */
+struct halo_menu_line
+{
+	char const *text, *language, *translation, *strings, *casing;
 	long index;
 	char const *file;
 	long line;
@@ -138,11 +149,13 @@ struct halo_menus
 	long frame_count;
 	struct halo_menu_language *languages;
 	long language_count;
+	struct halo_menu_line *lines;
+	long line_count;
 	struct halo_menu_strings *string_lists;
 	long string_list_count;
 	char const **strings;
 	/* each string's index in its list's map list (HALO_MENU_NONE: the
-	port's own, in English only) */
+	port's own, in English or as a <line> has it) */
 	long *string_maps;
 	long string_count;
 	struct halo_menu_widget *widgets;

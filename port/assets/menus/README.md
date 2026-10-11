@@ -73,6 +73,20 @@ pictures, which `python3 tools/menu_languages.py --extract <bitmaps.map>
 and the `loc.map` string that tells the edition (a text of the PC version's
 lists that no other edition has the same).
 
+The same command writes the port's own lines in each language as `<line>`
+elements: those a `loc.map` string says the same as (`REFERENCES` in
+`tools/menu_languages.py`: a control, a colour, a map's name), and, for each
+language, the others, from `tools/menu_lines_<language>.py` (`LINES`, and
+`SAME` for those it says as English does; a line there is shown before a
+`REFERENCES` one, for words too wide for the port's screens). The port's
+titles (`TITLES` in `tools/port_settings.py`) are lines too, and their
+pictures are drawn in each language as the headers are, smaller where the
+words are wider than the title's widget. It stops if a line with words, of
+the menus' files, of the port's code (`menu_text` and `MENU_LINE` in
+`port/linux/game`) or a title, is in neither, if a line is no longer the
+port's, or if a translation's `%` formats are not the English's; a new or
+changed English line is translated there before the command is run again.
+
 A settings screen (Controls Setup, Gamepads, Mouse, Audio, Video or Network
 Setup) is changed in `tools/port_settings.py`, not in its XML, and written
 with the command above.
@@ -81,7 +95,7 @@ with the command above.
 
 A file holds one `<menus>` element (`root` names the main menu's widget, in
 one file; `main_menu` if none does). It holds `<bitmap>`, `<language>`,
-`<strings>` and `<widget>` elements. All files share one set of names. Wherever a name is
+`<strings>`, `<line>` and `<widget>` elements. All files share one set of names. Wherever a name is
 asked for, one with a backslash is a tag of the map instead
 (`ui\shell\bitmaps\white`).
 
@@ -120,6 +134,22 @@ A language of Halo's editions: the maps' Custom Edition is in it when the
 PC version's tag). The first that matches is the language; with none, the
 pictures stay English (and the texts are still the `loc.map`'s).
 
+### `<line>`
+
+```xml
+<line text="PRESS A KEY" language="it" translation="PREMI UN TASTO"/>
+<line text="JUMP" strings="ui\shell\main_menu\...\controls_binding_labels" index="16"/>
+<line text="WHITE" strings="ui\shell\main_menu\...\colors_list" index="0" case="upper"/>
+```
+
+One of the port's own lines (`text`, as the menus' files or, with `\n` for
+its line breaks, the port's code write it) in a language: `translation` in
+the `<language>` `language`, or, in any `<language>`, the text at `index` in
+the `loc.map`'s list `strings` (in capitals with `case="upper"`; on one row
+if `text` is). A line for the language is taken before a `loc.map`'s. They
+are shown with `display.menu_language = "maps"` when the maps' Custom
+Edition is in a `<language>`; otherwise the line is as written.
+
 ### `<strings>`
 
 ```xml
@@ -137,7 +167,8 @@ of that list's its number there (`<string text="NEW CAMPAIGN" map="0"/>`).
 Each Custom Edition has that list in its language in its `loc.map`: with
 `display.menu_language = "maps"`, a text with a number is the list's from
 the `loc.map` in `custom_maps`, when it has the list and the number. A text
-without one (the port's own) is always the file's.
+without one (the port's own) is the file's, or a `<line>`'s in the
+edition's language.
 
 ### `<widget>`
 
