@@ -179,7 +179,8 @@ def test_game_sources_leave_out_the_excluded(tmp_path, monkeypatch):
 MENUS = Path(__file__).resolve().parent.parent / "port/assets/menus"
 MENU_ATTRIBUTES = {
     "menus": {"root"},
-    "bitmap": {"name", "width", "height", "frames", "platform"},
+    "bitmap": {"name", "width", "height", "frames", "language", "platform"},
+    "language": {"name", "strings", "index", "text", "platform"},
     "frame": {"png", "map", "index", "width", "height", "x", "y", "platform"},
     "strings": {"name", "map", "platform"},
     "string": {"text", "map", "platform"},
@@ -228,6 +229,7 @@ def test_menus_are_well_formed():
     assert sorted(path.relative_to(MENUS).as_posix() for path in files) == \
         sorted(name for name in listed if name.endswith(".xml"))
     widgets, bitmaps, strings, references, roots = {}, {}, {}, [], []
+    languages, translated = {}, []
     for path in files:
         tree = ElementTree.parse(path)
         assert tree.getroot().tag == "menus", path
@@ -250,7 +252,12 @@ def test_menus_are_well_formed():
                 assert element.get(attribute) in (None, "true", "false"), f"{where} {attribute}"
             assert not (element.text or "").strip() and not (element.tail or "").strip(), where
             if element.tag == "bitmap":
-                bitmaps[element.get("name")] = element
+                # (a language's bitmap is drawn for the one of its name with
+                # none, menu_tags.c: as many frames)
+                if element.get("language"):
+                    translated.append((where, element))
+                else:
+                    bitmaps[element.get("name")] = element
                 for frame in element.iter("frame"):
                     assert (frame.get("png") is None) != (frame.get("map") is None), where
                     if frame.get("map"):
@@ -262,6 +269,9 @@ def test_menus_are_well_formed():
                     width, height = int.from_bytes(header[16:20], "big"), int.from_bytes(header[20:24], "big")
                     logical = int(frame.get("width")), int(frame.get("height"))
                     assert width % logical[0] == 0 and width // logical[0] == height // logical[1], where
+            elif element.tag == "language":
+                assert element.get("name") not in languages and element.get("strings") and                     element.get("text") and int(element.get("index")) >= 0, where
+                languages[element.get("name")] = element
             elif element.tag == "strings":
                 strings[element.get("name")] = element
                 # (a string's map= is its number in the list's map list, menu_tags.c)
@@ -296,6 +306,9 @@ def test_menus_are_well_formed():
             elif element.tag == "data":
                 assert element.get("input") in inputs or element.get("input").startswith("unwired "), where
     assert all(root_name in widgets for root_name in roots)
+    for where, element in translated:
+        assert element.get("language") in languages and element.get("name") in bitmaps, where
+        assert len(element.findall("frame")) == len(bitmaps[element.get("name")].findall("frame")), where
     for where, names, name in references:
         if name and "\\" not in name:
             assert name in names, f"{where} {name}"

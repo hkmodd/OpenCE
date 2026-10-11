@@ -256,6 +256,7 @@ enum element
 	_element_menus,
 	_element_bitmap,
 	_element_frame,
+	_element_language,
 	_element_strings,
 	_element_string,
 	_element_widget,
@@ -488,6 +489,7 @@ static void read_bitmap(struct reader *reader, const XML_Char **attributes)
 	struct attribute table[] =
 	{
 		{ "name", &bitmap.name }, { "frames", &frames }, { "width", NULL, &width }, { "height", NULL, &height },
+		{ "language", &bitmap.language },
 	};
 
 	memset(&bitmap, 0, sizeof(bitmap));
@@ -571,6 +573,27 @@ static void read_frame(struct reader *reader, const XML_Char **attributes, long 
 	GROW(reader, menus->frames, menus->frame_count);
 	menus->frames[menus->frame_count++] = frame;
 	menus->bitmaps[owner].frame_count++;
+}
+
+static void read_language(struct reader *reader, const XML_Char **attributes)
+{
+	struct halo_menus *menus = &reader->menus;
+	struct halo_menu_language language;
+	long given = 0;
+	struct attribute table[] =
+	{
+		{ "name", &language.name }, { "strings", &language.strings }, { "text", &language.text },
+		{ "index", NULL, &language.index, &given },
+	};
+
+	memset(&language, 0, sizeof(language));
+	language.file = reader->file;
+	language.line = current_line(reader);
+	read_attributes(reader, "language", attributes, table, sizeof(table) / sizeof(*table));
+	if (!reader->failed && (!language.name || !language.strings || !language.text || !given || language.index < 0))
+		reader_error(reader, "a <language> needs a name, and the strings, index and text that tell it");
+	GROW(reader, menus->languages, menus->language_count);
+	menus->languages[menus->language_count++] = language;
 }
 
 static void read_strings(struct reader *reader, const XML_Char **attributes)
@@ -836,6 +859,11 @@ static void XMLCALL element_start(void *data, const XML_Char *name, const XML_Ch
 	{
 		element = _element_frame;
 		read_frame(reader, attributes, owner);
+	}
+	else if (!strcmp(name, "language") && parent == _element_menus)
+	{
+		element = _element_language;
+		read_language(reader, attributes);
 	}
 	else if (!strcmp(name, "strings") && parent == _element_menus)
 	{
