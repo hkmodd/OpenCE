@@ -328,8 +328,8 @@ LINES = {
     "OUTPUT DEVICE:": "DISPOSITIVO DI USCITA:",
     "OVERSHIELD": "SOVRASCUDO",
     "OVERSHIELD:": "SOVRASCUDO:",
-    "On foot, horizontal at 16:9, in degrees.\\nDefault keeps the stock view.":
-        "A piedi, orizzontale in 16:9, in gradi.\\nPredefinito mantiene la visuale originale.",
+    "On foot, in vehicles and after death, in\\ndegrees at 16:9. Default keeps the stock view.":
+        "In gradi a 16:9, a piedi, sui veicoli e da\\nmorto. Predefinito: la visuale originale.",
     "Only players with your invite link can join.": "Solo chi ha il tuo link d'invito può entrare.",
     "PASSENGER THIRD PERSON:": "TERZA PERSONA PASSEGGERI:",
     "PASTE LINK": "INCOLLA LINK",
