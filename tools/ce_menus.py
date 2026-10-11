@@ -32,7 +32,9 @@ nothing yet). Its gamespy and ticker fonts are drawn with small_ui, which
 the Xbox's map has.
 
 Needs rsvg-convert, Pillow, NumPy and SciPy; port/assets/menus/menus.json,
-which tools/embed_assets.py embeds the files from, is written too.
+which tools/embed_assets.py embeds the files from, is written too, with the
+pictures of tools/menu_languages.py (run after this, as they are drawn for
+these bitmaps).
 """
 
 import argparse
@@ -49,6 +51,7 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from hud_assets import bleed, render_svg  # noqa: E402
+import menu_languages  # noqa: E402
 import port_settings  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -778,7 +781,7 @@ def main() -> None:
     report += ["", "Wired: " + ", ".join(f"`{name}`" for name in sorted(WIRED)) + ".", ""]
     (MENUS / "UNWIRED.md").write_text("\n".join(report))
     files = sorted(path.relative_to(MENUS).as_posix() for path in MENUS.rglob("*.xml"))
-    files += sorted(art.pngs)
+    files += sorted(art.pngs) + menu_languages.picture_files()
     (MENUS / "menus.json").write_text(json.dumps({
         "comment": "The menus' files the game embeds (tools/ce_menus.py, tools/embed_assets.py).",
         "files": files,

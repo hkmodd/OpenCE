@@ -8,8 +8,8 @@ for the game, which builds them into widget tags when ui.map loads
 its attributes as written, and the file and line it came from; the game reads
 their meaning.
 
-A file holds <menus> with <bitmap> (holding <frame>s), <strings> (holding
-<string>s) and <widget> elements; a <widget> holds <widget> and <child>
+A file holds <menus> with <bitmap> (holding <frame>s), <language>, <strings>
+(holding <string>s) and <widget> elements; a <widget> holds <widget> and <child>
 (its children), <on> (an event handler), <data> (a game data input),
 <conditional> and <replace> elements. port/assets/menus/README.md describes
 them.
@@ -42,6 +42,19 @@ struct halo_menu_bitmap
 	char const *name;
 	/* its frames: frame_count from first_frame in the frames */
 	long first_frame, frame_count;
+	/* a <language>'s name: drawn in place of the bitmap of the same name
+	with none, when the maps' Custom Edition is in that language; else NULL */
+	char const *language;
+	char const *file;
+	long line;
+};
+
+/* a language of the menus' bitmaps: the maps' Custom Edition is in it when
+its loc.map's list strings (the PC version's tag's name) has text at index */
+struct halo_menu_language
+{
+	char const *name, *strings, *text;
+	long index;
 	char const *file;
 	long line;
 };
@@ -123,6 +136,8 @@ struct halo_menus
 	long bitmap_count;
 	struct halo_menu_frame *frames;
 	long frame_count;
+	struct halo_menu_language *languages;
+	long language_count;
 	struct halo_menu_strings *string_lists;
 	long string_list_count;
 	char const **strings;
