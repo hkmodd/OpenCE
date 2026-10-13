@@ -725,6 +725,24 @@ the world (such as `rasterizer_wireframe`). Refer to `NETCODE.md`.
 The frame rate shows at the bottom right of the screen. It is the mean over
 half a second.
 
+### The render thread
+
+With `display.render_thread`, the OpenGL calls run on a thread of their own
+(`src/render_thread.c`). The game's thread puts each draw, clear and present
+on a queue and goes on; while the render thread draws one frame, the game
+calculates and queues the next. Thus a frame reaches the screen at most one
+frame later than without the setting. The game waits for the render thread
+at a present (until the frame before is drawn), at a lock of a texture or a
+palette that a queued draw still reads, when a level loads, when the
+settings or the display's mode change, and in the menus, for the mouse's
+place on the screen.
+
+On a Ryzen 7 7800X3D with an RTX 4080 (Windows), in b30 with 32 times the
+enemies, the frames with 2000 draws or more went from 154 to 176 each second
+(the medians of four runs each), all frames from 219 to 248. There the
+game's thread is the limit: the game's own work takes most of its time, and
+the queueing of the draws about an eighth.
+
 ## Field of view
 
 Video Setup's FOV AND VIEWMODELS screen sets the field of view of the
