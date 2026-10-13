@@ -26,6 +26,7 @@ zlib (port/third_party/zlib).
 #include "hud_hires.h"
 #include "platform.h"
 #include "port_config.h"
+#include "render_thread.h"
 #include "xgpu.h"
 
 #include "zlib_prefixed.h"
@@ -238,7 +239,7 @@ unsigned long hud_hires_asset_sprites(long asset)
 the bitmap whose pixels are at address (guest virtual; its first mip level
 level0_size bytes): its setting on, the pixels those it was drawn for, and
 the texture decoded */
-int hud_hires_sprites_drawable(long asset, unsigned long address, unsigned long level0_size)
+static int run_sprites_drawable(long asset, unsigned long address, unsigned long level0_size)
 {
 	static int hud_enabled, titles_enabled;
 	static unsigned long read_at = (unsigned long)-1;
@@ -267,6 +268,33 @@ int hud_hires_sprites_drawable(long asset, unsigned long address, unsigned long 
 		return 0;
 	}
 	return hud_hires_override_texture(asset, &levels) != 0;
+}
+
+struct sprites_drawable_arguments
+{
+	long asset;
+	unsigned long address, level0_size;
+	int drawable;
+};
+
+static void sprites_drawable_command(void *payload)
+{
+	struct sprites_drawable_arguments *arguments = *(struct sprites_drawable_arguments **)payload;
+
+	arguments->drawable = run_sprites_drawable(arguments->asset, arguments->address, arguments->level0_size);
+}
+
+int hud_hires_sprites_drawable(long asset, unsigned long address, unsigned long level0_size)
+{
+	struct sprites_drawable_arguments arguments, *pointer = &arguments;
+
+	if (!render_thread_elsewhere())
+		return run_sprites_drawable(asset, address, level0_size);
+	arguments.asset = asset;
+	arguments.address = address;
+	arguments.level0_size = level0_size;
+	render_thread_call(sprites_drawable_command, &pointer, sizeof(pointer));
+	return arguments.drawable;
 }
 
 /* the placeholder the game draws the texture's sprites from: its D3D
