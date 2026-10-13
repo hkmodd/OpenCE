@@ -91,6 +91,9 @@ BOOL platform_video_hdr(float *sdr_white, float *headroom);
 just written it (the main thread's) */
 void platform_display_apply(void);
 void platform_video_swap(void);
+/* makes the GL context current on the calling thread, or (FALSE) on none:
+render_thread.c's hand over */
+void platform_video_make_current(BOOL current);
 /* frames between the 30 Hz ticks at the display's refresh rate, unless
 display.interpolation is false (port/linux/game/render_interpolation.c) */
 int halo_interpolation_enabled(void);
