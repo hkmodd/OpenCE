@@ -61,10 +61,12 @@ struct halo_menu_language
 
 /* a line of the port's own (text, in English) in a language: written for
 it (language, translation), or for any whose loc.map's list strings (the PC
-version's tag's name) says it at index, in capitals if casing is "upper" */
+version's tag's name) says it at index, in capitals if casing is "upper";
+or, shorter "yes", the language's words for a string of the PC version's
+(text) that its loc.map says wider than its widgets have room for */
 struct halo_menu_line
 {
-	char const *text, *language, *translation, *strings, *casing;
+	char const *text, *language, *translation, *strings, *casing, *shorter;
 	long index;
 	char const *file;
 	long line;

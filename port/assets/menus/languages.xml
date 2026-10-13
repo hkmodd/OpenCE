@@ -517,6 +517,17 @@
 	<line text="\n\nJoining from here:" language="it" translation="\n\nEntra da qui:"/>
 	<line text="player" language="it" translation="giocatore"/>
 	<line text="players" language="it" translation="giocatori"/>
+	<line text="ANY ORDER" language="it" translation="ORDINE LIBERO" shorter="yes"/>
+	<line text="AUTO TEAM BALANCE:" language="it" translation="BILANCIAMENTO SQUADRE:" shorter="yes"/>
+	<line text="CONTROLS SETUP" language="it" translation="CONTROLLI" shorter="yes"/>
+	<line text="DAMAGE RESISTANT" language="it" translation="PIÙ RESISTENTE" shorter="yes"/>
+	<line text="FLAG AT HOME TO SCORE:" language="it" translation="VINCI CON BANDIERA A BASE:" shorter="yes"/>
+	<line text="MOTION TRACKER" language="it" translation="RILEVATORE" shorter="yes"/>
+	<line text="NAV POINTS" language="it" translation="PUNTI DI NAV." shorter="yes"/>
+	<line text="SHORT RANGE" language="it" translation="CORTO RAGGIO" shorter="yes"/>
+	<line text="SHOW MISSING MAPS" language="it" translation="MOSTRA MAPPE MANCANTI" shorter="yes"/>
+	<line text="TEAMPLAY OPTIONS" language="it" translation="OPZIONI SQUADRA" shorter="yes"/>
+	<line text="VEHICLE RESPAWN TIME:" language="it" translation="RIAPPARIZIONE VEICOLI:" shorter="yes"/>
 	<line text="ACTION" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\controls_binding_labels" index="20"/>
 	<line text="ACTIONS" strings="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controls_setup\var_command_groups" index="2"/>
 	<line text="ALL" strings="ui\shell\main_menu\settings_select\multiplayer_setup\indicator_options_edit\var_others_on_radar" index="0"/>

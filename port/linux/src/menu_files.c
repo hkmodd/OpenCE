@@ -606,6 +606,7 @@ static void read_line(struct reader *reader, const XML_Char **attributes)
 	{
 		{ "text", &line.text }, { "language", &line.language }, { "translation", &line.translation },
 		{ "strings", &line.strings }, { "index", NULL, &line.index, &given }, { "case", &line.casing },
+		{ "shorter", &line.shorter },
 	};
 
 	memset(&line, 0, sizeof(line));
@@ -615,10 +616,11 @@ static void read_line(struct reader *reader, const XML_Char **attributes)
 	if (!reader->failed && (!line.text ||
 		(line.language ? !line.translation || line.strings || given :
 			line.translation || !line.strings || !given || line.index < 0) ||
-		(line.casing && strcmp(line.casing, "upper"))))
+		(line.casing && strcmp(line.casing, "upper")) ||
+		(line.shorter && (!line.language || strcmp(line.shorter, "yes")))))
 	{
 		reader_error(reader, "a <line> needs its text, and a language and translation, or the strings and "
-			"index that say it (and case=\"upper\" for capitals)");
+			"index that say it (and case=\"upper\" for capitals; shorter=\"yes\" with a language)");
 	}
 	GROW(reader, menus->lines, menus->line_count);
 	menus->lines[menus->line_count++] = line;

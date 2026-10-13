@@ -181,7 +181,7 @@ MENU_ATTRIBUTES = {
     "menus": {"root"},
     "bitmap": {"name", "width", "height", "frames", "language", "platform"},
     "language": {"name", "strings", "index", "text", "platform"},
-    "line": {"text", "language", "translation", "strings", "index", "case", "platform"},
+    "line": {"text", "language", "translation", "strings", "index", "case", "shorter", "platform"},
     "frame": {"png", "map", "index", "width", "height", "x", "y", "platform"},
     "strings": {"name", "map", "platform"},
     "string": {"text", "map", "platform"},
@@ -285,6 +285,8 @@ def test_menus_are_well_formed():
                     assert element.get("translation") is None and "\\" in element.get("strings", "") and \
                         int(element.get("index")) >= 0, where
                 assert element.get("case") in (None, "upper"), where
+                assert element.get("shorter") in (None, "yes") and \
+                    (element.get("shorter") is None or element.get("language")), where
             elif element.tag == "strings":
                 strings[element.get("name")] = element
                 # (a string's map= is its number in the list's map list, menu_tags.c)
@@ -332,7 +334,8 @@ def test_menus_are_well_formed():
 def test_menu_lines_are_translated():
     """Every line of the port's with words (its menus' files' and its
     code's menu_text and MENU_LINE lines) is in each language of
-    languages.xml, with the English's formats, and languages.xml has them as
+    languages.xml, with the English's formats, and languages.xml has them,
+    and each language's shorter words for strings of the PC version's, as
     tools/menu_languages.py writes them."""
     import xml.etree.ElementTree as ElementTree
     pytest.importorskip("numpy")
@@ -341,13 +344,16 @@ def test_menu_lines_are_translated():
     import menu_languages
 
     own = menu_languages.check_lines()
+    shorter = menu_languages.check_shorter()
     written = {}
     for element in ElementTree.parse(MENUS / "languages.xml").getroot().iter("line"):
-        key = element.get("language"), element.get("text")
+        key = element.get("language"), element.get("text"), element.get("shorter") == "yes"
         written[key] = element.get("translation") or (element.get("strings"), int(element.get("index")),
                                                        element.get("case") == "upper")
-    expected = {(language, text): words for language, lines in own.items() for text, words in lines.items()}
-    expected.update({(None, text): reference for text, reference in menu_languages.REFERENCES.items()})
+    expected = {(language, text, False): words for language, lines in own.items() for text, words in lines.items()}
+    expected.update({(language, text, True): words for language, lines in shorter.items()
+                     for text, words in lines.items()})
+    expected.update({(None, text, False): reference for text, reference in menu_languages.REFERENCES.items()})
     assert written == expected
 
 

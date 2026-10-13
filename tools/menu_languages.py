@@ -30,6 +30,11 @@ shown before a loc.map's, so a language may say a line of REFERENCES
 itself where the edition's words are wider than the port's screen has room
 for (the controls' names, in their narrower columns).
 
+A language's SHORTER says, in fewer words, the PC version's strings its
+edition's loc.map says wider than their widgets have room for (cut there,
+as that edition's own menus cut them): a <line language=... shorter="yes">
+for each, which the menus show in place of the loc.map's string.
+
 A language's words are those of its edition's own pictures (LANGUAGES):
 
     python tools/menu_languages.py --extract <bitmaps.map> <folder>
@@ -409,6 +414,34 @@ def language_lines(language: str) -> tuple:
     return module.LINES, set(module.SAME)
 
 
+def shorter_lines(language: str) -> dict:
+    """a language's shorter words for strings of the PC version's"""
+    try:
+        module = importlib.import_module(f"menu_lines_{language}")
+    except ModuleNotFoundError:
+        return {}
+    return getattr(module, "SHORTER", {})
+
+
+def check_shorter() -> dict:
+    """each language's shorter words, checked: each for a string of the PC
+    version's (one with a map= in strings.xml), with its formats"""
+    originals = {element.get("text") for element in ElementTree.parse(MENUS / "ce/strings.xml").getroot().iter("string")
+                 if element.get("map") is not None}
+    problems, languages = [], {}
+    for language in sorted(LANGUAGES):
+        shorter = shorter_lines(language)
+        for english, words in shorter.items():
+            if english not in originals:
+                problems.append(f"{language}: SHORTER {english!r} is not a string of the PC version's")
+            if FORMAT.findall(english) != FORMAT.findall(words) or english.count("\\n") != words.count("\\n"):
+                problems.append(f"{language}: SHORTER {english!r} and {words!r} have different formats")
+        languages[language] = shorter
+    if problems:
+        sys.exit("\n".join(problems))
+    return languages
+
+
 def check_lines() -> dict:
     """each language's lines, checked: every port line is said (a
     reference, a line of its own or the same), none is said twice (a line of
@@ -443,6 +476,7 @@ def check_lines() -> dict:
 def write() -> None:
     english = english_bitmaps()
     own_lines = check_lines()
+    shorter_words = check_shorter()
     titles = sorted(port_settings.TITLES.items())
     # (the port's titles are shown in their widgets' width, not all 512 of
     # the picture)
@@ -493,6 +527,8 @@ def write() -> None:
             lines.append("\t</bitmap>")
         for text, words in sorted(own_lines[language].items()):
             lines.append(f"\t<line{attributes([('text', text), ('language', language), ('translation', words)])}/>")
+        for text, words in sorted(shorter_words[language].items()):
+            lines.append(f"\t<line{attributes([('text', text), ('language', language), ('translation', words), ('shorter', 'yes')])}/>")
     for text, (strings, index, upper) in sorted(REFERENCES.items()):
         lines.append(f"\t<line{attributes([('text', text), ('strings', strings), ('index', index), ('case', 'upper' if upper else None)])}/>")
     lines.append("</menus>")

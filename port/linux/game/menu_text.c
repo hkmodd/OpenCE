@@ -12,6 +12,10 @@ every line is in English or a language languages.xml has no <language> for.
 
 A line of one row in English is one row in a string of the loc.map's too
 (its line breaks made spaces).
+
+The <line shorter="yes">s are the language's words for strings of the PC
+version's that its loc.map says wider than their widgets have room for
+(menu_text_shorter), shown in place of the loc.map's.
 */
 
 #include "cseries.h"
@@ -33,6 +37,8 @@ struct menu_text_line
 	/* its characters in the language, its terminator included */
 	unsigned short *text;
 	long length;
+	/* in place of a loc.map's string (menu_text_shorter), not a line */
+	boolean shorter;
 };
 
 static struct
@@ -108,13 +114,13 @@ static unsigned short *menu_text_from_map(struct halo_menu_line const *line, uns
 	return characters;
 }
 
-static struct menu_text_line const *menu_text_find(char const *english)
+static struct menu_text_line const *menu_text_find(char const *english, boolean shorter)
 {
 	long index;
 
 	for (index = 0; index < menu_text_globals.count; index++)
 	{
-		if (!strcmp(menu_text_globals.lines[index].english, english))
+		if (menu_text_globals.lines[index].shorter == shorter && !strcmp(menu_text_globals.lines[index].english, english))
 			return &menu_text_globals.lines[index];
 	}
 	return NULL;
@@ -145,6 +151,7 @@ static boolean menu_text_add(struct halo_menu_line const *line, boolean locale)
 			free(map);
 	}
 	added->english = line->text;
+	added->shorter = line->shorter != NULL;
 	added->english_text = added->text ? menu_text_utf16(line->text, &english_length) : NULL;
 	if (!added->english_text)
 	{
@@ -189,7 +196,7 @@ void menu_text_build(struct halo_menus const *menus, char const *language, boole
 
 			if (pass == 0 ? !line->language || strcmp(line->language, language) : line->language != NULL)
 				continue;
-			if (!menu_text_find(line->text))
+			if (!menu_text_find(line->text, line->shorter != NULL))
 				menu_text_add(line, locale);
 		}
 	}
@@ -197,7 +204,17 @@ void menu_text_build(struct halo_menus const *menus, char const *language, boole
 
 unsigned short const *menu_text_line(char const *english, long *length)
 {
-	struct menu_text_line const *line = menu_text_find(english);
+	struct menu_text_line const *line = menu_text_find(english, FALSE);
+
+	if (!line)
+		return NULL;
+	*length = line->length;
+	return line->text;
+}
+
+unsigned short const *menu_text_shorter(char const *english, long *length)
+{
+	struct menu_text_line const *line = menu_text_find(english, TRUE);
 
 	if (!line)
 		return NULL;
@@ -214,6 +231,8 @@ wchar_t const *menu_text(wchar_t const *english)
 		unsigned short const *text = menu_text_globals.lines[index].english_text;
 		long character;
 
+		if (menu_text_globals.lines[index].shorter)
+			continue;
 		for (character = 0; text[character] && text[character] == (unsigned short)english[character]; character++);
 		if (text[character] == (unsigned short)english[character])
 			return (wchar_t const *)menu_text_globals.lines[index].text;

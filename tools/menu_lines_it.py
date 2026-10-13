@@ -503,3 +503,20 @@ SAME = {
     "256 KB/S", "4 MB/S", "512 KB/S", "64 KB/S", "8 MB/S", "ANTI-ALIASING:", "AUTO", "CO-OP", "FOV:", "FXAA", "MSAA 2X",
     "MSAA 4X", "MSAA 8X", "PASSWORD", "PASSWORD:", "SMAA", "SSAA 2X", "V-SYNC:", ", password",
 }
+
+# the PC version's strings the Italian edition's loc.map says wider than
+# their widgets (the edition's own menus cut them): their English, and the
+# Italian shown instead, in the edition's words where it has them
+SHORTER = {
+    "ANY ORDER": "ORDINE LIBERO",
+    "AUTO TEAM BALANCE:": "BILANCIAMENTO SQUADRE:",
+    "CONTROLS SETUP": "CONTROLLI",
+    "DAMAGE RESISTANT": "PIÙ RESISTENTE",
+    "FLAG AT HOME TO SCORE:": "VINCI CON BANDIERA A BASE:",
+    "MOTION TRACKER": "RILEVATORE",
+    "NAV POINTS": "PUNTI DI NAV.",
+    "SHORT RANGE": "CORTO RAGGIO",
+    "SHOW MISSING MAPS": "MOSTRA MAPPE MANCANTI",
+    "TEAMPLAY OPTIONS": "OPZIONI SQUADRA",
+    "VEHICLE RESPAWN TIME:": "RIAPPARIZIONE VEICOLI:",
+}

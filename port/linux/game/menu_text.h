@@ -17,6 +17,10 @@ void menu_text_build(struct halo_menus const *menus, char const *language, boole
 /* a line of the menus' files (as written there) in the language: its UTF-16
 characters, its terminator included (length of them); NULL if it has none */
 unsigned short const *menu_text_line(char const *english, long *length);
+/* the language's shorter words for a string of the PC version's (its English)
+that its loc.map says wider than its widgets have room for, as
+menu_text_line's; NULL if it has none */
+unsigned short const *menu_text_shorter(char const *english, long *length);
 /* a line of the port's code in the language, else the line itself */
 wchar_t const *menu_text(wchar_t const *english);
 
