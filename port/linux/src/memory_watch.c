@@ -22,6 +22,10 @@ debug.txt, and then hands the signal to the handler before it, or the
 default action. It is installed before main, so that a crash at any time
 is reported; a library that installs its own later would take the watch's
 faults, so the renderer's device installs it again, chained to that one.
+
+A page's flag and its protection change together, under a lock: the
+render thread (display.render_thread) protects pages while the game's
+threads write them.
 */
 
 #include "platform.h"
@@ -45,6 +49,24 @@ static unsigned char page_protected[WATCH_PAGE_COUNT];
 static unsigned long page_generation[WATCH_PAGE_COUNT];
 static volatile unsigned long current_generation = 1;
 static BOOL watch_active = FALSE;
+static int watch_lock;
+
+/* held only around a page's flag and protection: no write to watched
+memory, so no fault, while it is held (and a spin, safe in the handler) */
+static void lock_pages(void)
+{
+	while (__atomic_exchange_n(&watch_lock, 1, __ATOMIC_ACQUIRE))
+	{
+#if defined(__i386__) || defined(__x86_64__)
+		__builtin_ia32_pause();
+#endif
+	}
+}
+
+static void unlock_pages(void)
+{
+	__atomic_store_n(&watch_lock, 0, __ATOMIC_RELEASE);
+}
 
 /* the signals reported as a crash, SIGSEGV first (the write tracking's), and
 what handled each before this file's handler */
@@ -212,7 +234,10 @@ static void crash_handler(int signal_number, siginfo_t *information, void *conte
 		/* a write to a page the renderer watches: noted, and let through */
 		if (page < WATCH_PAGE_COUNT && page_protected[page] == 1)
 		{
-			mark_written(page);
+			lock_pages();
+			if (page_protected[page])
+				mark_written(page);
+			unlock_pages();
 			return;
 		}
 		if (page < WATCH_PAGE_COUNT && page_protected[page] == 2)
@@ -299,8 +324,13 @@ void memory_watch_protect(unsigned long address, unsigned long size)
 	{
 		if (page_protected[page] != 1)
 		{
-			page_protected[page] = 1;
-			mprotect((void *)(PLATFORM_CONTIGUOUS_BASE + page * WATCH_PAGE_SIZE), WATCH_PAGE_SIZE, PROT_READ);
+			lock_pages();
+			if (!page_protected[page])
+			{
+				page_protected[page] = 1;
+				mprotect((void *)(PLATFORM_CONTIGUOUS_BASE + page * WATCH_PAGE_SIZE), WATCH_PAGE_SIZE, PROT_READ);
+			}
+			unlock_pages();
 		}
 	}
 }
@@ -346,7 +376,12 @@ void memory_watch_prepare_write(void *address, unsigned long size)
 	for (page = first; page <= last; page++)
 	{
 		if (page_protected[page] == 1)
-			mark_written(page);
+		{
+			lock_pages();
+			if (page_protected[page] == 1)
+				mark_written(page);
+			unlock_pages();
+		}
 	}
 }
 
@@ -363,8 +398,10 @@ void memory_watch_forget(void *address, unsigned long size)
 		last = WATCH_PAGE_COUNT - 1;
 	for (page = first; page <= last; page++)
 	{
+		lock_pages();
 		page_protected[page] = 0;
 		page_generation[page] = __sync_add_and_fetch(&current_generation, 1);
+		unlock_pages();
 	}
 }
 

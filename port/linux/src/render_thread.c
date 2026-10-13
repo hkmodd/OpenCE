@@ -11,6 +11,13 @@ The queue is a ring with one writer (the game's thread) and one reader
 how far the next one is, then its payload. The writer publishes how far it
 has written (submitted), the reader how far it has run (completed); each
 waits for the other by spinning a little, then on a condition variable.
+Positions count bytes from the start and wrap: they are compared by their
+differences, which the ring's size bounds.
+
+A resource the game may write again (a texture, a palette) is busy from a
+command that reads it until that command has run: the writer notes the
+position after the command against the resource's data, and the game's
+IsBusy, BlockUntilNotBusy and locks wait for the reader to pass it.
 */
 
 #include "render_thread.h"
@@ -29,6 +36,8 @@ waits for the other by spinning a little, then on a condition variable.
 #define RING_ALIGNMENT 16UL
 /* checks of the other thread's position before sleeping */
 #define SPIN_COUNT 4000
+/* busy resources, by their data's address (a power of two) */
+#define BUSY_SLOTS 4096
 
 struct command_header
 {
@@ -42,6 +51,7 @@ struct command_header
 
 static unsigned char *ring;
 static pthread_t render_thread;
+static pthread_t writer_thread;
 static int running;
 /* the writer's position: recorded (its own), submitted (published) */
 static unsigned long recorded;
@@ -52,9 +62,13 @@ static unsigned long completed;
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t work_condition = PTHREAD_COND_INITIALIZER;
 static pthread_cond_t done_condition = PTHREAD_COND_INITIALIZER;
-/* set, under lock, by a thread about to sleep */
+/* set, under lock, by the reader about to sleep; and the threads asleep
+until the reader reaches a position */
 static int reader_sleeping;
-static int writer_sleeping;
+static int waiters;
+/* the position after the latest command recorded that reads each busy
+resource (two resources in a slot: one waits for the other's commands) */
+static unsigned long busy_until[BUSY_SLOTS];
 
 static void spin_pause(void)
 {
@@ -63,24 +77,37 @@ static void spin_pause(void)
 #endif
 }
 
-/* returns once completed has reached at least position - room (room 0:
-everything up to position has run) */
-static void wait_for_reader(unsigned long position, unsigned long room)
+/* whether the reader has run everything before position (which is no
+more than a ring behind or ahead of it) */
+static int reached(unsigned long position, int order)
+{
+	return (long)(__atomic_load_n(&completed, order) - position) >= 0;
+}
+
+/* returns once the reader has run everything before position, which the
+writer has submitted */
+static void wait_for_reader(unsigned long position)
 {
 	int spin;
 
 	for (spin = 0; spin < SPIN_COUNT; spin++)
 	{
-		if (position - __atomic_load_n(&completed, __ATOMIC_ACQUIRE) <= room)
+		if (reached(position, __ATOMIC_ACQUIRE))
 			return;
 		spin_pause();
 	}
 	pthread_mutex_lock(&lock);
-	__atomic_store_n(&writer_sleeping, 1, __ATOMIC_SEQ_CST);
-	while (position - __atomic_load_n(&completed, __ATOMIC_SEQ_CST) > room)
+	__atomic_add_fetch(&waiters, 1, __ATOMIC_SEQ_CST);
+	while (!reached(position, __ATOMIC_SEQ_CST))
 		pthread_cond_wait(&done_condition, &lock);
-	__atomic_store_n(&writer_sleeping, 0, __ATOMIC_RELAXED);
+	__atomic_sub_fetch(&waiters, 1, __ATOMIC_RELAXED);
 	pthread_mutex_unlock(&lock);
+}
+
+/* whether the caller is the ring's writer, with the thread running */
+static int writing(void)
+{
+	return running && pthread_equal(pthread_self(), writer_thread);
 }
 
 static void *render_thread_main(void *unused)
@@ -115,13 +142,14 @@ static void *render_thread_main(void *unused)
 			if (header->command)
 				header->command((unsigned char *)header + HEADER_SIZE);
 			position += header->advance;
-		}
-		__atomic_store_n(&completed, position, __ATOMIC_SEQ_CST);
-		if (__atomic_load_n(&writer_sleeping, __ATOMIC_SEQ_CST))
-		{
-			pthread_mutex_lock(&lock);
-			pthread_cond_signal(&done_condition);
-			pthread_mutex_unlock(&lock);
+			/* after each command: a busy resource waits for its own only */
+			__atomic_store_n(&completed, position, __ATOMIC_SEQ_CST);
+			if (__atomic_load_n(&waiters, __ATOMIC_SEQ_CST))
+			{
+				pthread_mutex_lock(&lock);
+				pthread_cond_broadcast(&done_condition);
+				pthread_mutex_unlock(&lock);
+			}
 		}
 	}
 	return NULL;
@@ -150,6 +178,7 @@ int render_thread_start(void)
 		return FALSE;
 	}
 	pthread_detach(render_thread);
+	writer_thread = pthread_self();
 	running = TRUE;
 	platform_log("render thread: drawing on a thread of its own");
 	return TRUE;
@@ -161,6 +190,11 @@ int render_thread_elsewhere(void)
 	return running && !pthread_equal(pthread_self(), render_thread);
 }
 
+int render_thread_running(void)
+{
+	return running;
+}
+
 void *render_thread_record(render_thread_command command, unsigned long size)
 {
 	unsigned long advance = HEADER_SIZE + ((size + RING_ALIGNMENT - 1) & ~(RING_ALIGNMENT - 1));
@@ -168,16 +202,8 @@ void *render_thread_record(render_thread_command command, unsigned long size)
 	struct command_header *header;
 
 #ifndef HALO_RELEASE
-	static pthread_t writer;
-	static int writer_known;
-
 	/* the ring has one writer */
-	if (!writer_known)
-	{
-		writer = pthread_self();
-		writer_known = TRUE;
-	}
-	if (!pthread_equal(writer, pthread_self()))
+	if (!writing())
 	{
 		platform_log("render thread: a second thread queues commands");
 		abort();
@@ -188,19 +214,26 @@ void *render_thread_record(render_thread_command command, unsigned long size)
 		platform_log("render thread: a command of %lu bytes is too large", size);
 		abort();
 	}
+	/* the room needed must have been run; with the ring full of commands
+	not yet handed over, they are handed over first */
 	if (offset + advance > RING_SIZE)
 	{
 		/* to the start of the ring, past a header that says so */
-		wait_for_reader(recorded + RING_SIZE - offset + advance, RING_SIZE);
+		if (!reached(recorded - offset + advance, __ATOMIC_ACQUIRE))
+		{
+			render_thread_submit();
+			wait_for_reader(recorded - offset + advance);
+		}
 		header = (struct command_header *)(ring + offset);
 		header->command = NULL;
 		header->advance = RING_SIZE - offset;
 		recorded += header->advance;
 		offset = 0;
 	}
-	else
+	else if (!reached(recorded + advance - RING_SIZE, __ATOMIC_ACQUIRE))
 	{
-		wait_for_reader(recorded + advance, RING_SIZE);
+		render_thread_submit();
+		wait_for_reader(recorded + advance - RING_SIZE);
 	}
 	header = (struct command_header *)(ring + offset);
 	header->command = command;
@@ -211,6 +244,8 @@ void *render_thread_record(render_thread_command command, unsigned long size)
 
 void render_thread_submit(void)
 {
+	if (submitted == recorded)
+		return;
 	__atomic_store_n(&submitted, recorded, __ATOMIC_SEQ_CST);
 	if (__atomic_load_n(&reader_sleeping, __ATOMIC_SEQ_CST))
 	{
@@ -222,7 +257,7 @@ void render_thread_submit(void)
 
 void render_thread_wait(void)
 {
-	wait_for_reader(__atomic_load_n(&submitted, __ATOMIC_RELAXED), 0);
+	wait_for_reader(__atomic_load_n(&submitted, __ATOMIC_RELAXED));
 }
 
 void render_thread_call(render_thread_command command, const void *payload, unsigned long size)
@@ -233,4 +268,77 @@ void render_thread_call(render_thread_command command, const void *payload, unsi
 		memcpy(copy, payload, size);
 	render_thread_submit();
 	render_thread_wait();
+}
+
+void render_thread_drain(void)
+{
+	if (!writing())
+		return;
+	render_thread_submit();
+	render_thread_wait();
+}
+
+unsigned long render_thread_position(void)
+{
+	return recorded;
+}
+
+void render_thread_wait_for(unsigned long position)
+{
+	if (!writing() || reached(position, __ATOMIC_ACQUIRE))
+		return;
+	render_thread_submit();
+	wait_for_reader(position);
+}
+
+int render_thread_busy(void)
+{
+	if (!writing())
+		return FALSE;
+	render_thread_submit();
+	return !reached(submitted, __ATOMIC_ACQUIRE);
+}
+
+static unsigned long busy_slot(unsigned long data)
+{
+	return ((data >> 6) ^ (data >> 18)) & (BUSY_SLOTS - 1);
+}
+
+void render_thread_mark_busy(unsigned long data)
+{
+	if (data && writing())
+		busy_until[busy_slot(data)] = recorded;
+}
+
+/* the position the resource is busy until, or 0 */
+static unsigned long busy_position(unsigned long data)
+{
+	unsigned long until, done;
+
+	if (!data || !writing())
+		return 0;
+	until = busy_until[busy_slot(data)];
+	done = __atomic_load_n(&completed, __ATOMIC_ACQUIRE);
+	/* busy only after what has run, up to what is recorded (a slot noted
+	long ago, which the positions have wrapped back to, waits needlessly) */
+	if (until == done || until - done > recorded - done)
+		return 0;
+	return until;
+}
+
+int render_thread_resource_busy(unsigned long data)
+{
+	if (!busy_position(data))
+		return FALSE;
+	/* the game spins on IsBusy: what it waits for is handed over */
+	render_thread_submit();
+	return TRUE;
+}
+
+void render_thread_wait_resource(unsigned long data)
+{
+	unsigned long until = busy_position(data);
+
+	if (until)
+		render_thread_wait_for(until);
 }
