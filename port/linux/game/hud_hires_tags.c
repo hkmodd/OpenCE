@@ -76,6 +76,7 @@ void hud_hires_map_loaded(const long *assets, long count);
 void hud_hires_map_unloaded(void);
 void hud_hires_tags_loaded(long scenario_index);
 void hud_hires_tags_unloaded(void);
+void render_thread_drain(void); /* port/linux/src/render_thread.c */
 long hud_hires_asset_at(unsigned long address, long width, long height);
 struct bitmap_data const *hud_hires_sprite_bitmap(struct bitmap_data const *bitmap, short sequence_index);
 
@@ -177,6 +178,9 @@ void hud_hires_tags_loaded(
 	long asset;
 	long missing = 0;
 
+	/* (the renderer reads the lists as it uploads textures: not while they
+	change) */
+	render_thread_drain();
 	hires_bitmap_count = 0;
 	hud_hires_sprite_bitmaps_forget();
 	upscale_bitmap_count = 0;
@@ -292,6 +296,7 @@ void hud_hires_tags_loaded(
 void hud_hires_tags_unloaded(
 	void)
 {
+	render_thread_drain();
 	hires_bitmap_count = 0;
 	upscale_bitmap_count = 0;
 	ce_stock_bitmap_count = 0;

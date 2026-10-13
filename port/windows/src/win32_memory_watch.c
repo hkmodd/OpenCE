@@ -6,6 +6,10 @@ of port/linux/src/memory_watch.c (see there for the design). The pages behind
 a cached texture are made read-only; a vectored exception handler catches
 the first write, records a new generation for the page and makes it
 writable again.
+
+A page's flag and its protection change together, under a lock: the
+render thread (display.render_thread) protects pages while the game's
+threads write them.
 */
 
 #include <windows.h>
@@ -27,6 +31,20 @@ static volatile unsigned char page_protected[WATCH_PAGE_COUNT];
 static volatile LONG page_generation[WATCH_PAGE_COUNT];
 static volatile LONG current_generation = 1;
 static BOOL watch_active = FALSE;
+static volatile LONG watch_lock;
+
+/* held only around a page's flag and protection: no write to watched
+memory, so no fault, while it is held */
+static void lock_pages(void)
+{
+	while (InterlockedCompareExchange(&watch_lock, 1, 0))
+		YieldProcessor();
+}
+
+static void unlock_pages(void)
+{
+	InterlockedExchange(&watch_lock, 0);
+}
 
 static BOOL in_window(unsigned long address)
 {
@@ -59,7 +77,10 @@ static LONG CALLBACK watch_handler(EXCEPTION_POINTERS *exception)
 
 		if (in_window(address) && page_protected[page_index(address)] == 1)
 		{
-			mark_written(page_index(address));
+			lock_pages();
+			if (page_protected[page_index(address)])
+				mark_written(page_index(address));
+			unlock_pages();
 			return EXCEPTION_CONTINUE_EXECUTION;
 		}
 		if (in_window(address) && page_protected[page_index(address)] == 2)
@@ -92,9 +113,14 @@ void memory_watch_protect(unsigned long address, unsigned long size)
 		{
 			DWORD previous;
 
-			page_protected[page] = 1;
-			VirtualProtect((void *)(PLATFORM_CONTIGUOUS_BASE + page * WATCH_PAGE_SIZE), WATCH_PAGE_SIZE,
-				PAGE_READONLY, &previous);
+			lock_pages();
+			if (!page_protected[page])
+			{
+				page_protected[page] = 1;
+				VirtualProtect((void *)(PLATFORM_CONTIGUOUS_BASE + page * WATCH_PAGE_SIZE), WATCH_PAGE_SIZE,
+					PAGE_READONLY, &previous);
+			}
+			unlock_pages();
 		}
 	}
 }
@@ -140,7 +166,12 @@ void memory_watch_prepare_write(void *address, unsigned long size)
 	for (page = first; page <= last; page++)
 	{
 		if (page_protected[page] == 1)
-			mark_written(page);
+		{
+			lock_pages();
+			if (page_protected[page] == 1)
+				mark_written(page);
+			unlock_pages();
+		}
 	}
 }
 
@@ -157,8 +188,10 @@ void memory_watch_forget(void *address, unsigned long size)
 		last = WATCH_PAGE_COUNT - 1;
 	for (page = first; page <= last; page++)
 	{
+		lock_pages();
 		page_protected[page] = 0;
 		page_generation[page] = InterlockedIncrement(&current_generation);
+		unlock_pages();
 	}
 }
 
