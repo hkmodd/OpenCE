@@ -23,5 +23,24 @@ void render_thread_wait(void);
 /* runs command on the render thread with a copy of size bytes of payload,
 and returns once it has run */
 void render_thread_call(render_thread_command command, const void *payload, unsigned long size);
+/* nonzero while the render thread runs */
+int render_thread_running(void);
+
+/* The rest do nothing (or answer as for an idle queue) unless the render
+thread runs and the caller is the thread that queues. */
+
+/* hands over what is queued and returns once it has run */
+void render_thread_drain(void);
+/* the queue's position after the latest command recorded, and a wait
+until the render thread has run everything before such a position */
+unsigned long render_thread_position(void);
+void render_thread_wait_for(unsigned long position);
+/* hands over what is queued; nonzero while any of it has not run */
+int render_thread_busy(void);
+/* notes that the latest command recorded reads the resource whose data is
+at that address; a resource is busy until the render thread has run it */
+void render_thread_mark_busy(unsigned long data);
+int render_thread_resource_busy(unsigned long data);
+void render_thread_wait_resource(unsigned long data);
 
 #endif
