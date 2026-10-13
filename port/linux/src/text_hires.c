@@ -14,11 +14,17 @@ pixels per unit of the 480 lines, into an 8-bit atlas; the GL texture the
 game's placeholder bitmap stands for (xbox_textures.c) is the atlas, its new
 rows uploaded when the placeholder is bound. A change of the display's
 scale (a window made fullscreen) or a full atlas starts it over.
+
+With the render thread (display.render_thread), the glyphs are rasterized
+on the game's thread and drawn on the render thread: the renderer has a
+copy of the atlas and of the placeholder, which the new rows are sent to
+ahead of the draws that read them (text_hires_publish).
 */
 
 #include "text_hires.h"
 #include "platform.h"
 #include "port_config.h"
+#include "render_thread.h"
 #include "xgpu.h"
 
 #include <math.h>
@@ -70,6 +76,11 @@ static int pack_x, pack_y, pack_row_height;
 static int dirty_top = ATLAS_SIZE, dirty_bottom;
 static unsigned long placeholder_data, placeholder_width, placeholder_height;
 static GLuint atlas_texture;
+/* (with the render thread) the renderer's: the atlas, its rows not yet
+uploaded and the placeholder; and the placeholder last sent */
+static unsigned char *shown_atlas;
+static int shown_top = ATLAS_SIZE, shown_bottom;
+static unsigned long shown_placeholder, sent_placeholder;
 
 /* tag names compared as the game does, ignoring case (and without the POSIX
 strcasecmp, which the Windows build has not) */
@@ -303,9 +314,63 @@ void text_hires_register_atlas(const unsigned long *texture, unsigned long width
 	placeholder_height = height;
 }
 
+struct publish_header
+{
+	unsigned long placeholder;
+	long top, rows;
+};
+
+static void publish_command(void *payload)
+{
+	struct publish_header *header = (struct publish_header *)payload;
+
+	shown_placeholder = header->placeholder;
+	if (!header->rows)
+		return;
+	if (!shown_atlas)
+		shown_atlas = calloc(ATLAS_SIZE, ATLAS_SIZE);
+	if (!shown_atlas)
+		return;
+	memcpy(shown_atlas + header->top * ATLAS_SIZE, header + 1, (size_t)header->rows * ATLAS_SIZE);
+	if (header->top < shown_top)
+		shown_top = (int)header->top;
+	if (header->top + header->rows > shown_bottom)
+		shown_bottom = (int)(header->top + header->rows);
+}
+
+void text_hires_publish(void)
+{
+	long rows = atlas && dirty_top < dirty_bottom ? dirty_bottom - dirty_top : 0;
+	struct publish_header *header;
+
+	if (!render_thread_running() || (!rows && placeholder_data == sent_placeholder))
+		return;
+	header = (struct publish_header *)render_thread_record(publish_command,
+		sizeof(*header) + (unsigned long)rows * ATLAS_SIZE);
+	header->placeholder = placeholder_data;
+	header->top = dirty_top;
+	header->rows = rows;
+	if (rows)
+		memcpy(header + 1, atlas + (long)dirty_top * ATLAS_SIZE, (size_t)rows * ATLAS_SIZE);
+	sent_placeholder = placeholder_data;
+	dirty_top = ATLAS_SIZE;
+	dirty_bottom = 0;
+}
+
 unsigned int text_hires_atlas_texture(unsigned long data)
 {
-	if (!data || data != placeholder_data || !atlas || !xgpu_gl_ready())
+	const unsigned char *source = atlas;
+	unsigned long placeholder = placeholder_data;
+	int *top = &dirty_top, *bottom = &dirty_bottom;
+
+	if (render_thread_running())
+	{
+		source = shown_atlas;
+		placeholder = shown_placeholder;
+		top = &shown_top;
+		bottom = &shown_bottom;
+	}
+	if (!data || data != placeholder || !source || !xgpu_gl_ready())
 		return 0;
 	if (!atlas_texture)
 	{
@@ -315,19 +380,19 @@ unsigned int text_hires_atlas_texture(unsigned long data)
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, ATLAS_SIZE, ATLAS_SIZE, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 		xgpu_gl_state_invalidate();
-		dirty_top = 0;
-		dirty_bottom = ATLAS_SIZE;
+		*top = 0;
+		*bottom = ATLAS_SIZE;
 	}
-	if (dirty_top < dirty_bottom)
+	if (*top < *bottom)
 	{
 		/* (white, the glyph's coverage its alpha, as the maps' fonts are) */
-		long rows = dirty_bottom - dirty_top;
+		long rows = *bottom - *top;
 		unsigned char *texels = malloc((size_t)rows * ATLAS_SIZE * 4);
 
 		if (texels)
 		{
 			long index;
-			const unsigned char *coverage = atlas + (long)dirty_top * ATLAS_SIZE;
+			const unsigned char *coverage = source + (long)*top * ATLAS_SIZE;
 
 			for (index = 0; index < rows * ATLAS_SIZE; index++)
 			{
@@ -336,11 +401,11 @@ unsigned int text_hires_atlas_texture(unsigned long data)
 			}
 			glBindTexture(GL_TEXTURE_2D, atlas_texture);
 			glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-			glTexSubImage2D(GL_TEXTURE_2D, 0, 0, dirty_top, ATLAS_SIZE, (GLsizei)rows, GL_RGBA, GL_UNSIGNED_BYTE, texels);
+			glTexSubImage2D(GL_TEXTURE_2D, 0, 0, *top, ATLAS_SIZE, (GLsizei)rows, GL_RGBA, GL_UNSIGNED_BYTE, texels);
 			xgpu_gl_state_invalidate();
 			free(texels);
-			dirty_top = ATLAS_SIZE;
-			dirty_bottom = 0;
+			*top = ATLAS_SIZE;
+			*bottom = 0;
 		}
 	}
 	return atlas_texture;

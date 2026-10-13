@@ -11,6 +11,7 @@ which the GPU never reads directly, hold a virtual one). Texel layout
 follows xbox_textures.c, so locks and uploads agree.
 */
 
+#include "render_thread.h"
 #include "xgpu.h"
 
 #include <stdlib.h>
@@ -117,6 +118,8 @@ ULONG WINAPI D3DResource_Release(D3DResource *resource)
 	/* resources the game built itself (not D3DCOMMON_D3DCREATED) are never freed here */
 	if (!count && (fields[0] & D3DCOMMON_D3DCREATED))
 	{
+		/* (not while a draw queued reads it) */
+		render_thread_wait_resource(fields[1]);
 		if ((fields[0] & D3DCOMMON_TYPE_MASK) == D3DCOMMON_TYPE_INDEXBUFFER)
 			free((void *)fields[1]);
 		else if (fields[1])
@@ -126,15 +129,26 @@ ULONG WINAPI D3DResource_Release(D3DResource *resource)
 	return count;
 }
 
+/* With the render thread (display.render_thread), a texture or palette is
+busy until the draws queued that read it have run, as the Xbox's were until
+its GPU had drawn them; vertices and indices are copied as draws are
+queued, and are never busy. */
 BOOL WINAPI D3DResource_IsBusy(D3DResource *resource)
 {
-	(void)resource;
-	return FALSE;
+	return render_thread_resource_busy(((DWORD *)resource)[1]) ? TRUE : FALSE;
 }
 
 void WINAPI D3DResource_BlockUntilNotBusy(D3DResource *resource)
 {
-	(void)resource;
+	render_thread_wait_resource(((DWORD *)resource)[1]);
+}
+
+/* a lock waits for the resource, unless it will not write what the draws
+queued read */
+static void lock_wait(DWORD data, DWORD flags)
+{
+	if (!(flags & (D3DLOCK_NOOVERWRITE | D3DLOCK_READONLY)))
+		render_thread_wait_resource(data);
 }
 
 /* ---------- textures */
@@ -211,12 +225,13 @@ HRESULT WINAPI D3DDevice_CreateCubeTexture(UINT edge_length, UINT levels, DWORD 
 }
 
 static void lock_level(const DWORD *resource, unsigned long face, unsigned long level,
-	D3DLOCKED_RECT *locked, CONST RECT *rectangle)
+	D3DLOCKED_RECT *locked, CONST RECT *rectangle, DWORD flags)
 {
 	struct xgpu_texture_description description;
 	unsigned long pitch;
 	char *bits;
 
+	lock_wait(resource[1], flags);
 	xgpu_texture_describe(resource[3], resource[4], &description);
 	pitch = xgpu_texture_level_pitch(&description, level);
 	bits = (char *)resource_data(resource[1]);
@@ -244,15 +259,13 @@ static void lock_level(const DWORD *resource, unsigned long face, unsigned long 
 
 void WINAPI D3DTexture_LockRect(D3DTexture *texture, UINT level, D3DLOCKED_RECT *locked, CONST RECT *rectangle, DWORD flags)
 {
-	(void)flags;
-	lock_level((const DWORD *)texture, 0, level, locked, rectangle);
+	lock_level((const DWORD *)texture, 0, level, locked, rectangle, flags);
 }
 
 void WINAPI D3DCubeTexture_LockRect(D3DCubeTexture *texture, D3DCUBEMAP_FACES face, UINT level,
 	D3DLOCKED_RECT *locked, CONST RECT *rectangle, DWORD flags)
 {
-	(void)flags;
-	lock_level((const DWORD *)texture, (unsigned long)face, level, locked, rectangle);
+	lock_level((const DWORD *)texture, (unsigned long)face, level, locked, rectangle, flags);
 }
 
 void WINAPI D3DVolumeTexture_LockBox(D3DVolumeTexture *texture, UINT level, D3DLOCKED_BOX *locked,
@@ -263,7 +276,7 @@ void WINAPI D3DVolumeTexture_LockBox(D3DVolumeTexture *texture, UINT level, D3DL
 	unsigned long row_pitch, slice;
 	char *bits;
 
-	(void)flags;
+	lock_wait(resource[1], flags);
 	xgpu_texture_describe(resource[3], resource[4], &description);
 	row_pitch = xgpu_texture_level_pitch(&description, level);
 	slice = row_pitch * level_dimension(description.height, level);
@@ -333,8 +346,7 @@ void WINAPI D3DSurface_GetDesc(D3DSurface *surface, D3DSURFACE_DESC *description
 
 void WINAPI D3DSurface_LockRect(D3DSurface *surface, D3DLOCKED_RECT *locked, CONST RECT *rectangle, DWORD flags)
 {
-	(void)flags;
-	lock_level((const DWORD *)surface, 0, 0, locked, rectangle);
+	lock_level((const DWORD *)surface, 0, 0, locked, rectangle, flags);
 }
 
 /* ---------- vertex and index buffers */
@@ -430,7 +442,7 @@ HRESULT WINAPI D3DDevice_CreatePalette(D3DPALETTESIZE size, D3DPalette **result)
 
 void WINAPI D3DPalette_Lock(D3DPalette *palette, D3DCOLOR **colors, DWORD flags)
 {
-	(void)flags;
+	lock_wait(palette->Data, flags);
 	*colors = (D3DCOLOR *)resource_data(palette->Data);
 	if (*colors)
 		memory_watch_prepare_write(*colors, 256 * sizeof(D3DCOLOR));

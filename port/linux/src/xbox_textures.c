@@ -19,6 +19,7 @@ memory_watch.c detects that by write-protecting the pages.
 #include "menu_files.h"
 #include "text_hires.h"
 #include "port_config.h"
+#include "render_thread.h"
 #include "../game/cache_file_formats.h"
 
 #include <SDL3/SDL.h>
@@ -879,9 +880,8 @@ static unsigned char custom_edition_texels_order(unsigned long address)
 	return _custom_edition_channels_xbox;
 }
 
-void halo_custom_edition_texels_channels(const void *texels, unsigned char channel_order)
+static void run_texels_channels(unsigned long address, unsigned char channel_order)
 {
-	unsigned long address = (unsigned long)texels;
 	unsigned long index;
 
 	if (channel_order >= NUMBER_OF_CUSTOM_EDITION_CHANNEL_ORDERS)
@@ -918,8 +918,32 @@ void halo_custom_edition_texels_channels(const void *texels, unsigned char chann
 	}
 }
 
-void halo_custom_edition_texels_forget(void)
+static void texels_channels_command(void *payload)
 {
+	const unsigned long *words = (const unsigned long *)payload;
+
+	run_texels_channels(words[0], (unsigned char)words[1]);
+}
+
+/* (the list is the renderer's: with the render thread, it is changed in
+order with the draws queued) */
+void halo_custom_edition_texels_channels(const void *texels, unsigned char channel_order)
+{
+	unsigned long *words;
+
+	if (!render_thread_running())
+	{
+		run_texels_channels((unsigned long)texels, channel_order);
+		return;
+	}
+	words = (unsigned long *)render_thread_record(texels_channels_command, 2 * sizeof(unsigned long));
+	words[0] = (unsigned long)texels;
+	words[1] = channel_order;
+}
+
+static void run_texels_forget(void *unused)
+{
+	(void)unused;
 	custom_edition_hud_meter_active = 0;
 	free(custom_edition_texels);
 	custom_edition_texels = NULL;
@@ -927,6 +951,13 @@ void halo_custom_edition_texels_forget(void)
 	custom_edition_texel_capacity = 0;
 }
 
+void halo_custom_edition_texels_forget(void)
+{
+	if (render_thread_running())
+		render_thread_record(run_texels_forget, 0);
+	else
+		run_texels_forget(NULL);
+}
 
 static void upload(GLuint texture, GLenum target, const struct xgpu_texture_description *description,
 	const unsigned char *base, const D3DCOLOR *palette, unsigned char channel_order)

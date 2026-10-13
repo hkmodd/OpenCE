@@ -27,6 +27,7 @@ Conventions carried over from the Xbox:
 #include "port_config.h"
 #include "posix.h"
 #include "render_thread.h"
+#include "text_hires.h"
 #include "main/console.h"
 
 #include <SDL3/SDL.h>
@@ -391,9 +392,20 @@ static struct
 #endif
 } hdr;
 
+static void ui_offset_command(void *payload)
+{
+	ui_offset = *(long *)payload;
+}
+
 void halo_screen_ui_offset(unsigned char centered)
 {
-	ui_offset = centered ? (halo_screen_width() - 640) / 2 : 0;
+	long offset = centered ? (halo_screen_width() - 640) / 2 : 0;
+
+	/* (with the render thread, the draws queued before keep theirs) */
+	if (render_thread_running())
+		*(long *)render_thread_record(ui_offset_command, sizeof(offset)) = offset;
+	else
+		ui_offset = offset;
 }
 
 /* ---------- state the XDK header's inline functions read and write */
@@ -402,6 +414,14 @@ DWORD D3D__RenderState[D3DRS_MAX];
 DWORD D3D__TextureState[D3DTSS_MAXSTAGES][D3DTSS_MAX];
 WORD *D3D__IndexData;
 BYTE D3D__StateBlockDirty[1024];
+
+/* the render and texture stage state the renderer reads: the game's, or
+with the render thread (display.render_thread), copies of it that the
+queued commands bring up to date (render_sync) */
+static DWORD render_states[D3DRS_MAX];
+static DWORD texture_states[D3DTSS_MAXSTAGES][D3DTSS_MAX];
+static DWORD *render_state = D3D__RenderState;
+static DWORD (*texture_state)[D3DTSS_MAX] = D3D__TextureState;
 
 /* ---------- vertex shaders */
 
@@ -1076,6 +1096,11 @@ struct gl_device
 };
 
 static struct gl_device device;
+/* the device as the game sets and reads it: the device itself, or with the
+render thread, a copy of the game's thread's own, from which what the
+renderer reads is sent ahead of the commands that read it */
+static struct gl_device game_device;
+static struct gl_device *game = &device;
 
 /* debug.gpu_stats prints these once a second */
 static struct
@@ -1097,6 +1122,258 @@ void xgpu_statistics_texture_upload(unsigned long bytes)
 {
 	stats.texture_uploads++;
 	stats.texture_upload_bytes += bytes;
+}
+
+/* ---------- the render thread's commands
+
+With display.render_thread, the game's thread queues the renderer's work
+(render_thread.c) and goes on with its own; each command draws with the
+device's state as it was when the command was queued. The setters of what
+the renderer computes from (render targets, viewport, vertex constants)
+queue commands of their own. What the game stores without a call (the
+render and texture stage state, which the XDK's inline functions write)
+and the bindings are compared before each command that draws with what
+was last sent, and what has changed is sent (render_sync). A draw's
+vertices and indices are copied into the queue, or into the mirror's
+buffers by commands queued before it (mirror_refresh); the textures and
+palettes it reads are busy until it has run (render_bindings_busy). */
+
+/* nonzero where the work is queued for the render thread */
+static BOOL queued(void)
+{
+	return game != &device;
+}
+
+/* a stage's texture and palette as a draw reads them: a copy of the
+texture's header, which the game may change once the draw is queued, and
+the palette's data */
+struct stage_binding
+{
+	BOOL textured;
+	D3DBaseTexture texture;
+	DWORD palette;
+};
+
+/* (with the render thread) what the renderer was last sent: the state, the
+bindings and the fields of game_device it reads */
+static struct
+{
+	DWORD render_states[D3DRS_MAX];
+	DWORD texture_states[D3DTSS_MAXSTAGES][D3DTSS_MAX];
+	struct stage_binding bindings[D3DTSS_MAXSTAGES];
+	struct gl_device device;
+} sent;
+
+/* the fields of game_device that their setters have changed since they
+were last sent: the vertex shader and programs, the streams, the
+attributes */
+#define DEVICE_CHANGED_SHADER 1UL
+#define DEVICE_CHANGED_STREAMS 2UL
+#define DEVICE_CHANGED_ATTRIBUTES 4UL
+static unsigned long device_changed;
+
+/* the renderer's copies of the bindings, which its device points at */
+static struct stage_binding bindings[D3DTSS_MAXSTAGES];
+static D3DPalette bound_palettes[D3DTSS_MAXSTAGES];
+
+struct device_store_header
+{
+	unsigned long offset, size;
+};
+
+static void device_store_command(void *payload)
+{
+	struct device_store_header *header = (struct device_store_header *)payload;
+
+	memcpy((unsigned char *)&device + header->offset, header + 1, header->size);
+}
+
+/* sends a field of game_device to the renderer's device, if it has
+changed since it was last sent */
+static void field_sync(const void *field, unsigned long size)
+{
+	unsigned long offset = (unsigned long)((const unsigned char *)field - (const unsigned char *)&game_device);
+	struct device_store_header *header;
+
+	if (!memcmp((unsigned char *)&sent.device + offset, field, size))
+		return;
+	memcpy((unsigned char *)&sent.device + offset, field, size);
+	header = (struct device_store_header *)render_thread_record(device_store_command, sizeof(*header) + size);
+	header->offset = offset;
+	header->size = size;
+	memcpy(header + 1, field, size);
+}
+
+/* (a count, then pairs of an index and a value: a render state's index, or
+D3DRS_MAX and on, the texture stage state's) */
+static void states_command(void *payload)
+{
+	const DWORD *words = (const DWORD *)payload;
+	DWORD pair;
+
+	for (pair = 0; pair < words[0]; pair++)
+	{
+		DWORD index = words[1 + pair * 2];
+
+		if (index < D3DRS_MAX)
+			render_states[index] = words[2 + pair * 2];
+		else
+			(&texture_states[0][0])[index - D3DRS_MAX] = words[2 + pair * 2];
+	}
+}
+
+/* whether two arrays of words differ (compared whole, which the compiler
+makes a few vector instructions: this runs before every draw) */
+static BOOL words_differ(const DWORD *a, const DWORD *b, unsigned long count)
+{
+	DWORD difference = 0;
+	unsigned long index;
+
+	for (index = 0; index < count; index++)
+		difference |= a[index] ^ b[index];
+	return difference != 0;
+}
+
+static void states_sync(void)
+{
+	DWORD words[1 + 2 * (D3DRS_MAX + D3DTSS_MAXSTAGES * D3DTSS_MAX)];
+	const DWORD *textures = &D3D__TextureState[0][0];
+	DWORD *sent_textures = &sent.texture_states[0][0];
+	DWORD count = 0, index;
+
+	if (words_differ(sent.render_states, D3D__RenderState, D3DRS_MAX))
+	{
+		for (index = 0; index < D3DRS_MAX; index++)
+		{
+			if (sent.render_states[index] != D3D__RenderState[index])
+			{
+				sent.render_states[index] = D3D__RenderState[index];
+				words[1 + count * 2] = index;
+				words[2 + count * 2] = D3D__RenderState[index];
+				count++;
+			}
+		}
+	}
+	if (words_differ(sent_textures, textures, D3DTSS_MAXSTAGES * D3DTSS_MAX))
+	{
+		for (index = 0; index < D3DTSS_MAXSTAGES * D3DTSS_MAX; index++)
+		{
+			if (sent_textures[index] != textures[index])
+			{
+				sent_textures[index] = textures[index];
+				words[1 + count * 2] = D3DRS_MAX + index;
+				words[2 + count * 2] = textures[index];
+				count++;
+			}
+		}
+	}
+	if (!count)
+		return;
+	words[0] = count;
+	memcpy(render_thread_record(states_command, (1 + count * 2) * sizeof(DWORD)), words,
+		(1 + count * 2) * sizeof(DWORD));
+}
+
+static void bindings_command(void *payload)
+{
+	int stage;
+
+	memcpy(bindings, payload, sizeof(bindings));
+	for (stage = 0; stage < D3DTSS_MAXSTAGES; stage++)
+	{
+		device.textures[stage] = bindings[stage].textured ? &bindings[stage].texture : NULL;
+		bound_palettes[stage].Data = bindings[stage].palette;
+		device.palettes[stage] = bindings[stage].palette ? &bound_palettes[stage] : NULL;
+	}
+}
+
+/* sends the renderer what has changed of the state a draw reads, ahead of
+the command that draws */
+static void render_sync(void)
+{
+	struct stage_binding current[D3DTSS_MAXSTAGES];
+	int stage;
+
+	states_sync();
+	text_hires_publish();
+	memset(current, 0, sizeof(current));
+	for (stage = 0; stage < D3DTSS_MAXSTAGES; stage++)
+	{
+		if (game_device.textures[stage])
+		{
+			current[stage].textured = TRUE;
+			current[stage].texture = *game_device.textures[stage];
+			/* (its references, which change as the game takes and
+			releases them: the renderer reads none) */
+			current[stage].texture.Common = 0;
+		}
+		if (game_device.palettes[stage])
+			current[stage].palette = game_device.palettes[stage]->Data;
+	}
+	if (memcmp(current, sent.bindings, sizeof(current)))
+	{
+		memcpy(sent.bindings, current, sizeof(current));
+		memcpy(render_thread_record(bindings_command, sizeof(current)), current, sizeof(current));
+	}
+	if (device_changed & DEVICE_CHANGED_SHADER)
+	{
+		field_sync(&game_device.vertex_shader, sizeof(game_device.vertex_shader));
+		field_sync(game_device.program_slots, sizeof(game_device.program_slots));
+		field_sync(&game_device.program_address, sizeof(game_device.program_address));
+		field_sync(&game_device.fixed_function, sizeof(game_device.fixed_function));
+	}
+	/* (the transforms only the fixed-function pipeline reads: fixed_function_transform) */
+	if (game_device.fixed_function)
+	{
+		field_sync(&game_device.transforms[D3DTS_WORLD], sizeof(game_device.transforms[D3DTS_WORLD]));
+		field_sync(&game_device.transforms[D3DTS_VIEW], sizeof(game_device.transforms[D3DTS_VIEW]));
+		field_sync(&game_device.transforms[D3DTS_PROJECTION], sizeof(game_device.transforms[D3DTS_PROJECTION]));
+	}
+	if (device_changed & DEVICE_CHANGED_STREAMS)
+	{
+		field_sync(game_device.streams, sizeof(game_device.streams));
+		field_sync(&game_device.base_vertex_index, sizeof(game_device.base_vertex_index));
+	}
+	if (device_changed & DEVICE_CHANGED_ATTRIBUTES)
+		field_sync(game_device.attributes, sizeof(game_device.attributes));
+	device_changed = 0;
+}
+
+/* the textures and palettes of the command just queued are busy until it
+has run */
+static void render_bindings_busy(void)
+{
+	int stage;
+
+	for (stage = 0; stage < D3DTSS_MAXSTAGES; stage++)
+	{
+		if (sent.bindings[stage].textured)
+			render_thread_mark_busy(sent.bindings[stage].texture.Data);
+		render_thread_mark_busy(sent.bindings[stage].palette);
+	}
+}
+
+static void skipped_command(void *unused)
+{
+	(void)unused;
+	stats.skipped_no_program++;
+}
+
+/* whether a draw has a program to run (prepare_draw's own test, made
+before its vertices are copied into the queue) */
+static BOOL draw_ready(void)
+{
+	struct vertex_shader_object *program = game_device.program_slots[game_device.program_address];
+
+	if (!program)
+		program = game_device.vertex_shader;
+	/* (the fixed-function pipeline's program, made by the renderer) */
+	if (game_device.gl_ready && game_device.fixed_function)
+		return TRUE;
+	if (game_device.gl_ready && program && game_device.vertex_shader && program->instructions)
+		return TRUE;
+	render_thread_record(skipped_command, 0);
+	return FALSE;
 }
 
 static D3DDevice *device_pointer(void)
@@ -1297,13 +1574,13 @@ constant alpha one, which WebGL refuses; 0 otherwise */
 static unsigned char source_blend_in_shader(void)
 {
 #ifdef HALO_WEB
-	DWORD source = D3D__RenderState[D3DRS_SRCBLEND], destination = D3D__RenderState[D3DRS_DESTBLEND];
+	DWORD source = render_state[D3DRS_SRCBLEND], destination = render_state[D3DRS_DESTBLEND];
 	int source_kind = source == D3DBLEND_CONSTANTCOLOR || source == D3DBLEND_INVCONSTANTCOLOR ? 1 :
 		source == D3DBLEND_CONSTANTALPHA || source == D3DBLEND_INVCONSTANTALPHA ? 2 : 0;
 	int destination_kind = destination == D3DBLEND_CONSTANTCOLOR || destination == D3DBLEND_INVCONSTANTCOLOR ? 1 :
 		destination == D3DBLEND_CONSTANTALPHA || destination == D3DBLEND_INVCONSTANTALPHA ? 2 : 0;
 
-	if (D3D__RenderState[D3DRS_ALPHABLENDENABLE] && source_kind && destination_kind && source_kind != destination_kind)
+	if (render_state[D3DRS_ALPHABLENDENABLE] && source_kind && destination_kind && source_kind != destination_kind)
 	{
 		return source == D3DBLEND_CONSTANTCOLOR ? 1 : source == D3DBLEND_INVCONSTANTCOLOR ? 2 :
 			source == D3DBLEND_CONSTANTALPHA ? 3 : 4;
@@ -2490,6 +2767,32 @@ static void viewport_update_constants(void)
 	}
 }
 
+/* hands the renderer to a thread of its own (display.render_thread), the
+game's thread keeping game_device */
+static void render_start(void)
+{
+	/* (chosen now, which the two threads would otherwise both do on first
+	asking) */
+	halo_screen_width();
+	halo_shadow_map_scale();
+	anti_aliasing();
+	memcpy(render_states, D3D__RenderState, sizeof(render_states));
+	memcpy(texture_states, D3D__TextureState, sizeof(texture_states));
+	memcpy(sent.render_states, D3D__RenderState, sizeof(sent.render_states));
+	memcpy(sent.texture_states, D3D__TextureState, sizeof(sent.texture_states));
+	if (!render_thread_start())
+		return;
+	game_device = device;
+	game_device.created = TRUE;
+	sent.device = device;
+	/* (Begin's vertices are the game's, copied into End's command) */
+	device.immediate_vertices = NULL;
+	device.immediate_capacity = 0;
+	render_state = render_states;
+	texture_state = texture_states;
+	game = &game_device;
+}
+
 HRESULT WINAPI Direct3D_CreateDevice(UINT adapter, D3DDEVTYPE device_type, void *unused, DWORD behavior_flags,
 	D3DPRESENT_PARAMETERS *presentation_parameters, D3DDevice **returned_device)
 {
@@ -2562,7 +2865,7 @@ HRESULT WINAPI Direct3D_CreateDevice(UINT adapter, D3DDEVTYPE device_type, void 
 		if (!config_boolean("debug.null_renderer") && platform_video_initialize(width, height))
 		{
 			gl_initialize();
-			render_thread_start();
+			render_start();
 		}
 		else
 			platform_log("Direct3D: running without a window (nothing is displayed)");
@@ -2657,7 +2960,7 @@ int halo_scoreboard_pointer_update(int offered, struct halo_ui_pointer *pointer)
 	struct platform_ui_pointer state;
 
 	memset(pointer, 0, sizeof(*pointer));
-	if (!platform_scoreboard_pointer(offered != 0, &state) || !device.gl_ready)
+	if (!platform_scoreboard_pointer(offered != 0, &state) || !game->gl_ready)
 		return 0;
 	ui_point_from_window_on(state.x, state.y, FALSE, &pointer->x, &pointer->y);
 	ui_point_from_window_on(state.click_x, state.click_y, FALSE, &pointer->click_x, &pointer->click_y);
@@ -2673,7 +2976,7 @@ int halo_ui_pointer_update(int menus_active, struct halo_ui_pointer *pointer)
 
 	platform_menus_set_active(menus_active != 0);
 	platform_ui_pointer_set_active(menus_active != 0);
-	if (!menus_active || !device.gl_ready || !platform_ui_pointer_read(&state))
+	if (!menus_active || !game->gl_ready || !platform_ui_pointer_read(&state))
 		return 0;
 	memset(pointer, 0, sizeof(*pointer));
 	ui_point_from_window(state.x, state.y, &pointer->x, &pointer->y);
@@ -2756,8 +3059,26 @@ static void screen_commit_command(void *unused)
 
 long halo_screen_commit(void)
 {
-	if (!render_thread_elsewhere())
+#ifndef HALO_ANDROID
+	/* (with the render thread) what the latest commit took up: nothing has
+	changed, and the queue need not be run through, while the settings and
+	the display's mode are as they were */
+	static BOOL committed;
+	static unsigned long committed_changes;
+	static long committed_mode[3];
+	long mode[3];
+#endif
+
+	if (!queued())
 		return run_screen_commit();
+#ifndef HALO_ANDROID
+	mode[0] = platform_screen_mode(&mode[1], &mode[2]);
+	if (committed && committed_changes == config_changes() && !memcmp(committed_mode, mode, sizeof(mode)))
+		return screen_width;
+	committed = TRUE;
+	committed_changes = config_changes();
+	memcpy(committed_mode, mode, sizeof(mode));
+#endif
 	render_thread_call(screen_commit_command, NULL, 0);
 	return halo_screen_width();
 }
@@ -2825,7 +3146,7 @@ void WINAPI D3DDevice_GetBackBuffer(INT back_buffer, D3DBACKBUFFER_TYPE type, D3
 
 HRESULT WINAPI D3DDevice_GetDepthStencilSurface(D3DSurface **result)
 {
-	*result = device.depth_stencil;
+	*result = game->depth_stencil;
 	if (!*result)
 		return D3DERR_NOTFOUND;
 	(*result)->Common++;
@@ -2834,64 +3155,150 @@ HRESULT WINAPI D3DDevice_GetDepthStencilSurface(D3DSurface **result)
 
 static BOOL trace_frame(void);
 
+/* (with the render thread) the targets as SetRenderTarget sends them: the
+screen's buffers, which halo_screen_commit resizes, by their place, any
+other by a copy of its header */
+enum
+{
+	_target_none,
+	_target_back_buffer,
+	_target_depth_buffer,
+	_target_copy
+};
+
+struct render_target_header
+{
+	int kinds[2];
+	D3DSurface surfaces[2];
+	D3DVIEWPORT8 viewport;
+};
+
+/* the renderer's copies of the targets' headers */
+static D3DSurface target_surfaces[2];
+
+static void target_send(const D3DSurface *surface, int *kind, D3DSurface *copy)
+{
+	*kind = !surface ? _target_none : surface == &device.back_buffer ? _target_back_buffer :
+		surface == &device.depth_buffer ? _target_depth_buffer : _target_copy;
+	if (*kind == _target_copy)
+		*copy = *surface;
+}
+
+static D3DSurface *target_receive(int kind, const D3DSurface *copy, D3DSurface *slot)
+{
+	switch (kind)
+	{
+	case _target_back_buffer: return &device.back_buffer;
+	case _target_depth_buffer: return &device.depth_buffer;
+	case _target_copy:
+		*slot = *copy;
+		return slot;
+	default: return NULL;
+	}
+}
+
+static void render_target_command(void *payload)
+{
+	struct render_target_header *header = (struct render_target_header *)payload;
+
+	device.render_target = target_receive(header->kinds[0], &header->surfaces[0], &target_surfaces[0]);
+	device.depth_stencil = target_receive(header->kinds[1], &header->surfaces[1], &target_surfaces[1]);
+	device.viewport = header->viewport;
+	if (trace_frame())
+		platform_log("set render target %08lx depth %08lx",
+			device.render_target ? (unsigned long)device.render_target->Data : 0,
+			device.depth_stencil ? (unsigned long)device.depth_stencil->Data : 0);
+	stats.target_changes++;
+	viewport_update_constants();
+}
+
 void WINAPI D3DDevice_SetRenderTarget(D3DSurface *render_target, D3DSurface *depth_stencil)
 {
-	if (trace_frame())
-		platform_log("set render target %08lx depth %08lx", render_target ? (unsigned long)render_target->Data : 0,
-			depth_stencil ? (unsigned long)depth_stencil->Data : 0);
-	stats.target_changes++;
 	if (render_target)
-		device.render_target = render_target;
-	device.depth_stencil = depth_stencil;
+		game->render_target = render_target;
+	game->depth_stencil = depth_stencil;
 	/* like Direct3D, reset the viewport to the whole new target */
-	if (device.render_target)
+	if (game->render_target)
 	{
 		unsigned long width, height;
 		BOOL depth;
 
-		surface_dimensions(device.render_target, &width, &height, &depth);
-		device.viewport.X = 0;
-		device.viewport.Y = 0;
-		device.viewport.Width = width;
-		device.viewport.Height = height;
-		device.viewport.MinZ = 0.0f;
-		device.viewport.MaxZ = 1.0f;
+		surface_dimensions(game->render_target, &width, &height, &depth);
+		game->viewport.X = 0;
+		game->viewport.Y = 0;
+		game->viewport.Width = width;
+		game->viewport.Height = height;
+		game->viewport.MinZ = 0.0f;
+		game->viewport.MaxZ = 1.0f;
 	}
+	if (queued())
+	{
+		struct render_target_header *header =
+			(struct render_target_header *)render_thread_record(render_target_command, sizeof(*header));
+
+		target_send(game->render_target, &header->kinds[0], &header->surfaces[0]);
+		target_send(game->depth_stencil, &header->kinds[1], &header->surfaces[1]);
+		header->viewport = game->viewport;
+		return;
+	}
+	if (trace_frame())
+		platform_log("set render target %08lx depth %08lx", render_target ? (unsigned long)render_target->Data : 0,
+			depth_stencil ? (unsigned long)depth_stencil->Data : 0);
+	stats.target_changes++;
+	viewport_update_constants();
+}
+
+static void viewport_command(void *payload)
+{
+	device.viewport = *(D3DVIEWPORT8 *)payload;
 	viewport_update_constants();
 }
 
 void WINAPI D3DDevice_SetViewport(CONST D3DVIEWPORT8 *viewport)
 {
-	device.viewport = *viewport;
-	viewport_update_constants();
+	game->viewport = *viewport;
+	if (queued())
+		*(D3DVIEWPORT8 *)render_thread_record(viewport_command, sizeof(*viewport)) = *viewport;
+	else
+		viewport_update_constants();
 }
 
 void WINAPI D3DDevice_SetTransform(D3DTRANSFORMSTATETYPE state, CONST D3DMATRIX *matrix)
 {
 	if ((unsigned long)state < D3DTS_MAX)
-		device.transforms[state] = *matrix;
+		game->transforms[state] = *matrix;
 }
 
 void WINAPI D3DDevice_GetTransform(D3DTRANSFORMSTATETYPE state, D3DMATRIX *matrix)
 {
 	if ((unsigned long)state < D3DTS_MAX)
-		*matrix = device.transforms[state];
+		*matrix = game->transforms[state];
 }
 
 void WINAPI D3DDevice_SetFlickerFilter(DWORD filter) { (void)filter; }
 void WINAPI D3DDevice_SetSoftDisplayFilter(BOOL enable) { (void)enable; }
 
-void WINAPI D3DDevice_SetShaderConstantMode(D3DSHADERCONSTANTMODE mode)
+static void shader_constant_mode_command(void *payload)
 {
-	device.shader_constant_mode = mode;
+	device.shader_constant_mode = *(D3DSHADERCONSTANTMODE *)payload;
 	viewport_update_constants();
 }
 
-/* ---------- GPU synchronisation: GL keeps its own ordering */
+void WINAPI D3DDevice_SetShaderConstantMode(D3DSHADERCONSTANTMODE mode)
+{
+	game->shader_constant_mode = mode;
+	if (queued())
+		*(D3DSHADERCONSTANTMODE *)render_thread_record(shader_constant_mode_command, sizeof(mode)) = mode;
+	else
+		viewport_update_constants();
+}
+
+/* ---------- GPU synchronisation: GL keeps its own ordering; with the
+render thread, the GPU is busy while the queue has commands it has not run */
 
 BOOL WINAPI D3DDevice_IsBusy(void)
 {
-	return FALSE;
+	return render_thread_busy();
 }
 
 static void run_kick_push_buffer(void)
@@ -2908,10 +3315,15 @@ static void kick_push_buffer_command(void *unused)
 
 void WINAPI D3DDevice_KickPushBuffer(void)
 {
-	if (render_thread_elsewhere())
-		render_thread_call(kick_push_buffer_command, NULL, 0);
+	if (queued())
+	{
+		render_thread_record(kick_push_buffer_command, 0);
+		render_thread_submit();
+	}
 	else
+	{
 		run_kick_push_buffer();
+	}
 }
 
 void WINAPI D3DDevice_InsertCallback(D3DCALLBACKTYPE type, D3DCALLBACK callback, DWORD context)
@@ -3074,8 +3486,8 @@ static void begin_visibility_test_command(void *unused)
 
 void WINAPI D3DDevice_BeginVisibilityTest(void)
 {
-	if (render_thread_elsewhere())
-		render_thread_call(begin_visibility_test_command, NULL, 0);
+	if (queued())
+		render_thread_record(begin_visibility_test_command, 0);
 	else
 		run_begin_visibility_test();
 }
@@ -3151,12 +3563,29 @@ static void end_visibility_test_command(void *payload)
 
 HRESULT WINAPI D3DDevice_EndVisibilityTest(DWORD index)
 {
-	if (!render_thread_elsewhere())
+	if (!queued())
 		return run_end_visibility_test(index);
-	render_thread_call(end_visibility_test_command, &index, sizeof(index));
+	*(DWORD *)render_thread_record(end_visibility_test_command, sizeof(index)) = index;
 	return S_OK;
 }
 
+#ifndef HALO_GLES
+/* (with the render thread) the latest count known, read on the game's
+thread as run_get_visibility_test_result reads it: of the tests the
+renderer has run, whose counts it reads at each present
+(visibility_read_batch) */
+static HRESULT visibility_test_result_latest(DWORD index, UINT *result, ULONGLONG *time_stamp)
+{
+	if (time_stamp)
+		*time_stamp = 0;
+	index %= VISIBILITY_TEST_SLOTS;
+	if (result)
+		*result = __atomic_load_n(&device.query_pending[index], __ATOMIC_RELAXED) ?
+			__atomic_load_n(&device.visibility_known[index], __ATOMIC_RELAXED) : 0;
+	return S_OK;
+}
+
+#endif
 static HRESULT run_get_visibility_test_result(DWORD index, UINT *result, ULONGLONG *time_stamp)
 {
 #ifdef HALO_GLES
@@ -3221,13 +3650,17 @@ HRESULT WINAPI D3DDevice_GetVisibilityTestResult(DWORD index, UINT *result, ULON
 {
 	struct visibility_test_result_arguments arguments;
 
-	if (!render_thread_elsewhere())
+	if (!queued())
 		return run_get_visibility_test_result(index, result, time_stamp);
+#ifndef HALO_GLES
+	return visibility_test_result_latest(index, result, time_stamp);
+#else
 	arguments.index = index;
 	arguments.result = result;
 	arguments.time_stamp = time_stamp;
 	render_thread_call(visibility_test_result_command, &arguments, sizeof(arguments));
 	return S_OK;
+#endif
 }
 
 /* ---------- render and texture stage state */
@@ -3337,7 +3770,7 @@ void WINAPI D3DDevice_SetTextureState_BumpEnv(DWORD stage, D3DTEXTURESTAGESTATET
 void WINAPI D3DDevice_SetTexture(DWORD stage, D3DBaseTexture *texture)
 {
 	if (stage < D3DTSS_MAXSTAGES)
-		device.textures[stage] = texture;
+		game->textures[stage] = texture;
 }
 
 #ifdef HALO_ANDROID
@@ -3355,7 +3788,7 @@ void android_ce_texture_unbind(const void *resource)
 void WINAPI D3DDevice_SetPalette(DWORD stage, D3DPalette *palette)
 {
 	if (stage < D3DTSS_MAXSTAGES)
-		device.palettes[stage] = palette;
+		game->palettes[stage] = palette;
 }
 
 void WINAPI D3DDevice_SetPixelShaderProgram(D3DPIXELSHADERDEF *definition)
@@ -3466,7 +3899,7 @@ HRESULT WINAPI D3DDevice_CreateVertexShader(CONST DWORD *declaration, CONST DWOR
 	if (!object)
 		return E_OUTOFMEMORY;
 	object->signature = VERTEX_SHADER_SIGNATURE;
-	object->id = device.next_vertex_shader_id++;
+	object->id = game->next_vertex_shader_id++;
 	if (function)
 	{
 		/* header: program type in the low word, instruction count in the high */
@@ -3519,22 +3952,27 @@ void WINAPI D3DDevice_SetVertexShader(DWORD handle)
 
 	if (object)
 	{
-		device.vertex_shader = object;
-		device.program_address = 0;
-		device.program_slots[0] = object;
-		device.fixed_function = FALSE;
+		game->vertex_shader = object;
+		game->program_address = 0;
+		game->program_slots[0] = object;
+				game->fixed_function = FALSE;
+		device_changed |= DEVICE_CHANGED_SHADER;
 	}
 	/* 0: the fixed-function pipeline, which only the loading screen uses
 	(progress_bar.c). Another handle that is no shader (NONE, of a shader
 	that could not be made) changes nothing, as before */
 	else if (!handle)
-		device.fixed_function = TRUE;
+	{
+		game->fixed_function = TRUE;
+		device_changed |= DEVICE_CHANGED_SHADER;
+	}
 }
 
 void WINAPI D3DDevice_LoadVertexShader(DWORD handle, DWORD address)
 {
 	if (address < VERTEX_PROGRAM_SLOTS)
-		device.program_slots[address] = vertex_shader_from_handle(handle);
+		game->program_slots[address] = vertex_shader_from_handle(handle);
+	device_changed |= DEVICE_CHANGED_SHADER;
 }
 
 void WINAPI D3DDevice_SelectVertexShader(DWORD handle, DWORD address)
@@ -3543,11 +3981,12 @@ void WINAPI D3DDevice_SelectVertexShader(DWORD handle, DWORD address)
 
 	/* (a program, loaded or packed at the address: never the fixed-function
 	pipeline, which SetVertexShader with 0 sets) */
-	device.fixed_function = FALSE;
+	game->fixed_function = FALSE;
 	if (object)
-		device.vertex_shader = object;
+		game->vertex_shader = object;
 	if (address < VERTEX_PROGRAM_SLOTS)
-		device.program_address = address;
+		game->program_address = address;
+	device_changed |= DEVICE_CHANGED_SHADER;
 }
 
 void WINAPI D3DDevice_GetVertexShaderSize(DWORD handle, UINT *size)
@@ -3555,6 +3994,18 @@ void WINAPI D3DDevice_GetVertexShaderSize(DWORD handle, UINT *size)
 	struct vertex_shader_object *object = vertex_shader_from_handle(handle);
 
 	*size = object ? object->instruction_count : 0;
+}
+
+struct constants_header
+{
+	unsigned long first, count;
+};
+
+static void constants_command(void *payload)
+{
+	struct constants_header *header = (struct constants_header *)payload;
+
+	constants_store(header->first, header + 1, header->count);
 }
 
 void WINAPI D3DDevice_SetVertexShaderConstant(INT reg, CONST void *constant_data, DWORD constant_count)
@@ -3565,6 +4016,16 @@ void WINAPI D3DDevice_SetVertexShaderConstant(INT reg, CONST void *constant_data
 		return;
 	if (first + (long)constant_count > XGPU_VERTEX_CONSTANT_COUNT)
 		constant_count = XGPU_VERTEX_CONSTANT_COUNT - first;
+	if (queued())
+	{
+		struct constants_header *header = (struct constants_header *)render_thread_record(constants_command,
+			sizeof(*header) + constant_count * sizeof(device.constants[0]));
+
+		header->first = (unsigned long)first;
+		header->count = constant_count;
+		memcpy(header + 1, constant_data, constant_count * sizeof(device.constants[0]));
+		return;
+	}
 	constants_store((unsigned long)first, constant_data, constant_count);
 }
 
@@ -3863,7 +4324,7 @@ static struct program_entry *program_get(GLuint vertex_shader, GLuint fragment_s
 
 static unsigned long stage_texture_mode(int stage)
 {
-	return (D3D__RenderState[D3DRS_PSTEXTUREMODES] >> (5 * stage)) & 0x1f;
+	return (render_state[D3DRS_PSTEXTUREMODES] >> (5 * stage)) & 0x1f;
 }
 
 static GLenum address_mode(DWORD mode)
@@ -4015,7 +4476,7 @@ static void configure_sampler(int stage, BOOL mipmapped, BOOL hires, BOOL render
 	/* the texture stage state each stage's sampler was last chosen by */
 	static DWORD configured[D3DTSS_MAXSTAGES][SAMPLER_STATE_WORDS];
 	static GLuint configured_sampler[D3DTSS_MAXSTAGES];
-	DWORD *state = D3D__TextureState[stage];
+	DWORD *state = texture_state[stage];
 	DWORD inputs[SAMPLER_STATE_WORDS];
 
 	inputs[0] = hires ? D3DTEXF_LINEAR : state[D3DTSS_MINFILTER];
@@ -4460,7 +4921,7 @@ static GLenum blend_equation(DWORD operation)
 
 static void apply_raster_state(BOOL has_depth)
 {
-	DWORD *rs = D3D__RenderState;
+	DWORD *rs = render_state;
 	DWORD write = rs[D3DRS_COLORWRITEENABLE];
 	GLint viewport[4];
 	GLint scissor[4];
@@ -4784,12 +5245,12 @@ static struct program_entry *prepare_draw(BOOL immediate)
 	xgpu_gl_state_invalidate();
 #endif
 	memset(&key, 0, sizeof(key));
-	memcpy(key.combiner_state, D3D__RenderState, sizeof(key.combiner_state));
+	memcpy(key.combiner_state, render_state, sizeof(key.combiner_state));
 	/* constants are uniforms, not part of the program */
 	memset(&key.combiner_state[D3DRS_PSCONSTANT0_0], 0, 16 * sizeof(DWORD));
 	key.combiner_state[D3DRS_PSFINALCOMBINERCONSTANT0] = 0;
 	key.combiner_state[D3DRS_PSFINALCOMBINERCONSTANT1] = 0;
-	key.texture_modes = D3D__RenderState[D3DRS_PSTEXTUREMODES];
+	key.texture_modes = render_state[D3DRS_PSTEXTUREMODES];
 	/* the textures before the targets: a render target the draw samples
 	has its multisampled pixels resolved by a blit (render_target_resolve),
 	which binds framebuffers of its own, and the back buffer can be both
@@ -4803,23 +5264,23 @@ static struct program_entry *prepare_draw(BOOL immediate)
 	apply_raster_state(has_depth);
 	for (stage = 0; stage < D3DTSS_MAXSTAGES; stage++)
 	{
-		key.alpha_kill[stage] = D3D__TextureState[stage][D3DTSS_ALPHAKILL] == D3DTALPHAKILL_ENABLE;
-		key.color_sign[stage] = (unsigned char)((D3D__TextureState[stage][D3DTSS_COLORSIGN] >> 28) & 0xf);
+		key.alpha_kill[stage] = texture_state[stage][D3DTSS_ALPHAKILL] == D3DTALPHAKILL_ENABLE;
+		key.color_sign[stage] = (unsigned char)((texture_state[stage][D3DTSS_COLORSIGN] >> 28) & 0xf);
 	}
 	/* (only with the meter's blend: hud_hires.h, nv2a_pixel_shader_key) */
-	key.coverage_alpha = key.coverage_alpha && D3D__RenderState[D3DRS_ALPHABLENDENABLE] &&
-		D3D__RenderState[D3DRS_SRCBLEND] == D3DBLEND_CONSTANTCOLOR &&
-		D3D__RenderState[D3DRS_DESTBLEND] == D3DBLEND_SRCALPHA;
+	key.coverage_alpha = key.coverage_alpha && render_state[D3DRS_ALPHABLENDENABLE] &&
+		render_state[D3DRS_SRCBLEND] == D3DBLEND_CONSTANTCOLOR &&
+		render_state[D3DRS_DESTBLEND] == D3DBLEND_SRCALPHA;
 	key.point_threshold = key.point_threshold && key.coverage_alpha;
-	key.alpha_test_function = D3D__RenderState[D3DRS_ALPHATESTENABLE] ? D3D__RenderState[D3DRS_ALPHAFUNC] : 0;
+	key.alpha_test_function = render_state[D3DRS_ALPHATESTENABLE] ? render_state[D3DRS_ALPHAFUNC] : 0;
 #ifndef HALO_GLES
 	/* (gl_SampleMask: ES has it only from 3.2) */
-	if (target_samples > 1 && key.alpha_test_function && !D3D__RenderState[D3DRS_ALPHABLENDENABLE])
+	if (target_samples > 1 && key.alpha_test_function && !render_state[D3DRS_ALPHABLENDENABLE])
 		key.alpha_test_samples = (unsigned char)target_samples;
 #endif
-	key.fog_enable = D3D__RenderState[D3DRS_FOGENABLE] != 0;
+	key.fog_enable = render_state[D3DRS_FOGENABLE] != 0;
 	key.source_blend = source_blend_in_shader();
-	key.fog_table_mode = (unsigned char)D3D__RenderState[D3DRS_FOGTABLEMODE];
+	key.fog_table_mode = (unsigned char)render_state[D3DRS_FOGTABLEMODE];
 #ifdef HALO_GLES
 	key.count_samples = device.visibility_test_active && xgpu_capabilities.atomic_counters;
 #endif
@@ -4861,7 +5322,7 @@ static struct program_entry *prepare_draw(BOOL immediate)
 	{
 		float blend_constant[4];
 
-		color_to_vec4(D3D__RenderState[D3DRS_BLENDCOLOR], blend_constant);
+		color_to_vec4(render_state[D3DRS_BLENDCOLOR], blend_constant);
 		if (memcmp(entry->blend_constant_value, blend_constant, sizeof(blend_constant)))
 		{
 			memcpy(entry->blend_constant_value, blend_constant, sizeof(blend_constant));
@@ -4960,23 +5421,23 @@ static struct program_entry *prepare_draw(BOOL immediate)
 		count += 4;
 		memcpy(&inputs[count], uniforms.texture_scale, sizeof(uniforms.texture_scale));
 		count += 16;
-		inputs[count++] = D3D__RenderState[D3DRS_POINTSIZE];
+		inputs[count++] = render_state[D3DRS_POINTSIZE];
 		for (stage = 0; stage < 8; stage++)
 		{
-			inputs[count++] = D3D__RenderState[D3DRS_PSCONSTANT0_0 + stage];
-			inputs[count++] = D3D__RenderState[D3DRS_PSCONSTANT1_0 + stage];
+			inputs[count++] = render_state[D3DRS_PSCONSTANT0_0 + stage];
+			inputs[count++] = render_state[D3DRS_PSCONSTANT1_0 + stage];
 		}
-		inputs[count++] = D3D__RenderState[D3DRS_PSFINALCOMBINERCONSTANT0];
-		inputs[count++] = D3D__RenderState[D3DRS_PSFINALCOMBINERCONSTANT1];
-		inputs[count++] = D3D__RenderState[D3DRS_FOGCOLOR];
-		inputs[count++] = D3D__RenderState[D3DRS_FOGSTART];
-		inputs[count++] = D3D__RenderState[D3DRS_FOGEND];
-		inputs[count++] = D3D__RenderState[D3DRS_FOGDENSITY];
-		inputs[count++] = D3D__RenderState[D3DRS_ALPHAREF];
+		inputs[count++] = render_state[D3DRS_PSFINALCOMBINERCONSTANT0];
+		inputs[count++] = render_state[D3DRS_PSFINALCOMBINERCONSTANT1];
+		inputs[count++] = render_state[D3DRS_FOGCOLOR];
+		inputs[count++] = render_state[D3DRS_FOGSTART];
+		inputs[count++] = render_state[D3DRS_FOGEND];
+		inputs[count++] = render_state[D3DRS_FOGDENSITY];
+		inputs[count++] = render_state[D3DRS_ALPHAREF];
 		inputs[count++] = (DWORD)UI_OFFSET;
 		for (stage = 0; stage < D3DTSS_MAXSTAGES; stage++)
 		{
-			DWORD *state = D3D__TextureState[stage];
+			DWORD *state = texture_state[stage];
 
 			inputs[count++] = state[D3DTSS_BUMPENVMAT00];
 			inputs[count++] = state[D3DTSS_BUMPENVMAT01];
@@ -4997,24 +5458,24 @@ static struct program_entry *prepare_draw(BOOL immediate)
 			memcpy(converted->viewport_scale, device.viewport_scale, sizeof(converted->viewport_scale));
 			memcpy(converted->viewport_offset, device.viewport_offset, sizeof(converted->viewport_offset));
 			memcpy(converted->texture_scale, uniforms.texture_scale, sizeof(converted->texture_scale));
-			converted->point_size = D3D__RenderState[D3DRS_POINTSIZE] ?
-				dword_to_float(D3D__RenderState[D3DRS_POINTSIZE]) : 1.0f;
+			converted->point_size = render_state[D3DRS_POINTSIZE] ?
+				dword_to_float(render_state[D3DRS_POINTSIZE]) : 1.0f;
 			for (stage = 0; stage < 8; stage++)
 			{
-				color_to_vec4(D3D__RenderState[D3DRS_PSCONSTANT0_0 + stage], converted->ps_c0[stage]);
-				color_to_vec4(D3D__RenderState[D3DRS_PSCONSTANT1_0 + stage], converted->ps_c1[stage]);
+				color_to_vec4(render_state[D3DRS_PSCONSTANT0_0 + stage], converted->ps_c0[stage]);
+				color_to_vec4(render_state[D3DRS_PSCONSTANT1_0 + stage], converted->ps_c1[stage]);
 			}
-			color_to_vec4(D3D__RenderState[D3DRS_PSFINALCOMBINERCONSTANT0], converted->ps_final_c0);
-			color_to_vec4(D3D__RenderState[D3DRS_PSFINALCOMBINERCONSTANT1], converted->ps_final_c1);
-			color_to_vec4(D3D__RenderState[D3DRS_FOGCOLOR], converted->fog_color);
-			converted->fog_parameters[0] = dword_to_float(D3D__RenderState[D3DRS_FOGSTART]);
-			converted->fog_parameters[1] = dword_to_float(D3D__RenderState[D3DRS_FOGEND]);
-			converted->fog_parameters[2] = dword_to_float(D3D__RenderState[D3DRS_FOGDENSITY]);
+			color_to_vec4(render_state[D3DRS_PSFINALCOMBINERCONSTANT0], converted->ps_final_c0);
+			color_to_vec4(render_state[D3DRS_PSFINALCOMBINERCONSTANT1], converted->ps_final_c1);
+			color_to_vec4(render_state[D3DRS_FOGCOLOR], converted->fog_color);
+			converted->fog_parameters[0] = dword_to_float(render_state[D3DRS_FOGSTART]);
+			converted->fog_parameters[1] = dword_to_float(render_state[D3DRS_FOGEND]);
+			converted->fog_parameters[2] = dword_to_float(render_state[D3DRS_FOGDENSITY]);
 			converted->fog_parameters[3] = 0.0f;
-			converted->alpha_reference = (float)(D3D__RenderState[D3DRS_ALPHAREF] & 0xff);
+			converted->alpha_reference = (float)(render_state[D3DRS_ALPHAREF] & 0xff);
 			for (stage = 0; stage < D3DTSS_MAXSTAGES; stage++)
 			{
-				DWORD *state = D3D__TextureState[stage];
+				DWORD *state = texture_state[stage];
 
 				converted->bump_matrix[stage][0] = dword_to_float(state[D3DTSS_BUMPENVMAT00]);
 				converted->bump_matrix[stage][1] = dword_to_float(state[D3DTSS_BUMPENVMAT01]);
@@ -5066,7 +5527,7 @@ static BOOL trace_frame(void)
 static void trace_draw(const char *kind, D3DPRIMITIVETYPE type, unsigned long count, const float *first_vertex)
 {
 	struct vertex_shader_object *program = current_program();
-	DWORD *rs = D3D__RenderState;
+	DWORD *rs = render_state;
 
 	if (!trace_frame())
 		return;
@@ -5086,15 +5547,15 @@ static void trace_draw(const char *kind, D3DPRIMITIVETYPE type, unsigned long co
 			D3DBaseTexture *texture = device.textures[stage];
 			struct xgpu_texture_description description;
 
-			if (!texture || !((D3D__RenderState[D3DRS_PSTEXTUREMODES] >> (5 * stage)) & 0x1f))
+			if (!texture || !((render_state[D3DRS_PSTEXTUREMODES] >> (5 * stage)) & 0x1f))
 				continue;
 			xgpu_texture_describe(texture->Format, texture->Size, &description);
 			platform_log("    t%d: data %08lx format %08lx size %08lx -> fmt %02lx %lux%lux%lu levels %lu linear %d cube %d rt %d min %lu mip %lu bias %g maxmip %lu",
 				stage, texture->Data, texture->Format, texture->Size, description.format, description.width,
 				description.height, description.depth, description.levels, description.linear, description.cube_map,
-				xgpu_render_target_find(texture->Data) != NULL, D3D__TextureState[stage][D3DTSS_MINFILTER],
-				D3D__TextureState[stage][D3DTSS_MIPFILTER], dword_to_float(D3D__TextureState[stage][D3DTSS_MIPMAPLODBIAS]),
-				D3D__TextureState[stage][D3DTSS_MAXMIPLEVEL]);
+				xgpu_render_target_find(texture->Data) != NULL, texture_state[stage][D3DTSS_MINFILTER],
+				texture_state[stage][D3DTSS_MIPFILTER], dword_to_float(texture_state[stage][D3DTSS_MIPMAPLODBIAS]),
+				texture_state[stage][D3DTSS_MAXMIPLEVEL]);
 		}
 	}
 	platform_log("    offset enable %lu slope %g offset %g zbias %ld stencil %lu func %lx ref %lx mask %lx write %lx ops %lx/%lx/%lx",
@@ -5220,6 +5681,59 @@ static struct
 #endif
 } mirror;
 
+/* (with the render thread) the bytes drawn from the mirror since the latest
+draw queued, which that draw's command counts */
+static unsigned long mirror_queued_bytes;
+
+/* writes size bytes into the mirror's buffer for segment, at offset into
+it, making the buffer if it is the segment's first; unused if no queued
+draw can read them */
+static void run_mirror_upload(unsigned long segment, unsigned long offset, unsigned long size, const void *data,
+	BOOL unused)
+{
+	if (!mirror.buffers[segment])
+	{
+		glGenBuffers(1, &mirror.buffers[segment]);
+		glBindBuffer(GL_COPY_WRITE_BUFFER, mirror.buffers[segment]);
+		glBufferData(GL_COPY_WRITE_BUFFER, MIRROR_SEGMENT_SIZE, NULL, GL_DYNAMIC_DRAW);
+#ifdef HALO_GLES
+		/* (no glBufferSubData yet: as if long enough ago) */
+		mirror.subdata_frame[segment] = device.frame - STREAM_BUFFER_RING;
+#endif
+	}
+	glBindBuffer(GL_COPY_WRITE_BUFFER, mirror.buffers[segment]);
+#ifdef HALO_GLES
+	/* Mali copies the whole buffer for a glBufferSubData that queued
+	draws might read (see STREAM_BUFFER_RING); unused pages can be
+	written without waiting for them. Not while such a copy may be
+	pending: it gives the buffer new storage at once but fills it on
+	the GPU's timeline, over what was written into it meanwhile (a level
+	loaded after another drew some of the earlier level's vertices).
+	The GPU is done with a frame's work STREAM_BUFFER_RING frames on */
+	if (unused && device.frame - mirror.subdata_frame[segment] >= STREAM_BUFFER_RING)
+	{
+		host_gl_buffer_write(GL_COPY_WRITE_BUFFER, (unsigned int)offset, (unsigned int)size, data);
+		return;
+	}
+	mirror.subdata_frame[segment] = device.frame;
+#else
+	(void)unused;
+#endif
+	buffer_upload(GL_COPY_WRITE_BUFFER, offset, size, data);
+}
+
+struct mirror_upload_header
+{
+	unsigned long segment, offset, size;
+};
+
+static void mirror_upload_command(void *payload)
+{
+	struct mirror_upload_header *header = (struct mirror_upload_header *)payload;
+
+	run_mirror_upload(header->segment, header->offset, header->size, header + 1, FALSE);
+}
+
 /* uploads the pages of [first, last) that are absent or stale; FALSE if one
 of them turns out to be volatile */
 static BOOL mirror_refresh(unsigned long first, unsigned long last)
@@ -5248,11 +5762,11 @@ static BOOL mirror_refresh(unsigned long first, unsigned long last)
 		stale[page - first] = mirror.state[page] != _mirror_page_present || written;
 		if (written)
 		{
-			if (device.frame - mirror.rewritten_frame[page] <= MIRROR_REWRITE_FRAMES)
+			if (game->frame - mirror.rewritten_frame[page] <= MIRROR_REWRITE_FRAMES)
 				mirror.rewrites[page]++;
 			else
 				mirror.rewrites[page] = 1;
-			mirror.rewritten_frame[page] = device.frame;
+			mirror.rewritten_frame[page] = game->frame;
 			if (mirror.rewrites[page] >= MIRROR_VOLATILE_REWRITES)
 			{
 				mirror.state[page] = _mirror_page_volatile;
@@ -5279,7 +5793,7 @@ static BOOL mirror_refresh(unsigned long first, unsigned long last)
 			if (mirror.state[run] != _mirror_page_present)
 			{
 				mirror.rewrites[run] = 0;
-				mirror.rewritten_frame[run] = device.frame;
+				mirror.rewritten_frame[run] = game->frame;
 			}
 			else
 			{
@@ -5296,48 +5810,31 @@ static BOOL mirror_refresh(unsigned long first, unsigned long last)
 				MIRROR_PAGE_SIZE);
 			mirror.state[page] = _mirror_page_present;
 		}
-		if (!mirror.buffers[segment])
+		if (queued())
 		{
-			glGenBuffers(1, &mirror.buffers[segment]);
-			glBindBuffer(GL_COPY_WRITE_BUFFER, mirror.buffers[segment]);
-			glBufferData(GL_COPY_WRITE_BUFFER, MIRROR_SEGMENT_SIZE, NULL, GL_DYNAMIC_DRAW);
-#ifdef HALO_GLES
-			/* (no glBufferSubData yet: as if long enough ago) */
-			mirror.subdata_frame[segment] = device.frame - STREAM_BUFFER_RING;
-#endif
-		}
-		glBindBuffer(GL_COPY_WRITE_BUFFER, mirror.buffers[segment]);
-#ifdef HALO_GLES
-		/* Mali copies the whole buffer for a glBufferSubData that queued
-		draws might read (see STREAM_BUFFER_RING); unused pages can be
-		written without waiting for them. Not while such a copy may be
-		pending: it gives the buffer new storage at once but fills it on
-		the GPU's timeline, over what was written into it meanwhile (a level
-		loaded after another drew some of the earlier level's vertices).
-		The GPU is done with a frame's work STREAM_BUFFER_RING frames on */
-		if (unused && device.frame - mirror.subdata_frame[segment] >= STREAM_BUFFER_RING)
-		{
-			host_gl_buffer_write(GL_COPY_WRITE_BUFFER,
-				(unsigned int)(address - PLATFORM_CONTIGUOUS_BASE - segment * MIRROR_SEGMENT_SIZE),
-				(unsigned int)size, (const void *)address);
+			/* (a copy: the draws queued before it read the pages as they
+			were, and the game may write them again before it runs) */
+			struct mirror_upload_header *header = (struct mirror_upload_header *)render_thread_record(
+				mirror_upload_command, sizeof(*header) + size);
+
+			header->segment = segment;
+			header->offset = address - PLATFORM_CONTIGUOUS_BASE - segment * MIRROR_SEGMENT_SIZE;
+			header->size = size;
+			memcpy(header + 1, (const void *)address, size);
 			continue;
 		}
-		mirror.subdata_frame[segment] = device.frame;
-#else
-		(void)unused;
-#endif
-		buffer_upload(GL_COPY_WRITE_BUFFER, address - PLATFORM_CONTIGUOUS_BASE - segment * MIRROR_SEGMENT_SIZE, size,
-			(const void *)address);
+		run_mirror_upload(segment, address - PLATFORM_CONTIGUOUS_BASE - segment * MIRROR_SEGMENT_SIZE, size,
+			(const void *)address, unused);
 	}
 	return TRUE;
 }
 
-/* makes [address, address + size) current in the mirror, giving the buffer
-that holds it, the range's offset in that buffer and the newest upload
-generation of its pages (which changes whenever its contents do); FALSE if
-the range is outside the window, spans two segments or is volatile */
-static BOOL mirror_range(unsigned long address, unsigned long size, GLuint *buffer, unsigned long *offset,
-	unsigned long *generation)
+/* makes [address, address + size) current in the mirror, giving the segment
+whose buffer holds it, the range's offset in that buffer and the newest
+upload generation of its pages (which changes whenever its contents do);
+FALSE if the range is outside the window, spans two segments or is volatile */
+static BOOL mirror_range(unsigned long address, unsigned long size, unsigned long *buffer_segment,
+	unsigned long *offset, unsigned long *generation)
 {
 	unsigned long start = address - PLATFORM_CONTIGUOUS_BASE;
 	unsigned long segment, first, last, page, oldest = ~0UL, newest = 0;
@@ -5359,7 +5856,7 @@ static BOOL mirror_range(unsigned long address, unsigned long size, GLuint *buff
 	{
 		if (mirror.state[page] == _mirror_page_volatile)
 		{
-			if (device.frame - mirror.rewritten_frame[page] < MIRROR_VOLATILE_FRAMES)
+			if (game->frame - mirror.rewritten_frame[page] < MIRROR_VOLATILE_FRAMES)
 				return FALSE;
 			mirror.state[page] = _mirror_page_absent;
 		}
@@ -5385,11 +5882,14 @@ static BOOL mirror_range(unsigned long address, unsigned long size, GLuint *buff
 				newest = mirror.generation[page];
 		}
 	}
-	*buffer = mirror.buffers[segment];
+	*buffer_segment = segment;
 	*offset = start - segment * MIRROR_SEGMENT_SIZE;
 	if (generation)
 		*generation = newest;
-	stats.mirrored_bytes += size;
+	if (queued())
+		mirror_queued_bytes += size;
+	else
+		stats.mirrored_bytes += size;
 	return TRUE;
 }
 
@@ -5897,12 +6397,52 @@ static BOOL vertex_array_cache_use(const struct vertex_shader_object *declaratio
 }
 #endif
 
-static void setup_streams(unsigned long first, unsigned long count)
+#define STREAM_NOT_MIRRORED ((unsigned long)-1)
+
+/* where a draw's vertices are: for each stream it reads (placed), the
+segment of the mirror whose buffer holds them and their offset in it, or
+(not mirrored) the bytes to stream */
+struct stream_sources
+{
+	unsigned long placed;
+	unsigned long segment[16], offset[16], bytes[16];
+	const unsigned char *data[16];
+};
+
+/* the streams of a draw of count vertices from vertex first on, from the
+mirror where they can be */
+static void streams_place(unsigned long first, unsigned long count, struct stream_sources *sources)
+{
+	struct vertex_shader_object *declaration = game->vertex_shader;
+	unsigned long index;
+
+	sources->placed = 0;
+	for (index = 0; index < declaration->element_count; index++)
+	{
+		const struct vertex_element *element = &declaration->elements[index];
+		unsigned long stream = element->stream;
+		unsigned long stride = game->streams[stream].stride;
+
+		if (!game->streams[stream].data || element->type == D3DVSDT_NONE || (sources->placed & (1UL << stream)))
+			continue;
+		sources->placed |= 1UL << stream;
+		sources->bytes[stream] = stride ? stride * count : 64;
+		sources->data[stream] = PLATFORM_PHYSICAL_TO_VIRTUAL(game->streams[stream].data) + first * stride;
+#ifdef HALO_GLES
+		if (!stream_has_colors(declaration, stream))
+#endif
+		if (mirror_range((unsigned long)sources->data[stream], sources->bytes[stream], &sources->segment[stream],
+			&sources->offset[stream], NULL))
+			continue;
+		sources->segment[stream] = STREAM_NOT_MIRRORED;
+	}
+}
+
+static void setup_streams_from(const struct stream_sources *sources)
 {
 	struct vertex_shader_object *declaration = device.vertex_shader;
 	GLuint stream_buffers[16];
 	unsigned long stream_offsets[16];
-	BOOL placed[16] = { FALSE };
 	BOOL enabled[XGPU_VERTEX_ATTRIBUTE_COUNT] = { FALSE };
 	unsigned long index, total = 0;
 #ifndef HALO_GLES
@@ -5914,26 +6454,18 @@ static void setup_streams(unsigned long first, unsigned long count)
 #endif
 
 	/* the mirror first; then one reservation for everything streamed */
-	for (index = 0; index < declaration->element_count; index++)
+	for (index = 0; index < 16; index++)
 	{
-		const struct vertex_element *element = &declaration->elements[index];
-		unsigned long stream = element->stream;
-		unsigned long stride = device.streams[stream].stride;
-		unsigned long bytes = stride ? stride * count : 64;
-		unsigned long base;
-
-		if (!device.streams[stream].data || element->type == D3DVSDT_NONE || placed[stream])
+		if (!(sources->placed & (1UL << index)))
 			continue;
-		placed[stream] = TRUE;
-		stream_buffers[stream] = 0;
-		base = (unsigned long)PLATFORM_PHYSICAL_TO_VIRTUAL(device.streams[stream].data) + first * stride;
-#ifdef HALO_GLES
-		if (!stream_has_colors(declaration, stream))
-#endif
-		if (mirror_range(base, bytes, &stream_buffers[stream], &stream_offsets[stream], NULL))
+		if (sources->segment[index] == STREAM_NOT_MIRRORED)
+		{
+			stream_buffers[index] = 0;
+			total += (sources->bytes[index] + 15) & ~15UL;
 			continue;
-		stream_buffers[stream] = 0;
-		total += (bytes + 15) & ~15UL;
+		}
+		stream_buffers[index] = mirror.buffers[sources->segment[index]];
+		stream_offsets[index] = sources->offset[index];
 	}
 #ifdef HALO_WEB
 	{
@@ -5941,18 +6473,14 @@ static void setup_streams(unsigned long first, unsigned long count)
 		(vertex_array_cache) */
 		unsigned long streams = 0;
 
-		for (index = 0; index < 16; index++)
-		{
-			if (placed[index])
-				streams |= 1UL << index;
-		}
+		streams = sources->placed;
 		if (!total && streams && vertex_array_cache_use(declaration, streams, stream_buffers, stream_offsets))
 		{
 			for (index = 0; index < declaration->element_count; index++)
 			{
 				const struct vertex_element *element = &declaration->elements[index];
 
-				if (device.streams[element->stream].data && element->type != D3DVSDT_NONE)
+				if ((streams & (1UL << element->stream)) && element->type != D3DVSDT_NONE)
 					enabled[element->reg] = TRUE;
 			}
 			for (index = 0; index < XGPU_VERTEX_ATTRIBUTE_COUNT; index++)
@@ -5975,17 +6503,16 @@ static void setup_streams(unsigned long first, unsigned long count)
 		GLenum type;
 		GLboolean normalized;
 
-		if (!device.streams[stream].data || element->type == D3DVSDT_NONE)
+		if (!(sources->placed & (1UL << stream)) || element->type == D3DVSDT_NONE)
 			continue;
 		if (!stream_buffers[stream])
 		{
-			const unsigned char *base = PLATFORM_PHYSICAL_TO_VIRTUAL(device.streams[stream].data);
-			unsigned long bytes = stride ? stride * count : 64;
+			unsigned long bytes = sources->bytes[stream];
 
 #ifdef HALO_GLES
-			stream_offsets[stream] = stream_upload_swizzled(declaration, stream, base + first * stride, bytes, stride);
+			stream_offsets[stream] = stream_upload_swizzled(declaration, stream, sources->data[stream], bytes, stride);
 #else
-			stream_offsets[stream] = stream_upload(base + first * stride, bytes);
+			stream_offsets[stream] = stream_upload(sources->data[stream], bytes);
 #endif
 			stream_buffers[stream] = device.stream_buffer;
 			stats.streamed_bytes += bytes;
@@ -6039,6 +6566,14 @@ static void setup_streams(unsigned long first, unsigned long count)
 	}
 }
 
+static void setup_streams(unsigned long first, unsigned long count)
+{
+	struct stream_sources sources;
+
+	streams_place(first, count, &sources);
+	setup_streams_from(&sources);
+}
+
 static GLenum primitive_mode(D3DPRIMITIVETYPE type)
 {
 	switch (type)
@@ -6084,22 +6619,23 @@ void WINAPI D3DDevice_SetStreamSource(UINT stream_number, D3DVertexBuffer *strea
 {
 	if (stream_number >= 16)
 		return;
-	device.streams[stream_number].data = stream_data ? stream_data->Data : 0;
-	device.streams[stream_number].stride = stride;
+	game->streams[stream_number].data = stream_data ? stream_data->Data : 0;
+	game->streams[stream_number].stride = stride;
+	device_changed |= DEVICE_CHANGED_STREAMS;
 }
 
 void WINAPI D3DDevice_SetIndices(D3DIndexBuffer *index_data, UINT base_vertex_index)
 {
-	device.base_vertex_index = base_vertex_index;
+	game->base_vertex_index = base_vertex_index;
+	device_changed |= DEVICE_CHANGED_STREAMS;
 	D3D__IndexData = index_data ? (WORD *)index_data->Data : NULL;
 }
 
-static void run_draw_vertices(D3DPRIMITIVETYPE primitive_type, UINT start_vertex, UINT vertex_count)
+static void queue_draw(D3DPRIMITIVETYPE type, unsigned long count, unsigned long first, const WORD *indices);
+
+/* a draw itself, once its streams are set up */
+static void draw_vertices_from(D3DPRIMITIVETYPE primitive_type, UINT vertex_count)
 {
-	if (!vertex_count || !prepare_draw(FALSE))
-		return;
-	trace_draw("draw", primitive_type, vertex_count, NULL);
-	setup_streams(start_vertex, vertex_count);
 	if (primitive_type == D3DPT_QUADLIST)
 	{
 		unsigned long count;
@@ -6116,32 +6652,21 @@ static void run_draw_vertices(D3DPRIMITIVETYPE primitive_type, UINT start_vertex
 	gl_check_errors("draw");
 }
 
-struct draw_vertices_arguments
+static void run_draw_vertices(D3DPRIMITIVETYPE primitive_type, UINT start_vertex, UINT vertex_count)
 {
-	D3DPRIMITIVETYPE primitive_type;
-	UINT start_vertex, vertex_count;
-};
-
-static void draw_vertices_command(void *payload)
-{
-	struct draw_vertices_arguments *arguments = (struct draw_vertices_arguments *)payload;
-
-	run_draw_vertices(arguments->primitive_type, arguments->start_vertex, arguments->vertex_count);
+	if (!vertex_count || !prepare_draw(FALSE))
+		return;
+	trace_draw("draw", primitive_type, vertex_count, NULL);
+	setup_streams(start_vertex, vertex_count);
+	draw_vertices_from(primitive_type, vertex_count);
 }
 
 void WINAPI D3DDevice_DrawVertices(D3DPRIMITIVETYPE primitive_type, UINT start_vertex, UINT vertex_count)
 {
-	struct draw_vertices_arguments arguments;
-
-	if (!render_thread_elsewhere())
-	{
+	if (!queued())
 		run_draw_vertices(primitive_type, start_vertex, vertex_count);
-		return;
-	}
-	arguments.primitive_type = primitive_type;
-	arguments.start_vertex = start_vertex;
-	arguments.vertex_count = vertex_count;
-	render_thread_call(draw_vertices_command, &arguments, sizeof(arguments));
+	else if (vertex_count)
+		queue_draw(primitive_type, vertex_count, start_vertex, NULL);
 }
 
 #ifdef HALO_WEB
@@ -6323,38 +6848,17 @@ static BOOL index_cache_get(const WORD *indices, unsigned long count, unsigned l
 }
 #endif
 
-static void run_draw_indexed_vertices(D3DPRIMITIVETYPE primitive_type, UINT vertex_count, CONST WORD *index_data)
+/* an indexed draw itself, once its streams are set up from vertex minimum
+on: of index_data, or with none, of the indices in the mirror's buffer
+index_buffer at index_offset */
+static void draw_indexed_from(D3DPRIMITIVETYPE primitive_type, UINT vertex_count, CONST WORD *index_data,
+	GLuint index_buffer, unsigned long index_offset, unsigned long minimum)
 {
-	unsigned long minimum, maximum, index, count, generation = 0, index_offset = 0;
+	unsigned long index, count;
 	WORD *indices = NULL;
 	const WORD *source = index_data;
-	GLuint index_buffer = 0;
-	BOOL mirrored;
 
-	if (!vertex_count || !index_data || !prepare_draw(FALSE))
-		return;
-	/* quads are drawn as triangles, from indices made for the draw */
-	mirrored = primitive_type != D3DPT_QUADLIST &&
-#ifdef HALO_GLES
-		xgpu_capabilities.base_vertex &&
-#endif
-		mirror_range((unsigned long)index_data, vertex_count * sizeof(WORD), &index_buffer, &index_offset, &generation);
-#ifdef HALO_WEB
-	if (!mirrored && primitive_type != D3DPT_QUADLIST &&
-		index_cache_get(index_data, vertex_count, &minimum, &maximum, &index_offset))
-	{
-		trace_draw("indexed", primitive_type, vertex_count, NULL);
-		setup_streams(device.base_vertex_index + minimum, maximum - minimum + 1);
-		state_element_array_buffer(index_cache.buffers[device.buffer_ring]);
-		glDrawElements(primitive_mode(primitive_type), (GLsizei)vertex_count, GL_UNSIGNED_SHORT, (const void *)index_offset);
-		return;
-	}
-#endif
-	index_extent(index_data, vertex_count, generation, mirrored, &minimum, &maximum);
-	trace_draw("indexed", primitive_type, vertex_count, NULL);
-	/* (the streams from the base vertex on: index i is vertex base + i) */
-	setup_streams(device.base_vertex_index + minimum, maximum - minimum + 1);
-	if (mirrored)
+	if (!index_data)
 	{
 		/* the attributes start at vertex minimum */
 		state_element_array_buffer(index_buffer);
@@ -6390,62 +6894,179 @@ static void run_draw_indexed_vertices(D3DPRIMITIVETYPE primitive_type, UINT vert
 	free(indices);
 }
 
-struct draw_indexed_vertices_arguments
+static void run_draw_indexed_vertices(D3DPRIMITIVETYPE primitive_type, UINT vertex_count, CONST WORD *index_data)
 {
-	D3DPRIMITIVETYPE primitive_type;
-	UINT vertex_count;
-	CONST WORD *index_data;
+	unsigned long minimum, maximum, generation = 0, index_segment = 0, index_offset = 0;
+	BOOL mirrored;
+
+	if (!vertex_count || !index_data || !prepare_draw(FALSE))
+		return;
+	/* quads are drawn as triangles, from indices made for the draw */
+	mirrored = primitive_type != D3DPT_QUADLIST &&
+#ifdef HALO_GLES
+		xgpu_capabilities.base_vertex &&
+#endif
+		mirror_range((unsigned long)index_data, vertex_count * sizeof(WORD), &index_segment, &index_offset, &generation);
+#ifdef HALO_WEB
+	if (!mirrored && primitive_type != D3DPT_QUADLIST &&
+		index_cache_get(index_data, vertex_count, &minimum, &maximum, &index_offset))
+	{
+		trace_draw("indexed", primitive_type, vertex_count, NULL);
+		setup_streams(device.base_vertex_index + minimum, maximum - minimum + 1);
+		state_element_array_buffer(index_cache.buffers[device.buffer_ring]);
+		glDrawElements(primitive_mode(primitive_type), (GLsizei)vertex_count, GL_UNSIGNED_SHORT, (const void *)index_offset);
+		return;
+	}
+#endif
+	index_extent(index_data, vertex_count, generation, mirrored, &minimum, &maximum);
+	trace_draw("indexed", primitive_type, vertex_count, NULL);
+	/* (the streams from the base vertex on: index i is vertex base + i) */
+	setup_streams(device.base_vertex_index + minimum, maximum - minimum + 1);
+	draw_indexed_from(primitive_type, vertex_count, mirrored ? NULL : index_data,
+		mirrored ? mirror.buffers[index_segment] : 0, index_offset, minimum);
+}
+
+/* (with the render thread) a draw queued, of count vertices or indices:
+where its streams are, and for an indexed draw the smallest of its indices
+(the streams' first vertex) and where they are; the bytes of the streams
+and indices not in the mirror follow it, at the offsets given in place of
+their addresses */
+struct queued_draw
+{
+	D3DPRIMITIVETYPE type;
+	unsigned long count;
+	BOOL indexed;
+	unsigned long minimum, index_segment, index_offset;
+	/* bytes drawn from the mirror (stats) */
+	unsigned long mirrored_bytes;
+	struct stream_sources sources;
 };
 
-static void draw_indexed_vertices_command(void *payload)
+static void queued_draw_command(void *payload)
 {
-	struct draw_indexed_vertices_arguments *arguments = (struct draw_indexed_vertices_arguments *)payload;
+	struct queued_draw *draw = (struct queued_draw *)payload;
+	const unsigned char *copied = (const unsigned char *)(draw + 1);
+	struct stream_sources sources = draw->sources;
+	unsigned long stream;
 
-	run_draw_indexed_vertices(arguments->primitive_type, arguments->vertex_count, arguments->index_data);
+	for (stream = 0; stream < 16; stream++)
+	{
+		if ((sources.placed & (1UL << stream)) && sources.segment[stream] == STREAM_NOT_MIRRORED)
+			sources.data[stream] = copied + (unsigned long)sources.data[stream];
+	}
+	if (!prepare_draw(FALSE))
+		return;
+	stats.mirrored_bytes += draw->mirrored_bytes;
+	trace_draw(draw->indexed ? "indexed" : "draw", draw->type, draw->count, NULL);
+	setup_streams_from(&sources);
+	if (!draw->indexed)
+		draw_vertices_from(draw->type, draw->count);
+	else if (draw->index_segment == STREAM_NOT_MIRRORED)
+		draw_indexed_from(draw->type, draw->count, (const WORD *)(copied + draw->index_offset), 0, 0, draw->minimum);
+	else
+		draw_indexed_from(draw->type, draw->count, NULL, mirror.buffers[draw->index_segment], draw->index_offset,
+			draw->minimum);
+}
+
+/* queues a draw of count vertices from vertex first on, or of count
+indices: what it reads that has changed, the mirror's uploads, then the
+draw with copies of the vertices and indices not in the mirror (which the
+game may write again once it has queued them) */
+static void queue_draw(D3DPRIMITIVETYPE type, unsigned long count, unsigned long first, const WORD *indices)
+{
+	struct queued_draw draw;
+	struct stream_sources sources;
+	unsigned long vertices = count, minimum, maximum, generation = 0, copied = 0, stream;
+	struct queued_draw *queued;
+	unsigned char *payload;
+
+	if (!draw_ready())
+		return;
+	render_sync();
+	memset(&draw, 0, sizeof(draw));
+	draw.type = type;
+	draw.count = count;
+	draw.indexed = indices != NULL;
+	draw.index_segment = STREAM_NOT_MIRRORED;
+	if (indices)
+	{
+		/* quads are drawn as triangles, from indices made for the draw */
+		BOOL mirrored = type != D3DPT_QUADLIST &&
+			mirror_range((unsigned long)indices, count * sizeof(WORD), &draw.index_segment, &draw.index_offset,
+				&generation);
+
+		if (!mirrored)
+			draw.index_segment = STREAM_NOT_MIRRORED;
+		index_extent(indices, count, generation, mirrored, &minimum, &maximum);
+		draw.minimum = minimum;
+		first = game_device.base_vertex_index + minimum;
+		vertices = maximum - minimum + 1;
+	}
+	streams_place(first, vertices, &sources);
+	draw.sources = sources;
+	for (stream = 0; stream < 16; stream++)
+	{
+		if ((sources.placed & (1UL << stream)) && sources.segment[stream] == STREAM_NOT_MIRRORED)
+		{
+			draw.sources.data[stream] = (const unsigned char *)copied;
+			copied += (sources.bytes[stream] + 3) & ~3UL;
+		}
+	}
+	if (indices && draw.index_segment == STREAM_NOT_MIRRORED)
+	{
+		draw.index_offset = copied;
+		copied += count * sizeof(WORD);
+	}
+	draw.mirrored_bytes = mirror_queued_bytes;
+	mirror_queued_bytes = 0;
+	queued = (struct queued_draw *)render_thread_record(queued_draw_command, sizeof(draw) + copied);
+	*queued = draw;
+	payload = (unsigned char *)(queued + 1);
+	for (stream = 0; stream < 16; stream++)
+	{
+		if ((sources.placed & (1UL << stream)) && sources.segment[stream] == STREAM_NOT_MIRRORED)
+			memcpy(payload + (unsigned long)draw.sources.data[stream], sources.data[stream], sources.bytes[stream]);
+	}
+	if (indices && draw.index_segment == STREAM_NOT_MIRRORED)
+		memcpy(payload + draw.index_offset, indices, count * sizeof(WORD));
+	render_bindings_busy();
 }
 
 void WINAPI D3DDevice_DrawIndexedVertices(D3DPRIMITIVETYPE primitive_type, UINT vertex_count, CONST WORD *index_data)
 {
-	struct draw_indexed_vertices_arguments arguments;
-
-	if (!render_thread_elsewhere())
-	{
+	if (!queued())
 		run_draw_indexed_vertices(primitive_type, vertex_count, index_data);
-		return;
-	}
-	arguments.primitive_type = primitive_type;
-	arguments.vertex_count = vertex_count;
-	arguments.index_data = index_data;
-	render_thread_call(draw_indexed_vertices_command, &arguments, sizeof(arguments));
+	else if (vertex_count && index_data)
+		queue_draw(primitive_type, vertex_count, 0, index_data);
 }
 
 /* ---------- immediate mode */
 
 void WINAPI D3DDevice_Begin(D3DPRIMITIVETYPE primitive_type)
 {
-	device.immediate_active = TRUE;
-	device.immediate_type = primitive_type;
-	device.immediate_count = 0;
-	device.immediate_written = 0;
+	game->immediate_active = TRUE;
+	game->immediate_type = primitive_type;
+	game->immediate_count = 0;
+	game->immediate_written = 0;
 }
 
 static void immediate_emit(void)
 {
 	unsigned long floats = XGPU_VERTEX_ATTRIBUTE_COUNT * 4;
 
-	if (device.immediate_count == device.immediate_capacity)
+	if (game->immediate_count == game->immediate_capacity)
 	{
-		unsigned long capacity = device.immediate_capacity ? device.immediate_capacity * 2 : 256;
-		float *vertices = realloc(device.immediate_vertices, capacity * floats * sizeof(float));
+		unsigned long capacity = game->immediate_capacity ? game->immediate_capacity * 2 : 256;
+		float *vertices = realloc(game->immediate_vertices, capacity * floats * sizeof(float));
 
 		/* (out of memory: the vertex is dropped) */
 		if (!vertices)
 			return;
-		device.immediate_vertices = vertices;
-		device.immediate_capacity = capacity;
+		game->immediate_vertices = vertices;
+		game->immediate_capacity = capacity;
 	}
-	memcpy(device.immediate_vertices + device.immediate_count * floats, device.attributes, floats * sizeof(float));
-	device.immediate_count++;
+	memcpy(game->immediate_vertices + game->immediate_count * floats, game->attributes, floats * sizeof(float));
+	game->immediate_count++;
 }
 
 static void run_end(void)
@@ -6638,18 +7259,45 @@ static void run_end(void)
 	gl_check_errors("immediate draw");
 }
 
-static void end_command(void *unused)
+/* (with the render thread) an immediate draw queued, its vertices after it */
+struct queued_end
 {
-	(void)unused;
+	D3DPRIMITIVETYPE type;
+	unsigned long count, written;
+};
+
+static void queued_end_command(void *payload)
+{
+	struct queued_end *end = (struct queued_end *)payload;
+
+	device.immediate_type = end->type;
+	device.immediate_count = end->count;
+	device.immediate_written = end->written;
+	device.immediate_vertices = (float *)(end + 1);
 	run_end();
+	device.immediate_vertices = NULL;
 }
 
 void WINAPI D3DDevice_End(void)
 {
-	if (render_thread_elsewhere())
-		render_thread_call(end_command, NULL, 0);
-	else
+	unsigned long size = game->immediate_count * XGPU_VERTEX_ATTRIBUTE_COUNT * 4 * sizeof(float);
+	struct queued_end *end;
+
+	if (!queued())
+	{
 		run_end();
+		return;
+	}
+	game_device.immediate_active = FALSE;
+	if (!game_device.immediate_count || !draw_ready())
+		return;
+	render_sync();
+	end = (struct queued_end *)render_thread_record(queued_end_command, sizeof(*end) + size);
+	end->type = game_device.immediate_type;
+	end->count = game_device.immediate_count;
+	end->written = game_device.immediate_written;
+	memcpy(end + 1, game_device.immediate_vertices, size);
+	render_bindings_busy();
 }
 
 static void set_attribute(INT reg, float a, float b, float c, float d)
@@ -6663,14 +7311,15 @@ static void set_attribute(INT reg, float a, float b, float c, float d)
 	}
 	if (reg < 0 || reg >= XGPU_VERTEX_ATTRIBUTE_COUNT)
 		return;
-	device.attributes[reg][0] = a;
-	device.attributes[reg][1] = b;
-	device.attributes[reg][2] = c;
-	device.attributes[reg][3] = d;
-	if (device.immediate_active)
-		device.immediate_written |= 1UL << reg;
+	game->attributes[reg][0] = a;
+	game->attributes[reg][1] = b;
+	game->attributes[reg][2] = c;
+	game->attributes[reg][3] = d;
+	device_changed |= DEVICE_CHANGED_ATTRIBUTES;
+	if (game->immediate_active)
+		game->immediate_written |= 1UL << reg;
 	/* like the hardware, writing register 0 completes a vertex */
-	if (device.immediate_active && (emit || reg == 0))
+	if (game->immediate_active && (emit || reg == 0))
 		immediate_emit();
 }
 
@@ -6794,40 +7443,45 @@ static void run_clear(DWORD count, CONST D3DRECT *rectangles, DWORD flags, D3DCO
 	clear_state_forget();
 }
 
-struct clear_arguments
+/* (with the render thread) a clear queued, its rectangles (count, if
+any) after it */
+struct queued_clear
 {
 	DWORD count;
-	CONST D3DRECT *rectangles;
+	BOOL rectangles;
 	DWORD flags;
 	D3DCOLOR color;
 	float z;
 	DWORD stencil;
 };
 
-static void clear_command(void *payload)
+static void queued_clear_command(void *payload)
 {
-	struct clear_arguments *arguments = (struct clear_arguments *)payload;
+	struct queued_clear *clear = (struct queued_clear *)payload;
 
-	run_clear(arguments->count, arguments->rectangles, arguments->flags, arguments->color, arguments->z,
-		arguments->stencil);
+	run_clear(clear->count, clear->rectangles ? (CONST D3DRECT *)(clear + 1) : NULL, clear->flags, clear->color,
+		clear->z, clear->stencil);
 }
 
 void WINAPI D3DDevice_Clear(DWORD count, CONST D3DRECT *rectangles, DWORD flags, D3DCOLOR color, float z, DWORD stencil)
 {
-	struct clear_arguments arguments;
+	unsigned long size = rectangles ? count * sizeof(D3DRECT) : 0;
+	struct queued_clear *clear;
 
-	if (!render_thread_elsewhere())
+	if (!queued())
 	{
 		run_clear(count, rectangles, flags, color, z, stencil);
 		return;
 	}
-	arguments.count = count;
-	arguments.rectangles = rectangles;
-	arguments.flags = flags;
-	arguments.color = color;
-	arguments.z = z;
-	arguments.stencil = stencil;
-	render_thread_call(clear_command, &arguments, sizeof(arguments));
+	clear = (struct queued_clear *)render_thread_record(queued_clear_command, sizeof(*clear) + size);
+	clear->count = count;
+	clear->rectangles = rectangles != NULL;
+	clear->flags = flags;
+	clear->color = color;
+	clear->z = z;
+	clear->stencil = stencil;
+	if (size)
+		memcpy(clear + 1, rectangles, size);
 }
 
 /* ---------- the anti-aliasing passes */
@@ -6900,18 +7554,18 @@ static void screen_anti_alias_command(void *payload)
 
 void halo_screen_anti_alias(short x0, short y0, short x1, short y1)
 {
-	short corners[4];
+	short *corners;
 
-	if (!render_thread_elsewhere())
+	if (!queued())
 	{
 		run_screen_anti_alias(x0, y0, x1, y1);
 		return;
 	}
+	corners = (short *)render_thread_record(screen_anti_alias_command, 4 * sizeof(short));
 	corners[0] = x0;
 	corners[1] = y0;
 	corners[2] = x1;
 	corners[3] = y1;
-	render_thread_call(screen_anti_alias_command, corners, sizeof(corners));
 }
 
 /* ---------- presentation */
@@ -7444,7 +8098,8 @@ static void front_buffer_ready_command(void *payload)
 	**(BOOL **)payload = front_buffer_ready();
 }
 
-static void run_present(void)
+/* the frame onto the window */
+static void run_present_draw(void)
 {
 	static long screenshot_every = -1;
 
@@ -7597,6 +8252,11 @@ static void run_present(void)
 		}
 #endif
 	}
+}
+
+/* (on the game's thread) the events, then the wait for the display */
+static void present_pace(void)
+{
 	platform_pump_events();
 
 	pthread_mutex_lock(&vertical_blank_lock);
@@ -7616,23 +8276,41 @@ static void run_present(void)
 	pthread_mutex_unlock(&vertical_blank_lock);
 }
 
+static void run_present(void)
+{
+	run_present_draw();
+	present_pace();
+}
+
 static void present_command(void *unused)
 {
 	(void)unused;
-	run_present();
+	run_present_draw();
 }
 
 void WINAPI D3DDevice_Present(CONST RECT *source_rectangle, CONST RECT *destination_rectangle,
 	void *unused, void *unused2)
 {
+	/* (with the render thread) the queue's position after the latest frame */
+	static unsigned long frame_queued;
+
 	(void)source_rectangle;
 	(void)destination_rectangle;
 	(void)unused;
 	(void)unused2;
-	if (render_thread_elsewhere())
-		render_thread_call(present_command, NULL, 0);
-	else
+	if (!queued())
+	{
 		run_present();
+		return;
+	}
+	render_thread_record(present_command, 0);
+	render_thread_submit();
+	/* the game makes the next frame while the render thread draws this
+	one, but no more: a frame queued at most */
+	render_thread_wait_for(frame_queued);
+	frame_queued = render_thread_position();
+	game_device.frame++;
+	present_pace();
 }
 
 HRESULT WINAPI D3DDevice_PersistDisplay(void)
