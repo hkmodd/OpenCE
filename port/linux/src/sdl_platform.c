@@ -18,6 +18,7 @@ and the debug keyboard that the game's console reads.
 #include "server_mode.h"
 #include "server_master.h"
 #include "player_link.h"
+#include "render_thread.h"
 #include "xiso.h"
 #include "touch_input.h"
 #include "../game/text_filter.h"
@@ -1370,6 +1371,18 @@ BOOL platform_video_initialize(unsigned long width, unsigned long height)
 	return TRUE;
 }
 
+/* display.vsync, where the GL context is current */
+static void swap_interval_apply(void *unused)
+{
+	(void)unused;
+	SDL_GL_SetSwapInterval(config_boolean("display.vsync") ? 1 : 0);
+}
+
+void platform_video_make_current(BOOL current)
+{
+	SDL_GL_MakeCurrent(platform_window, current ? platform_gl_context : NULL);
+}
+
 /* display.mode, display.resolution (fullscreen's display mode),
 display.window_size (when it changes: the window can be resized) and
 display.vsync, as Settings has written them; display.resolution_scaling
@@ -1401,7 +1414,10 @@ void platform_display_apply(void)
 	if (!platform_window)
 		return;
 #endif
-	platform_swap_interval(config_boolean("display.vsync") ? 1 : 0);
+	if (render_thread_elsewhere())
+		render_thread_call(swap_interval_apply, NULL, 0);
+	else
+		swap_interval_apply(NULL);
 }
 
 void platform_video_drawable_size(int *width, int *height)

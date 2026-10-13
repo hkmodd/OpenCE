@@ -142,6 +142,10 @@ static const struct config_setting config_settings[] =
 	{ "display.show_fps", _config_boolean, "false", "HALO_SHOW_FPS", _environment_set_is_true, _platform_all,
 		"Draw the frame rate at the bottom right of a game, counted over half a\n"
 		"second: green from 30 frames a second, red below." },
+	{ "display.render_thread", _config_boolean, "false", "HALO_RENDER_THREAD", _environment_value, _platform_desktop,
+		"Draw on a thread of its own, beside the game's, which the Xbox did not\n"
+		"need: more frames a second where the processor limits them. From the\n"
+		"next start." },
 	{ "display.anti_aliasing", _config_string, "\"off\"", "HALO_ANTI_ALIASING", _environment_value, _platform_all,
 		"Smoothing of jagged edges, which the Xbox did not have: \"off\"; \"fxaa\"\n"
 		"or \"smaa\" smooth the 3D view once it is drawn (the HUD and menus stay\n"
