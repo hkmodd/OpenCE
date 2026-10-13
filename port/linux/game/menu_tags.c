@@ -731,7 +731,8 @@ static void parse_bounds(char const *text, rectangle2d *bounds, char const *file
 
 /* a 'ustr' of the strings; each with an index in the list `map` (the
 Custom Edition's in its language, or NULL) given by maps is its string
-there, and each other in the menus' language if it has it (menu_text_line) */
+there (or the language's shorter words for it, menu_text_shorter), and each
+other in the menus' language if it has it (menu_text_line) */
 static void *string_list_build(char const *const *strings, long const *maps, long count,
 	struct custom_edition_string_list const *map)
 {
@@ -752,17 +753,26 @@ static void *string_list_build(char const *const *strings, long const *maps, lon
 
 		if (map && maps[index] != HALO_MENU_NONE && maps[index] < map->count)
 		{
-			length = map->lengths[maps[index]];
-			characters = allocate(length * sizeof(unsigned short));
-			if (!characters)
-				return list;
-			memcpy(characters, map->strings[maps[index]], length * sizeof(unsigned short));
-			entries[index].string.size = length * (long)sizeof(unsigned short);
-			entries[index].string.address = characters;
-			build.map_strings++;
-			continue;
+			/* (but one the language says shorter, the loc.map's being wider
+			than its widgets) */
+			translated = menu_text_shorter(strings[index], &length);
+			if (!translated)
+			{
+				length = map->lengths[maps[index]];
+				characters = allocate(length * sizeof(unsigned short));
+				if (!characters)
+					return list;
+				memcpy(characters, map->strings[maps[index]], length * sizeof(unsigned short));
+				entries[index].string.size = length * (long)sizeof(unsigned short);
+				entries[index].string.address = characters;
+				build.map_strings++;
+				continue;
+			}
 		}
-		translated = menu_text_line(strings[index], &length);
+		else
+		{
+			translated = menu_text_line(strings[index], &length);
+		}
 		if (translated)
 		{
 			characters = allocate(length * sizeof(unsigned short));
