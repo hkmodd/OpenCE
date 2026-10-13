@@ -22,6 +22,7 @@ high-res HUD's are (hud_hires.c).
 #include "menu_files.h"
 #include "platform.h"
 #include "port_config.h"
+#include "render_thread.h"
 #include "xgpu.h"
 
 #include "expat.h"
@@ -1100,7 +1101,7 @@ static struct
 } art[MAXIMUM_ART];
 static long art_count;
 
-void halo_menus_art_register(void const *texture, char const *png)
+static void run_art_register(void const *texture, char const *png)
 {
 	unsigned long data = ((const unsigned long *)texture)[1];
 	long index;
@@ -1137,7 +1138,34 @@ void halo_menus_art_register(void const *texture, char const *png)
 	art[index].png = strdup(png);
 }
 
-void halo_menus_art_forget(void)
+struct art_register_arguments
+{
+	void const *texture;
+	char const *png;
+};
+
+static void art_register_command(void *payload)
+{
+	struct art_register_arguments *arguments = (struct art_register_arguments *)payload;
+
+	run_art_register(arguments->texture, arguments->png);
+}
+
+void halo_menus_art_register(void const *texture, char const *png)
+{
+	struct art_register_arguments arguments;
+
+	if (!render_thread_elsewhere())
+	{
+		run_art_register(texture, png);
+		return;
+	}
+	arguments.texture = texture;
+	arguments.png = png;
+	render_thread_call(art_register_command, &arguments, sizeof(arguments));
+}
+
+static void run_art_forget(void)
 {
 	long index;
 
@@ -1151,6 +1179,20 @@ void halo_menus_art_forget(void)
 		}
 	}
 	art_count = 0;
+}
+
+static void art_forget_command(void *unused)
+{
+	(void)unused;
+	run_art_forget();
+}
+
+void halo_menus_art_forget(void)
+{
+	if (render_thread_elsewhere())
+		render_thread_call(art_forget_command, NULL, 0);
+	else
+		run_art_forget();
 }
 
 unsigned int menu_art_texture(unsigned long data, unsigned long *levels)

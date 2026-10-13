@@ -125,6 +125,10 @@ static const struct config_setting config_settings[] =
 		"The most frames the GPU has queued (1 to 8): a frame waits for the GPU\n"
 		"to finish the one this many before it, so that frames come evenly when\n"
 		"the GPU is the slower; 0 leaves it to the driver." },
+	{ "display.render_thread", _config_boolean, "false", "HALO_RENDER_THREAD", _environment_value, _platform_desktop,
+		"Draw on a thread of its own, beside the game's, which the Xbox did not\n"
+		"need: more frames a second where the processor limits them. From the\n"
+		"next start." },
 	{ "display.anti_aliasing", _config_string, "\"off\"", "HALO_ANTI_ALIASING", _environment_value, _platform_all,
 		"Smoothing of jagged edges, which the Xbox did not have: \"off\"; \"fxaa\"\n"
 		"or \"smaa\" smooth the 3D view once it is drawn (the HUD and menus stay\n"
