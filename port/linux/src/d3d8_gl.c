@@ -25,6 +25,7 @@ Conventions carried over from the Xbox:
 #include "sdl_platform.h"
 #include "halo_ui_pointer.h"
 #include "port_config.h"
+#include "render_thread.h"
 #include "main/console.h"
 
 #include <SDL3/SDL.h>
@@ -1952,7 +1953,10 @@ HRESULT WINAPI Direct3D_CreateDevice(UINT adapter, D3DDEVTYPE device_type, void 
 		viewport_update_constants();
 
 		if (!config_boolean("debug.null_renderer") && platform_video_initialize(width, height))
+		{
 			gl_initialize();
+			render_thread_start();
+		}
 		else
 			platform_log("Direct3D: running without a window (nothing is displayed)");
 		device.created = TRUE;
@@ -1968,7 +1972,7 @@ inverse of the letterboxed display blit at presentation, the screen's
 width and the menus' centering (halo_screen_ui_offset); or, not centered,
 the screen's (the game's drawing: the scoreboard's); x and y are -1 if there
 is no back buffer or window yet */
-static void ui_point_from_window_on(float window_x, float window_y, int centered, short *x, short *y)
+static void run_ui_point_from_window_on(float window_x, float window_y, int centered, short *x, short *y)
 {
 	struct render_target_entry *back_buffer = render_target_get(&device.back_buffer);
 	int window_width, window_height, pixel_width, pixel_height, width, height, left, top;
@@ -1994,6 +1998,38 @@ static void ui_point_from_window_on(float window_x, float window_y, int centered
 	screen_y = (window_y * pixel_height / window_height - top) * (float)back_buffer->target.height / (float)height;
 	*x = (short)floorf(screen_x - (centered ? (float)(halo_screen_width() - 640) / 2.0f : 0.0f));
 	*y = (short)floorf(screen_y);
+}
+
+struct ui_point_arguments
+{
+	float window_x, window_y;
+	int centered;
+	short *x, *y;
+};
+
+static void ui_point_command(void *payload)
+{
+	struct ui_point_arguments *arguments = (struct ui_point_arguments *)payload;
+
+	run_ui_point_from_window_on(arguments->window_x, arguments->window_y, arguments->centered, arguments->x,
+		arguments->y);
+}
+
+static void ui_point_from_window_on(float window_x, float window_y, int centered, short *x, short *y)
+{
+	struct ui_point_arguments arguments;
+
+	if (!render_thread_elsewhere())
+	{
+		run_ui_point_from_window_on(window_x, window_y, centered, x, y);
+		return;
+	}
+	arguments.window_x = window_x;
+	arguments.window_y = window_y;
+	arguments.centered = centered;
+	arguments.x = x;
+	arguments.y = y;
+	render_thread_call(ui_point_command, &arguments, sizeof(arguments));
 }
 
 static void ui_point_from_window(float window_x, float window_y, short *x, short *y)
@@ -2048,7 +2084,7 @@ int halo_ui_pointer_update(int menus_active, struct halo_ui_pointer *pointer)
 /* takes up the display's shape and resolution, or the window's, if they
 have changed; between frames, since the game's layout and the targets must
 agree for a whole frame. Returns the width the game draws. */
-long halo_screen_commit(void)
+static long run_screen_commit(void)
 {
 	long width;
 	float scale[2];
@@ -2092,6 +2128,20 @@ long halo_screen_commit(void)
 		render_targets_evict();
 	}
 	return screen_width;
+}
+
+static void screen_commit_command(void *unused)
+{
+	(void)unused;
+	run_screen_commit();
+}
+
+long halo_screen_commit(void)
+{
+	if (!render_thread_elsewhere())
+		return run_screen_commit();
+	render_thread_call(screen_commit_command, NULL, 0);
+	return halo_screen_width();
 }
 
 ULONG WINAPI D3DDevice_Release(void)
@@ -2204,10 +2254,24 @@ BOOL WINAPI D3DDevice_IsBusy(void)
 	return FALSE;
 }
 
-void WINAPI D3DDevice_KickPushBuffer(void)
+static void run_kick_push_buffer(void)
 {
 	if (device.gl_ready)
 		glFlush();
+}
+
+static void kick_push_buffer_command(void *unused)
+{
+	(void)unused;
+	run_kick_push_buffer();
+}
+
+void WINAPI D3DDevice_KickPushBuffer(void)
+{
+	if (render_thread_elsewhere())
+		render_thread_call(kick_push_buffer_command, NULL, 0);
+	else
+		run_kick_push_buffer();
 }
 
 void WINAPI D3DDevice_InsertCallback(D3DCALLBACKTYPE type, D3DCALLBACK callback, DWORD context)
@@ -2220,7 +2284,7 @@ void WINAPI D3DDevice_InsertCallback(D3DCALLBACKTYPE type, D3DCALLBACK callback,
 
 /* ---------- visibility (occlusion) tests */
 
-void WINAPI D3DDevice_BeginVisibilityTest(void)
+static void run_begin_visibility_test(void)
 {
 	if (!device.gl_ready || device.visibility_test_active)
 		return;
@@ -2255,7 +2319,21 @@ void WINAPI D3DDevice_BeginVisibilityTest(void)
 	glBeginQuery(VISIBILITY_QUERY, device.scratch_query);
 }
 
-HRESULT WINAPI D3DDevice_EndVisibilityTest(DWORD index)
+static void begin_visibility_test_command(void *unused)
+{
+	(void)unused;
+	run_begin_visibility_test();
+}
+
+void WINAPI D3DDevice_BeginVisibilityTest(void)
+{
+	if (render_thread_elsewhere())
+		render_thread_call(begin_visibility_test_command, NULL, 0);
+	else
+		run_begin_visibility_test();
+}
+
+static HRESULT run_end_visibility_test(DWORD index)
 {
 	GLuint scratch;
 
@@ -2311,6 +2389,19 @@ HRESULT WINAPI D3DDevice_EndVisibilityTest(DWORD index)
 	return S_OK;
 }
 
+static void end_visibility_test_command(void *payload)
+{
+	run_end_visibility_test(*(DWORD *)payload);
+}
+
+HRESULT WINAPI D3DDevice_EndVisibilityTest(DWORD index)
+{
+	if (!render_thread_elsewhere())
+		return run_end_visibility_test(index);
+	render_thread_call(end_visibility_test_command, &index, sizeof(index));
+	return S_OK;
+}
+
 #ifndef HALO_GLES
 /* a count of pixels in the game's pixels */
 static GLuint visibility_unscaled(GLuint samples, DWORD index)
@@ -2321,7 +2412,7 @@ static GLuint visibility_unscaled(GLuint samples, DWORD index)
 }
 
 #endif
-HRESULT WINAPI D3DDevice_GetVisibilityTestResult(DWORD index, UINT *result, ULONGLONG *time_stamp)
+static HRESULT run_get_visibility_test_result(DWORD index, UINT *result, ULONGLONG *time_stamp)
 {
 	GLuint available = 0, samples = 0;
 
@@ -2377,6 +2468,33 @@ HRESULT WINAPI D3DDevice_GetVisibilityTestResult(DWORD index, UINT *result, ULON
 	}
 	if (result)
 		*result = device.visibility_known[index];
+	return S_OK;
+}
+
+struct visibility_test_result_arguments
+{
+	DWORD index;
+	UINT *result;
+	ULONGLONG *time_stamp;
+};
+
+static void visibility_test_result_command(void *payload)
+{
+	struct visibility_test_result_arguments *arguments = (struct visibility_test_result_arguments *)payload;
+
+	run_get_visibility_test_result(arguments->index, arguments->result, arguments->time_stamp);
+}
+
+HRESULT WINAPI D3DDevice_GetVisibilityTestResult(DWORD index, UINT *result, ULONGLONG *time_stamp)
+{
+	struct visibility_test_result_arguments arguments;
+
+	if (!render_thread_elsewhere())
+		return run_get_visibility_test_result(index, result, time_stamp);
+	arguments.index = index;
+	arguments.result = result;
+	arguments.time_stamp = time_stamp;
+	render_thread_call(visibility_test_result_command, &arguments, sizeof(arguments));
 	return S_OK;
 }
 
@@ -5063,7 +5181,7 @@ void WINAPI D3DDevice_SetIndices(D3DIndexBuffer *index_data, UINT base_vertex_in
 	D3D__IndexData = index_data ? (WORD *)index_data->Data : NULL;
 }
 
-void WINAPI D3DDevice_DrawVertices(D3DPRIMITIVETYPE primitive_type, UINT start_vertex, UINT vertex_count)
+static void run_draw_vertices(D3DPRIMITIVETYPE primitive_type, UINT start_vertex, UINT vertex_count)
 {
 	if (!vertex_count || !prepare_draw(FALSE))
 		return;
@@ -5083,6 +5201,34 @@ void WINAPI D3DDevice_DrawVertices(D3DPRIMITIVETYPE primitive_type, UINT start_v
 		glDrawArrays(primitive_mode(primitive_type), 0, (GLsizei)vertex_count);
 	}
 	gl_check_errors("draw");
+}
+
+struct draw_vertices_arguments
+{
+	D3DPRIMITIVETYPE primitive_type;
+	UINT start_vertex, vertex_count;
+};
+
+static void draw_vertices_command(void *payload)
+{
+	struct draw_vertices_arguments *arguments = (struct draw_vertices_arguments *)payload;
+
+	run_draw_vertices(arguments->primitive_type, arguments->start_vertex, arguments->vertex_count);
+}
+
+void WINAPI D3DDevice_DrawVertices(D3DPRIMITIVETYPE primitive_type, UINT start_vertex, UINT vertex_count)
+{
+	struct draw_vertices_arguments arguments;
+
+	if (!render_thread_elsewhere())
+	{
+		run_draw_vertices(primitive_type, start_vertex, vertex_count);
+		return;
+	}
+	arguments.primitive_type = primitive_type;
+	arguments.start_vertex = start_vertex;
+	arguments.vertex_count = vertex_count;
+	render_thread_call(draw_vertices_command, &arguments, sizeof(arguments));
 }
 
 #ifdef HALO_WEB
@@ -5205,7 +5351,7 @@ static BOOL index_cache_get(const WORD *indices, unsigned long count, unsigned l
 }
 #endif
 
-void WINAPI D3DDevice_DrawIndexedVertices(D3DPRIMITIVETYPE primitive_type, UINT vertex_count, CONST WORD *index_data)
+static void run_draw_indexed_vertices(D3DPRIMITIVETYPE primitive_type, UINT vertex_count, CONST WORD *index_data)
 {
 	unsigned long minimum, maximum, index, count, generation = 0, index_offset = 0;
 	WORD *indices = NULL;
@@ -5272,6 +5418,35 @@ void WINAPI D3DDevice_DrawIndexedVertices(D3DPRIMITIVETYPE primitive_type, UINT 
 	free(indices);
 }
 
+struct draw_indexed_vertices_arguments
+{
+	D3DPRIMITIVETYPE primitive_type;
+	UINT vertex_count;
+	CONST WORD *index_data;
+};
+
+static void draw_indexed_vertices_command(void *payload)
+{
+	struct draw_indexed_vertices_arguments *arguments = (struct draw_indexed_vertices_arguments *)payload;
+
+	run_draw_indexed_vertices(arguments->primitive_type, arguments->vertex_count, arguments->index_data);
+}
+
+void WINAPI D3DDevice_DrawIndexedVertices(D3DPRIMITIVETYPE primitive_type, UINT vertex_count, CONST WORD *index_data)
+{
+	struct draw_indexed_vertices_arguments arguments;
+
+	if (!render_thread_elsewhere())
+	{
+		run_draw_indexed_vertices(primitive_type, vertex_count, index_data);
+		return;
+	}
+	arguments.primitive_type = primitive_type;
+	arguments.vertex_count = vertex_count;
+	arguments.index_data = index_data;
+	render_thread_call(draw_indexed_vertices_command, &arguments, sizeof(arguments));
+}
+
 /* ---------- immediate mode */
 
 void WINAPI D3DDevice_Begin(D3DPRIMITIVETYPE primitive_type)
@@ -5301,7 +5476,7 @@ static void immediate_emit(void)
 	device.immediate_count++;
 }
 
-void WINAPI D3DDevice_End(void)
+static void run_end(void)
 {
 	unsigned long stride = XGPU_VERTEX_ATTRIBUTE_COUNT * 4 * sizeof(float);
 	unsigned long offset, index, count = device.immediate_count;
@@ -5485,6 +5660,20 @@ void WINAPI D3DDevice_End(void)
 	gl_check_errors("immediate draw");
 }
 
+static void end_command(void *unused)
+{
+	(void)unused;
+	run_end();
+}
+
+void WINAPI D3DDevice_End(void)
+{
+	if (render_thread_elsewhere())
+		render_thread_call(end_command, NULL, 0);
+	else
+		run_end();
+}
+
 static void set_attribute(INT reg, float a, float b, float c, float d)
 {
 	BOOL emit = FALSE;
@@ -5550,7 +5739,7 @@ static void clear_state_forget(void)
 	memset(gl_state.scissor, 0xff, sizeof(gl_state.scissor));
 }
 
-void WINAPI D3DDevice_Clear(DWORD count, CONST D3DRECT *rectangles, DWORD flags, D3DCOLOR color, float z, DWORD stencil)
+static void run_clear(DWORD count, CONST D3DRECT *rectangles, DWORD flags, D3DCOLOR color, float z, DWORD stencil)
 {
 	float rgba[4];
 	GLbitfield mask = 0;
@@ -5627,12 +5816,48 @@ void WINAPI D3DDevice_Clear(DWORD count, CONST D3DRECT *rectangles, DWORD flags,
 	clear_state_forget();
 }
 
+struct clear_arguments
+{
+	DWORD count;
+	CONST D3DRECT *rectangles;
+	DWORD flags;
+	D3DCOLOR color;
+	float z;
+	DWORD stencil;
+};
+
+static void clear_command(void *payload)
+{
+	struct clear_arguments *arguments = (struct clear_arguments *)payload;
+
+	run_clear(arguments->count, arguments->rectangles, arguments->flags, arguments->color, arguments->z,
+		arguments->stencil);
+}
+
+void WINAPI D3DDevice_Clear(DWORD count, CONST D3DRECT *rectangles, DWORD flags, D3DCOLOR color, float z, DWORD stencil)
+{
+	struct clear_arguments arguments;
+
+	if (!render_thread_elsewhere())
+	{
+		run_clear(count, rectangles, flags, color, z, stencil);
+		return;
+	}
+	arguments.count = count;
+	arguments.rectangles = rectangles;
+	arguments.flags = flags;
+	arguments.color = color;
+	arguments.z = z;
+	arguments.stencil = stencil;
+	render_thread_call(clear_command, &arguments, sizeof(arguments));
+}
+
 /* ---------- the anti-aliasing passes */
 
 /* display.anti_aliasing's pass over a window's 3D view, before the HUD and
 menus are drawn over it (source/render/render.c); the window's bounds in the
 game's units of the screen */
-void halo_screen_anti_alias(short x0, short y0, short x1, short y1)
+static void run_screen_anti_alias(short x0, short y0, short x1, short y1)
 {
 	struct render_target_entry *target;
 	GLint corners[4];
@@ -5654,6 +5879,29 @@ void halo_screen_anti_alias(short x0, short y0, short x1, short y1)
 		target->target.gl_width, target->target.gl_height, corners);
 	glBindVertexArray(device.vertex_array);
 	xgpu_gl_state_invalidate();
+}
+
+static void screen_anti_alias_command(void *payload)
+{
+	short *corners = (short *)payload;
+
+	run_screen_anti_alias(corners[0], corners[1], corners[2], corners[3]);
+}
+
+void halo_screen_anti_alias(short x0, short y0, short x1, short y1)
+{
+	short corners[4];
+
+	if (!render_thread_elsewhere())
+	{
+		run_screen_anti_alias(x0, y0, x1, y1);
+		return;
+	}
+	corners[0] = x0;
+	corners[1] = y0;
+	corners[2] = x1;
+	corners[3] = y1;
+	render_thread_call(screen_anti_alias_command, corners, sizeof(corners));
 }
 
 /* ---------- presentation */
@@ -5830,15 +6078,10 @@ static void visibility_copy_batch(void)
 }
 
 #endif
-void WINAPI D3DDevice_Present(CONST RECT *source_rectangle, CONST RECT *destination_rectangle,
-	void *unused, void *unused2)
+static void run_present(void)
 {
 	static long screenshot_every = -1;
 
-	(void)source_rectangle;
-	(void)destination_rectangle;
-	(void)unused;
-	(void)unused2;
 	if (screenshot_every < 0)
 		screenshot_every = config_integer("debug.screenshot_every");
 
@@ -5958,6 +6201,25 @@ void WINAPI D3DDevice_Present(CONST RECT *source_rectangle, CONST RECT *destinat
 		pending_flips++;
 	}
 	pthread_mutex_unlock(&vertical_blank_lock);
+}
+
+static void present_command(void *unused)
+{
+	(void)unused;
+	run_present();
+}
+
+void WINAPI D3DDevice_Present(CONST RECT *source_rectangle, CONST RECT *destination_rectangle,
+	void *unused, void *unused2)
+{
+	(void)source_rectangle;
+	(void)destination_rectangle;
+	(void)unused;
+	(void)unused2;
+	if (render_thread_elsewhere())
+		render_thread_call(present_command, NULL, 0);
+	else
+		run_present();
 }
 
 HRESULT WINAPI D3DDevice_PersistDisplay(void)
