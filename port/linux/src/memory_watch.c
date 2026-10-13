@@ -15,6 +15,10 @@ buffer) would fail with EFAULT instead of faulting, so the file layer reads
 guest memory through a bounce buffer (xbox_files.c). Unprotecting ahead of
 such a write (memory_watch_prepare_write) is not enough on its own: the
 renderer can protect the pages again before the kernel writes them.
+
+A page's flag and its protection change together, under a lock: the
+render thread (display.render_thread) protects pages while the game's
+threads write them.
 */
 
 #include "platform.h"
@@ -35,6 +39,24 @@ static unsigned long page_generation[WATCH_PAGE_COUNT];
 static volatile unsigned long current_generation = 1;
 static struct sigaction previous_segv_action;
 static BOOL watch_active = FALSE;
+static int watch_lock;
+
+/* held only around a page's flag and protection: no write to watched
+memory, so no fault, while it is held (and a spin, safe in the handler) */
+static void lock_pages(void)
+{
+	while (__atomic_exchange_n(&watch_lock, 1, __ATOMIC_ACQUIRE))
+	{
+#if defined(__i386__) || defined(__x86_64__)
+		__builtin_ia32_pause();
+#endif
+	}
+}
+
+static void unlock_pages(void)
+{
+	__atomic_store_n(&watch_lock, 0, __ATOMIC_RELEASE);
+}
 
 static unsigned long page_index(unsigned long address)
 {
@@ -76,7 +98,10 @@ static void segv_handler(int signal_number, siginfo_t *information, void *contex
 
 		if (page_protected[page])
 		{
-			mark_written(page);
+			lock_pages();
+			if (page_protected[page])
+				mark_written(page);
+			unlock_pages();
 			return;
 		}
 	}
@@ -155,8 +180,13 @@ void memory_watch_protect(unsigned long address, unsigned long size)
 	{
 		if (!page_protected[page])
 		{
-			page_protected[page] = 1;
-			mprotect((void *)(PLATFORM_CONTIGUOUS_BASE + page * WATCH_PAGE_SIZE), WATCH_PAGE_SIZE, PROT_READ);
+			lock_pages();
+			if (!page_protected[page])
+			{
+				page_protected[page] = 1;
+				mprotect((void *)(PLATFORM_CONTIGUOUS_BASE + page * WATCH_PAGE_SIZE), WATCH_PAGE_SIZE, PROT_READ);
+			}
+			unlock_pages();
 		}
 	}
 }
@@ -202,7 +232,12 @@ void memory_watch_prepare_write(void *address, unsigned long size)
 	for (page = first; page <= last; page++)
 	{
 		if (page_protected[page])
-			mark_written(page);
+		{
+			lock_pages();
+			if (page_protected[page])
+				mark_written(page);
+			unlock_pages();
+		}
 	}
 }
 
@@ -219,8 +254,10 @@ void memory_watch_forget(void *address, unsigned long size)
 		last = WATCH_PAGE_COUNT - 1;
 	for (page = first; page <= last; page++)
 	{
+		lock_pages();
 		page_protected[page] = 0;
 		page_generation[page] = __sync_add_and_fetch(&current_generation, 1);
+		unlock_pages();
 	}
 }
 

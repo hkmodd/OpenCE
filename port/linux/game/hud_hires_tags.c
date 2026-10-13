@@ -40,6 +40,7 @@ void hud_hires_register_placeholder(long asset, unsigned long const *texture);
 
 void hud_hires_tags_loaded(void);
 void hud_hires_tags_unloaded(void);
+void render_thread_drain(void); /* port/linux/src/render_thread.c */
 long hud_hires_asset_at(unsigned long address, long width, long height);
 struct bitmap_data const *hud_hires_sprite_bitmap(struct bitmap_data const *bitmap, short sequence_index);
 
@@ -105,6 +106,9 @@ void hud_hires_tags_loaded(
 	long asset;
 	long missing = 0;
 
+	/* (the renderer reads the lists as it uploads textures: not while they
+	change) */
+	render_thread_drain();
 	hires_bitmap_count = 0;
 	hud_hires_sprite_bitmaps_forget();
 	for (asset = 0; asset < asset_count && hires_bitmap_count < MAXIMUM_HIRES_BITMAPS; asset++)
@@ -149,6 +153,7 @@ void hud_hires_tags_loaded(
 void hud_hires_tags_unloaded(
 	void)
 {
+	render_thread_drain();
 	hires_bitmap_count = 0;
 	hud_hires_sprite_bitmaps_forget();
 

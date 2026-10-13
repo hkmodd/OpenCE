@@ -193,21 +193,44 @@ int hud_hires_sprites_drawable(long asset, unsigned long address, unsigned long 
 	return arguments.drawable;
 }
 
-/* the placeholder the game draws the texture's sprites from: its D3D
-texture (NULL forgets it) */
-void hud_hires_register_placeholder(long asset, const unsigned long *texture)
+static void run_register_placeholder(long asset, int textured, unsigned long data)
 {
 	long index;
 
 	for (index = 0; index < placeholder_count && placeholders[index].asset != asset; index++)
 		;
-	if (texture && index == placeholder_count && placeholder_count < MAXIMUM_PLACEHOLDERS)
+	if (textured && index == placeholder_count && placeholder_count < MAXIMUM_PLACEHOLDERS)
 		placeholder_count++;
 	if (index < placeholder_count)
 	{
-		placeholders[index].data = texture ? texture[1] : 0;
+		placeholders[index].data = data;
 		placeholders[index].asset = asset;
 	}
+}
+
+static void register_placeholder_command(void *payload)
+{
+	const unsigned long *words = (const unsigned long *)payload;
+
+	run_register_placeholder((long)words[0], words[1] != 0, words[2]);
+}
+
+/* the placeholder the game draws the texture's sprites from: its D3D
+texture (NULL forgets it); with the render thread, the renderer's, ahead
+of the draws that bind it */
+void hud_hires_register_placeholder(long asset, const unsigned long *texture)
+{
+	unsigned long *words;
+
+	if (!render_thread_running())
+	{
+		run_register_placeholder(asset, texture != NULL, texture ? texture[1] : 0);
+		return;
+	}
+	words = (unsigned long *)render_thread_record(register_placeholder_command, 3 * sizeof(unsigned long));
+	words[0] = (unsigned long)asset;
+	words[1] = texture != NULL;
+	words[2] = texture ? texture[1] : 0;
 }
 
 unsigned int hud_hires_placeholder_texture(unsigned long data, unsigned long *levels)

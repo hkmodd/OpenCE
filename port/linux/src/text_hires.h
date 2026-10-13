@@ -57,6 +57,9 @@ void text_hires_register_atlas(const unsigned long *texture, unsigned long width
 /* the GL texture of the atlas when data (a D3D texture's Data) is its
 placeholder's, its rasterized glyphs uploaded; 0 otherwise */
 unsigned int text_hires_atlas_texture(unsigned long data);
+/* (with the render thread) sends the renderer the atlas's new rows and the
+placeholder, ahead of the draws that read them */
+void text_hires_publish(void);
 
 /* a function called before the atlas is emptied, which draws what has been
 batched from it (rasterizer_xbox_text.c's rasterizer_text_flush) */
