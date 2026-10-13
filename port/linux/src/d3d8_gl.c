@@ -9193,7 +9193,7 @@ static void run_screen_anti_alias(short x0, short y0, short x1, short y1)
 menus are drawn over it, and before display.anti_aliasing's pass (which
 then finds the edges the display shows); in place, into the multisampled
 renderbuffer with multisampling */
-void halo_screen_tone_map(short x0, short y0, short x1, short y1)
+static void run_screen_tone_map(short x0, short y0, short x1, short y1)
 {
 	struct render_target_entry *target;
 	GLuint source, destination;
@@ -9219,6 +9219,29 @@ void halo_screen_tone_map(short x0, short y0, short x1, short y1)
 	}
 	glBindVertexArray(device.vertex_array);
 	xgpu_gl_state_invalidate();
+}
+
+static void screen_tone_map_command(void *payload)
+{
+	short *corners = (short *)payload;
+
+	run_screen_tone_map(corners[0], corners[1], corners[2], corners[3]);
+}
+
+void halo_screen_tone_map(short x0, short y0, short x1, short y1)
+{
+	short *corners;
+
+	if (!queued())
+	{
+		run_screen_tone_map(x0, y0, x1, y1);
+		return;
+	}
+	corners = (short *)render_thread_record(screen_tone_map_command, 4 * sizeof(short));
+	corners[0] = x0;
+	corners[1] = y0;
+	corners[2] = x1;
+	corners[3] = y1;
 }
 
 static void screen_anti_alias_command(void *payload)
