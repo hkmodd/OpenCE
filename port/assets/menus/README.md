@@ -78,7 +78,10 @@ elements: those a `loc.map` string says the same as (`REFERENCES` in
 `tools/menu_languages.py`: a control, a colour, a map's name), and, for each
 language, the others, from `tools/menu_lines_<language>.py` (`LINES`, and
 `SAME` for those it says as English does; a line there is shown before a
-`REFERENCES` one, for words too wide for the port's screens). The port's
+`REFERENCES` one, for words too wide for the port's screens; and
+`SHORTER`, fewer words for the PC version's strings its edition's `loc.map`
+says wider than their widgets have room for, as that edition's own menus
+cut them). The port's
 titles (`TITLES` in `tools/port_settings.py`) are lines too, and their
 pictures are drawn in each language as the headers are, smaller where the
 words are wider than the title's widget. It stops if a line with words, of
@@ -140,6 +143,7 @@ pictures stay English (and the texts are still the `loc.map`'s).
 <line text="PRESS A KEY" language="it" translation="PREMI UN TASTO"/>
 <line text="JUMP" strings="ui\shell\main_menu\...\controls_binding_labels" index="16"/>
 <line text="WHITE" strings="ui\shell\main_menu\...\colors_list" index="0" case="upper"/>
+<line text="CONTROLS SETUP" language="it" translation="CONTROLLI" shorter="yes"/>
 ```
 
 One of the port's own lines (`text`, as the menus' files or, with `\n` for
@@ -149,6 +153,10 @@ the `loc.map`'s list `strings` (in capitals with `case="upper"`; on one row
 if `text` is). A line for the language is taken before a `loc.map`'s. They
 are shown with `display.menu_language = "maps"` when the maps' Custom
 Edition is in a `<language>`; otherwise the line is as written.
+
+With `shorter="yes"`, `text` is a string of the PC version's (one with a
+`map`), and `translation` is shown in that `<language>` in place of the
+`loc.map`'s string for it, which is wider than its widgets have room for.
 
 ### `<strings>`
 
