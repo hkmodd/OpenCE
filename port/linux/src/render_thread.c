@@ -328,10 +328,19 @@ static unsigned long busy_slot(unsigned long data)
 	return ((data >> 6) ^ (data >> 18)) & (BUSY_SLOTS - 1);
 }
 
-void render_thread_mark_busy(unsigned long data)
+void render_thread_mark_busy(unsigned long const *data, int count)
 {
-	if (data && writing())
-		busy_until[busy_slot(data)] = recorded;
+	int index;
+
+	/* (which thread asks is a call to the system: asked once for all of a
+	command's resources) */
+	if (!writing())
+		return;
+	for (index = 0; index < count; index++)
+	{
+		if (data[index])
+			busy_until[busy_slot(data[index])] = recorded;
+	}
 }
 
 /* the position the resource is busy until, or 0 */
