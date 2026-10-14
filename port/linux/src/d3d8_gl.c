@@ -34,6 +34,7 @@ Conventions carried over from the Xbox:
 
 #include <math.h>
 #include <stdio.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -1122,6 +1123,8 @@ static struct
 	unsigned long most_draws, slowest_frame;
 	/* (draws counted when this frame began) */
 	unsigned long frame_first_draw;
+	/* draws deferred by display.instancing, and the instanced draws they made */
+	unsigned long instances, instanced_draws;
 } stats;
 
 void xgpu_statistics_texture_upload(unsigned long bytes)
@@ -6971,6 +6974,524 @@ struct queued_draw
 	struct stream_sources sources;
 };
 
+#ifndef HALO_GLES
+/* ---------- instancing (display.instancing)
+
+The game draws its objects one at a time and each object's parts one after
+another: a scene of many bipeds draws the same parts with the same state
+thousands of times a frame, each with vertex constants (the nodes'
+matrices, the lights) and pixel combiner constants (change colors) of its
+own, and the driver's cost is per draw. On the render thread, a draw that
+can be drawn out of order (no blending, depth written and tested with LESS
+or LESSEQUAL, the stencil not written) and whose vertices and indices are all in the
+mirror is deferred into a batch of the draws with the same state but for
+those constants and the same vertices and indices. The batches are drawn,
+in the order they began, each as one instanced draw whose instances read
+their constants from a storage buffer (XGPU_INSTANCE_GLSL), before a
+command that is not state, bindings, constants or such a draw, before a
+draw that cannot be deferred, and when render_thread_hold says. Until then
+the render thread holds back its position, so that what the draws read
+stays busy.
+
+A draw joins the latest batch of its vertices and indices only, so that
+passes over the same vertices keep their order. Draws of different
+vertices are reordered, which for these draws changes only which of two
+wins at exactly the same depth. */
+
+/* batches and draws deferred at most (beyond, they are drawn) */
+#define INSTANCE_BATCHES 1024
+#define INSTANCE_DRAWS 8192
+#define INSTANCE_BUCKETS 1024
+#define INSTANCE_NONE ((unsigned long)-1)
+
+/* what a batch's draws share: the state prepare_draw reads (but for the
+constants), and the draw */
+struct instance_state
+{
+	DWORD render_states[D3DRS_MAX];
+	DWORD texture_states[D3DTSS_MAXSTAGES][D3DTSS_MAX];
+	struct stage_binding bindings[D3DTSS_MAXSTAGES];
+	struct vertex_shader_object *vertex_shader;
+	struct vertex_shader_object *program;
+	unsigned long program_address;
+	DWORD streams[16][2];
+	UINT base_vertex_index;
+	float attributes[XGPU_VERTEX_ATTRIBUTE_COUNT][4];
+	/* the draw, its streams' data left out (zero) */
+	D3DPRIMITIVETYPE type;
+	unsigned long count, minimum, index_segment, index_offset;
+	struct stream_sources sources;
+};
+
+typedef char instance_streams_size_assert[sizeof(((struct gl_device *)0)->streams) ==
+	sizeof(((struct instance_state *)0)->streams) ? 1 : -1];
+typedef char instance_state_size_assert[sizeof(struct instance_state) % sizeof(DWORD) == 0 ? 1 : -1];
+
+/* a deferred draw: the registers it has values of its own of (low > high:
+none) and where they are (instancing.captured), and its pixel combiner
+constants (D3DRS_PSCONSTANT0_0 to D3DRS_PSCONSTANT1_7, then the final
+combiner's two) */
+struct instance_draw
+{
+	unsigned long next;
+	unsigned long low, high, captured;
+	DWORD pixel_constants[XGPU_INSTANCE_PIXEL_CONSTANTS];
+};
+
+struct instance_batch
+{
+	struct instance_state state;
+	/* the vertex constants at its first draw, the serial they were current
+	to and the serial at its latest draw (constants_store), and the
+	registers changed since its first (low > high: none) */
+	float base[XGPU_VERTEX_CONSTANT_COUNT][4];
+	unsigned long long base_serial, latest_serial;
+	unsigned long low, high;
+	/* its draws, first to last */
+	unsigned long first, last, count;
+	/* the hash of its vertices and indices, and the batch begun before it
+	with the same hash (its index + 1, 0 for none) */
+	unsigned long hash;
+	unsigned long earlier;
+};
+
+static struct
+{
+	struct instance_batch *batches;
+	unsigned long batch_count;
+	struct instance_draw *draws;
+	unsigned long draw_count;
+	/* the latest batch with each hash (its index + 1, 0 for none) */
+	unsigned long buckets[INSTANCE_BUCKETS];
+	/* the draws' own registers, and the storage buffer's contents (vec4s) */
+	float (*captured)[4];
+	unsigned long captured_count, captured_capacity;
+	float (*blocks)[4];
+	unsigned long blocks_capacity;
+	GLuint buffer;
+	unsigned long read_at;
+	BOOL enabled;
+} instancing;
+
+/* display.instancing, read again when a setting changes */
+static BOOL instancing_enabled(void)
+{
+	if (instancing.read_at != config_changes() + 1)
+	{
+		instancing.read_at = config_changes() + 1;
+		instancing.enabled = config_boolean("display.instancing") != 0;
+	}
+	return instancing.enabled;
+}
+
+/* whether a draw can be deferred: indexed from the mirror, every stream
+from the mirror, and drawn the same out of order */
+static BOOL instancing_eligible(const struct queued_draw *draw)
+{
+	DWORD depth_function = render_states[D3DRS_ZFUNC];
+	unsigned long stream;
+
+	if (!draw->indexed || draw->index_segment == STREAM_NOT_MIRRORED || draw->type == D3DPT_QUADLIST)
+		return FALSE;
+	for (stream = 0; stream < 16; stream++)
+	{
+		if ((draw->sources.placed & (1UL << stream)) && draw->sources.segment[stream] == STREAM_NOT_MIRRORED)
+			return FALSE;
+	}
+	/* the stencil may be tested (most of the objects' draws test it) but not
+	written: a draw that writes it is drawn in order, after the deferred
+	draws, so that those after it test what it wrote */
+	if (render_states[D3DRS_STENCILENABLE] && render_states[D3DRS_STENCILWRITEMASK] &&
+		(render_states[D3DRS_STENCILPASS] != D3DSTENCILOP_KEEP || render_states[D3DRS_STENCILZFAIL] != D3DSTENCILOP_KEEP ||
+		render_states[D3DRS_STENCILFAIL] != D3DSTENCILOP_KEEP))
+	{
+		return FALSE;
+	}
+	return !render_states[D3DRS_ALPHABLENDENABLE] && render_states[D3DRS_ZWRITEENABLE] &&
+		render_states[D3DRS_ZENABLE] && (depth_function == D3DCMP_LESS || depth_function == D3DCMP_LESSEQUAL) &&
+		!trace_frame();
+}
+
+static void instancing_state(struct instance_state *state, const struct queued_draw *draw)
+{
+	unsigned long stream;
+
+	memset(state, 0, sizeof(*state));
+	memcpy(state->render_states, render_states, sizeof(state->render_states));
+	memcpy(state->texture_states, texture_states, sizeof(state->texture_states));
+	memcpy(state->bindings, bindings, sizeof(state->bindings));
+	state->vertex_shader = device.vertex_shader;
+	state->program = current_program();
+	state->program_address = device.program_address;
+	memcpy(state->streams, device.streams, sizeof(state->streams));
+	state->base_vertex_index = device.base_vertex_index;
+	memcpy(state->attributes, device.attributes, sizeof(state->attributes));
+	state->type = draw->type;
+	state->count = draw->count;
+	state->minimum = draw->minimum;
+	state->index_segment = draw->index_segment;
+	state->index_offset = draw->index_offset;
+	state->sources.placed = draw->sources.placed;
+	for (stream = 0; stream < 16; stream++)
+	{
+		if (draw->sources.placed & (1UL << stream))
+		{
+			state->sources.segment[stream] = draw->sources.segment[stream];
+			state->sources.offset[stream] = draw->sources.offset[stream];
+			state->sources.bytes[stream] = draw->sources.bytes[stream];
+		}
+	}
+}
+
+/* instance_state's words: the draw's from INSTANCE_DRAW_WORD on, and the
+state's before it, which the pixel combiner constants are among */
+#define INSTANCE_DRAW_WORD (offsetof(struct instance_state, type) / sizeof(DWORD))
+#define INSTANCE_STATE_WORDS (sizeof(struct instance_state) / sizeof(DWORD))
+
+static BOOL instancing_same_draw(const struct instance_state *a, const struct instance_state *b)
+{
+	return !words_differ((const DWORD *)a + INSTANCE_DRAW_WORD, (const DWORD *)b + INSTANCE_DRAW_WORD,
+		INSTANCE_STATE_WORDS - INSTANCE_DRAW_WORD);
+}
+
+static BOOL instancing_same_state(const struct instance_state *a, const struct instance_state *b)
+{
+	const DWORD *words_a = (const DWORD *)a, *words_b = (const DWORD *)b;
+
+	return !words_differ(words_a, words_b, D3DRS_PSCONSTANT0_0) &&
+		!words_differ(words_a + D3DRS_PSCONSTANT1_7 + 1, words_b + D3DRS_PSCONSTANT1_7 + 1,
+			D3DRS_PSFINALCOMBINERCONSTANT0 - D3DRS_PSCONSTANT1_7 - 1) &&
+		!words_differ(words_a + D3DRS_PSFINALCOMBINERCONSTANT1 + 1, words_b + D3DRS_PSFINALCOMBINERCONSTANT1 + 1,
+			INSTANCE_DRAW_WORD - D3DRS_PSFINALCOMBINERCONSTANT1 - 1);
+}
+
+static unsigned long instancing_hash(const struct instance_state *state)
+{
+	DWORD words[5];
+
+	words[0] = (DWORD)state->type;
+	words[1] = (DWORD)state->count;
+	words[2] = (DWORD)state->minimum;
+	words[3] = (DWORD)state->index_segment;
+	words[4] = (DWORD)state->index_offset;
+	return hash_words(words, sizeof(words));
+}
+
+/* the registers in a batch's block: its changed ones */
+static unsigned long instancing_span(const struct instance_batch *batch)
+{
+	return batch->low <= batch->high ? batch->high - batch->low + 1 : 0;
+}
+
+/* draws a batch's draws one at a time, as they were queued */
+static void instancing_draw_each(const struct instance_batch *batch)
+{
+	const struct instance_state *state = &batch->state;
+	unsigned long index;
+	int constant;
+
+	for (index = batch->first; index != INSTANCE_NONE; index = instancing.draws[index].next)
+	{
+		const struct instance_draw *draw = &instancing.draws[index];
+
+		constants_store(0, batch->base, XGPU_VERTEX_CONSTANT_COUNT);
+		if (draw->low <= draw->high)
+			constants_store(draw->low, instancing.captured[draw->captured], draw->high - draw->low + 1);
+		for (constant = 0; constant < 16; constant++)
+			render_states[D3DRS_PSCONSTANT0_0 + constant] = draw->pixel_constants[constant];
+		render_states[D3DRS_PSFINALCOMBINERCONSTANT0] = draw->pixel_constants[16];
+		render_states[D3DRS_PSFINALCOMBINERCONSTANT1] = draw->pixel_constants[17];
+		if (!prepare_draw(FALSE))
+			continue;
+		setup_streams_from(&state->sources);
+		draw_indexed_from(state->type, state->count, NULL, mirror.buffers[state->index_segment], state->index_offset,
+			state->minimum);
+	}
+}
+
+/* a batch's instances' blocks: its changed registers, each draw's own
+where it has them, then the pixel combiner constants */
+static void instancing_fill(const struct instance_batch *batch, float (*block)[4])
+{
+	unsigned long span = instancing_span(batch);
+	unsigned long index, reg;
+	int constant;
+
+	for (index = batch->first; index != INSTANCE_NONE; index = instancing.draws[index].next)
+	{
+		const struct instance_draw *draw = &instancing.draws[index];
+
+		for (reg = batch->low; reg < batch->low + span; reg++)
+		{
+			if (reg >= draw->low && reg <= draw->high)
+				memcpy(block[reg - batch->low], instancing.captured[draw->captured + reg - draw->low], sizeof(block[0]));
+			else
+				memcpy(block[reg - batch->low], batch->base[reg], sizeof(block[0]));
+		}
+		block += span;
+		for (constant = 0; constant < XGPU_INSTANCE_PIXEL_CONSTANTS; constant++)
+			color_to_vec4(draw->pixel_constants[constant], block[constant]);
+		block += XGPU_INSTANCE_PIXEL_CONSTANTS;
+	}
+}
+
+/* draws every deferred draw, and lets go of the render thread's hold */
+static void instancing_draw_all(void)
+{
+	/* the state as the commands left it, put back after */
+	static struct instance_state live;
+	static struct vertex_shader_object *live_slots[VERTEX_PROGRAM_SLOTS];
+	static float live_constants[XGPU_VERTEX_CONSTANT_COUNT][4];
+	unsigned long batch_index, total = 0, first = 0;
+
+	if (!instancing.batch_count)
+	{
+		render_thread_release();
+		return;
+	}
+	memcpy(live.render_states, render_states, sizeof(live.render_states));
+	memcpy(live.texture_states, texture_states, sizeof(live.texture_states));
+	memcpy(live.bindings, bindings, sizeof(live.bindings));
+	live.vertex_shader = device.vertex_shader;
+	live.program_address = device.program_address;
+	memcpy(live.streams, device.streams, sizeof(live.streams));
+	live.base_vertex_index = device.base_vertex_index;
+	memcpy(live.attributes, device.attributes, sizeof(live.attributes));
+	memcpy(live_slots, device.program_slots, sizeof(live_slots));
+	memcpy(live_constants, device.constants, sizeof(live_constants));
+
+	/* every batch's blocks, in one upload */
+	for (batch_index = 0; batch_index < instancing.batch_count; batch_index++)
+	{
+		const struct instance_batch *batch = &instancing.batches[batch_index];
+
+		if (batch->count > 1)
+			total += batch->count * (instancing_span(batch) + XGPU_INSTANCE_PIXEL_CONSTANTS);
+	}
+	if (total > instancing.blocks_capacity)
+	{
+		float (*blocks)[4] = realloc(instancing.blocks, total * 2 * sizeof(blocks[0]));
+
+		if (blocks)
+		{
+			instancing.blocks = blocks;
+			instancing.blocks_capacity = total * 2;
+		}
+		else
+			total = 0;
+	}
+	if (total)
+	{
+		for (batch_index = 0; batch_index < instancing.batch_count; batch_index++)
+		{
+			const struct instance_batch *batch = &instancing.batches[batch_index];
+
+			if (batch->count > 1)
+			{
+				instancing_fill(batch, instancing.blocks + first);
+				first += batch->count * (instancing_span(batch) + XGPU_INSTANCE_PIXEL_CONSTANTS);
+			}
+		}
+		if (!instancing.buffer)
+			glGenBuffers(1, &instancing.buffer);
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, instancing.buffer);
+		glBufferData(GL_SHADER_STORAGE_BUFFER, (GLsizeiptr)(total * sizeof(instancing.blocks[0])), instancing.blocks,
+			GL_STREAM_DRAW);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, XGPU_INSTANCE_BINDING, instancing.buffer);
+	}
+
+	first = 0;
+	for (batch_index = 0; batch_index < instancing.batch_count; batch_index++)
+	{
+		const struct instance_batch *batch = &instancing.batches[batch_index];
+		const struct instance_state *state = &batch->state;
+		unsigned long span = instancing_span(batch);
+		struct program_entry *entry = NULL;
+
+		memcpy(render_states, state->render_states, sizeof(render_states));
+		memcpy(texture_states, state->texture_states, sizeof(texture_states));
+		bindings_command((void *)state->bindings);
+		device.vertex_shader = state->vertex_shader;
+		device.program_address = state->program_address;
+		device.program_slots[state->program_address] = state->program;
+		memcpy(device.streams, state->streams, sizeof(device.streams));
+		device.base_vertex_index = state->base_vertex_index;
+		memcpy(device.attributes, state->attributes, sizeof(device.attributes));
+		if (batch->count > 1 && total)
+		{
+			constants_store(0, batch->base, XGPU_VERTEX_CONSTANT_COUNT);
+			entry = prepare_draw_as(FALSE, TRUE);
+		}
+		if (!entry)
+			instancing_draw_each(batch);
+		else
+		{
+			glUniform1i(entry->instance_first, (GLint)first);
+			glUniform1i(entry->instance_stride, (GLint)(span + XGPU_INSTANCE_PIXEL_CONSTANTS));
+			glUniform1i(entry->instance_low, (GLint)(span ? batch->low : 0));
+			glUniform1i(entry->instance_span, (GLint)span);
+			setup_streams_from(&state->sources);
+			state_element_array_buffer(mirror.buffers[state->index_segment]);
+			glDrawElementsInstancedBaseVertex(primitive_mode(state->type), (GLsizei)state->count, GL_UNSIGNED_SHORT,
+				(const void *)state->index_offset, (GLsizei)batch->count, -(GLint)state->minimum);
+			stats.instanced_draws++;
+		}
+		if (batch->count > 1 && total)
+			first += batch->count * (span + XGPU_INSTANCE_PIXEL_CONSTANTS);
+		instancing.buckets[batch->hash % INSTANCE_BUCKETS] = 0;
+	}
+
+	memcpy(render_states, live.render_states, sizeof(render_states));
+	memcpy(texture_states, live.texture_states, sizeof(texture_states));
+	bindings_command(live.bindings);
+	device.vertex_shader = live.vertex_shader;
+	device.program_address = live.program_address;
+	memcpy(device.program_slots, live_slots, sizeof(live_slots));
+	memcpy(device.streams, live.streams, sizeof(device.streams));
+	device.base_vertex_index = live.base_vertex_index;
+	memcpy(device.attributes, live.attributes, sizeof(device.attributes));
+	constants_store(0, live_constants, XGPU_VERTEX_CONSTANT_COUNT);
+	instancing.batch_count = 0;
+	instancing.draw_count = 0;
+	instancing.captured_count = 0;
+	render_thread_release();
+}
+
+static void queued_draw_command(void *payload);
+
+/* the commands that leave the deferred draws deferred */
+static int instancing_keeps(render_thread_command command)
+{
+	return command == queued_draw_command || command == constants_command || command == states_command ||
+		command == bindings_command || command == device_store_command;
+}
+
+/* widens a batch's changed registers by one */
+static void instancing_changed(struct instance_batch *batch, unsigned long reg)
+{
+	if (batch->low > batch->high)
+		batch->low = batch->high = reg;
+	else if (reg < batch->low)
+		batch->low = reg;
+	else if (reg > batch->high)
+		batch->high = reg;
+}
+
+/* defers a draw (instancing_eligible) */
+static void instancing_defer(const struct queued_draw *queued)
+{
+	static struct instance_state state;
+	struct instance_batch *batch = NULL;
+	struct instance_draw *draw;
+	unsigned long hash, index, span;
+	int constant;
+
+	if (!instancing.batches)
+	{
+		instancing.batches = calloc(INSTANCE_BATCHES, sizeof(instancing.batches[0]));
+		instancing.draws = calloc(INSTANCE_DRAWS, sizeof(instancing.draws[0]));
+		if (!instancing.batches || !instancing.draws)
+		{
+			platform_log("GPU: no memory for display.instancing");
+			abort();
+		}
+	}
+	if (instancing.draw_count == INSTANCE_DRAWS)
+		instancing_draw_all();
+	instancing_state(&state, queued);
+	hash = instancing_hash(&state);
+	/* the latest batch of the same vertices and indices, if it has the same
+	state */
+	for (index = instancing.buckets[hash % INSTANCE_BUCKETS]; index; index = instancing.batches[index - 1].earlier)
+	{
+		struct instance_batch *candidate = &instancing.batches[index - 1];
+
+		if (candidate->hash == hash && instancing_same_draw(&candidate->state, &state))
+		{
+			if (instancing_same_state(&candidate->state, &state))
+				batch = candidate;
+			break;
+		}
+	}
+	if (batch)
+	{
+		/* the registers changed since its latest draw */
+		if (constants_serial - batch->latest_serial <= CONSTANT_LOG_SIZE)
+		{
+			unsigned long long serial;
+
+			for (serial = batch->latest_serial + 1; serial <= constants_serial; serial++)
+				instancing_changed(batch, constant_log[serial % CONSTANT_LOG_SIZE]);
+		}
+		else
+		{
+			for (index = 0; index < XGPU_VERTEX_CONSTANT_COUNT; index++)
+			{
+				if (constant_serials[index] > batch->base_serial)
+					instancing_changed(batch, index);
+			}
+		}
+		batch->latest_serial = constants_serial;
+	}
+	else
+	{
+		if (instancing.batch_count == INSTANCE_BATCHES)
+			instancing_draw_all();
+		batch = &instancing.batches[instancing.batch_count++];
+		batch->state = state;
+		memcpy(batch->base, device.constants, sizeof(batch->base));
+		batch->base_serial = batch->latest_serial = constants_serial;
+		batch->low = 1;
+		batch->high = 0;
+		batch->first = INSTANCE_NONE;
+		batch->count = 0;
+		batch->hash = hash;
+		batch->earlier = instancing.buckets[hash % INSTANCE_BUCKETS];
+		instancing.buckets[hash % INSTANCE_BUCKETS] = instancing.batch_count;
+	}
+
+	span = instancing_span(batch);
+	if (instancing.captured_count + span > instancing.captured_capacity)
+	{
+		unsigned long capacity = instancing.captured_capacity ? instancing.captured_capacity * 2 : 65536;
+		float (*captured)[4];
+
+		while (capacity < instancing.captured_count + span)
+			capacity *= 2;
+		captured = realloc(instancing.captured, capacity * sizeof(captured[0]));
+		if (!captured)
+		{
+			platform_log("GPU: no memory for display.instancing");
+			abort();
+		}
+		instancing.captured = captured;
+		instancing.captured_capacity = capacity;
+	}
+	draw = &instancing.draws[instancing.draw_count];
+	draw->next = INSTANCE_NONE;
+	draw->low = batch->low;
+	draw->high = batch->high;
+	draw->captured = instancing.captured_count;
+	if (span)
+		memcpy(instancing.captured[instancing.captured_count], device.constants[batch->low], span * sizeof(device.constants[0]));
+	instancing.captured_count += span;
+	for (constant = 0; constant < 16; constant++)
+		draw->pixel_constants[constant] = render_states[D3DRS_PSCONSTANT0_0 + constant];
+	draw->pixel_constants[16] = render_states[D3DRS_PSFINALCOMBINERCONSTANT0];
+	draw->pixel_constants[17] = render_states[D3DRS_PSFINALCOMBINERCONSTANT1];
+	if (batch->first == INSTANCE_NONE)
+		batch->first = instancing.draw_count;
+	else
+		instancing.draws[batch->last].next = instancing.draw_count;
+	batch->last = instancing.draw_count++;
+	batch->count++;
+	stats.instances++;
+	stats.mirrored_bytes += queued->mirrored_bytes;
+	render_thread_hold(instancing_keeps, instancing_draw_all);
+}
+#endif
+
+
 static void queued_draw_command(void *payload)
 {
 	struct queued_draw *draw = (struct queued_draw *)payload;
@@ -6983,6 +7504,15 @@ static void queued_draw_command(void *payload)
 		if ((sources.placed & (1UL << stream)) && sources.segment[stream] == STREAM_NOT_MIRRORED)
 			sources.data[stream] = copied + (unsigned long)sources.data[stream];
 	}
+#ifndef HALO_GLES
+	if (instancing_enabled() && instancing_eligible(draw))
+	{
+		instancing_defer(draw);
+		return;
+	}
+	if (instancing.batch_count)
+		instancing_draw_all();
+#endif
 	if (!prepare_draw(FALSE))
 		return;
 	stats.mirrored_bytes += draw->mirrored_bytes;
@@ -8274,11 +8804,12 @@ static void run_present_draw(void)
 	if (debug_settings.statistics && device.frame % 60 == 0)
 	{
 		platform_log("frame %lu: %lu draws, %lu immediate, %lu clears, %lu target changes; skipped %lu no program, %lu no target, %lu link; "
-			"%lu KB mirrored, %lu KB streamed; in 60 frames, %lu textures uploaded (%lu KB), at most %lu draws "
-			"and %lu ms in a frame",
+			"%lu KB mirrored, %lu KB streamed; %lu instances in %lu instanced draws; in 60 frames, %lu textures "
+			"uploaded (%lu KB), at most %lu draws and %lu ms in a frame",
 			device.frame, stats.draws / stats.presents, stats.immediate_draws / stats.presents, stats.clears / stats.presents,
 			stats.target_changes / stats.presents, stats.skipped_no_program, stats.skipped_no_target, stats.skipped_link,
 			stats.mirrored_bytes / stats.presents / 1024, stats.streamed_bytes / stats.presents / 1024,
+			stats.instances / stats.presents, stats.instanced_draws / stats.presents,
 			stats.texture_uploads, stats.texture_upload_bytes / 1024, stats.most_draws, stats.slowest_frame);
 		memset(&stats, 0, sizeof(stats));
 #ifndef HALO_GLES

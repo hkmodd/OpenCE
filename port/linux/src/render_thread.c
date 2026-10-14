@@ -18,6 +18,13 @@ A resource the game may write again (a texture, a palette) is busy from a
 command that reads it until that command has run: the writer notes the
 position after the command against the resource's data, and the game's
 IsBusy, BlockUntilNotBusy and locks wait for the reader to pass it.
+
+A command may hold back what the reader publishes (render_thread_hold):
+the renderer defers draws to make them together later (display.instancing),
+and until it has made them, the reader publishes no position past the first
+of them, so that what they read stays busy. It lets them go before a
+command that would not keep them, when the writer waits for a position the
+reader has passed, and before sleeping.
 */
 
 #include "render_thread.h"
@@ -65,9 +72,11 @@ reader writes its position after every command, the writer records
 thousands a frame */
 static struct
 {
-	/* how far it has published (submitted), how many wait for the reader */
+	/* how far it has published (submitted), how many wait for the reader,
+	and the position they wait for */
 	unsigned long submitted;
 	int waiters;
+	unsigned long wanted;
 } __attribute__((aligned(CACHE_LINE))) writer_side;
 static struct
 {
@@ -88,6 +97,14 @@ static unsigned long frame_ends[RENDER_THREAD_MAXIMUM_FRAMES];
 static unsigned long frames_ended;
 /* render_thread_set_idle_work */
 static int (*idle_work)(void);
+/* (the reader's) render_thread_hold: whether it holds, from the position
+of the command that began holding, the command running, the commands that
+keep it holding and what lets go */
+static int holding;
+static unsigned long held_from;
+static unsigned long running_from;
+static int (*hold_keeps)(render_thread_command);
+static void (*hold_release)(void);
 
 static void spin_pause(void)
 {
@@ -127,6 +144,7 @@ static void wait_for_reader(unsigned long position)
 		spin_pause();
 	}
 	pthread_mutex_lock(&lock);
+	__atomic_store_n(&writer_side.wanted, position, __ATOMIC_RELAXED);
 	__atomic_add_fetch(&writer_side.waiters, 1, __ATOMIC_SEQ_CST);
 	while (!reached(position, __ATOMIC_SEQ_CST))
 		pthread_cond_wait(&done_condition, &lock);
@@ -138,6 +156,52 @@ static void wait_for_reader(unsigned long position)
 static int writing(void)
 {
 	return running && pthread_equal(pthread_self(), writer_thread);
+}
+
+void render_thread_hold(int (*keeps)(render_thread_command), void (*release)(void))
+{
+	if (!holding)
+	{
+		holding = TRUE;
+		held_from = running_from;
+	}
+	hold_keeps = keeps;
+	hold_release = release;
+}
+
+void render_thread_release(void)
+{
+	holding = FALSE;
+}
+
+/* (the reader, at position) lets what is held go, and publishes position */
+static void hold_end(unsigned long position)
+{
+	hold_release();
+	holding = FALSE;
+	__atomic_store_n(&reader_side.completed, position, __ATOMIC_SEQ_CST);
+}
+
+/* (the reader, at position) whether the writer waits for a position that
+only the hold keeps it from */
+static int hold_blocks_writer(unsigned long position)
+{
+	unsigned long wanted;
+
+	if (!__atomic_load_n(&writer_side.waiters, __ATOMIC_SEQ_CST))
+		return FALSE;
+	wanted = __atomic_load_n(&writer_side.wanted, __ATOMIC_RELAXED);
+	return (long)(wanted - held_from) > 0 && (long)(position - wanted) >= 0;
+}
+
+static void wake_writer(void)
+{
+	if (__atomic_load_n(&writer_side.waiters, __ATOMIC_SEQ_CST))
+	{
+		pthread_mutex_lock(&lock);
+		pthread_cond_broadcast(&done_condition);
+		pthread_mutex_unlock(&lock);
+	}
 }
 
 static void *render_thread_main(void *unused)
@@ -153,8 +217,16 @@ static void *render_thread_main(void *unused)
 
 		for (spin = 0; end == position && spin < SPIN_COUNT; spin++)
 		{
+			if (holding && hold_blocks_writer(position))
+				break;
 			spin_pause();
 			end = __atomic_load_n(&writer_side.submitted, __ATOMIC_ACQUIRE);
+		}
+		/* nothing more to keep with what is held */
+		if (holding && end == position)
+		{
+			hold_end(position);
+			wake_writer();
 		}
 		if (end == position)
 		{
@@ -169,17 +241,17 @@ static void *render_thread_main(void *unused)
 		{
 			struct command_header *header = (struct command_header *)(ring + (position & (RING_SIZE - 1)));
 
+			if (holding && header->command && !hold_keeps(header->command))
+				hold_end(position);
+			running_from = position;
 			if (header->command)
 				header->command((unsigned char *)header + HEADER_SIZE);
 			position += header->advance;
+			if (holding && hold_blocks_writer(position))
+				hold_end(position);
 			/* after each command: a busy resource waits for its own only */
-			__atomic_store_n(&reader_side.completed, position, __ATOMIC_SEQ_CST);
-			if (__atomic_load_n(&writer_side.waiters, __ATOMIC_SEQ_CST))
-			{
-				pthread_mutex_lock(&lock);
-				pthread_cond_broadcast(&done_condition);
-				pthread_mutex_unlock(&lock);
-			}
+			__atomic_store_n(&reader_side.completed, holding ? held_from : position, __ATOMIC_SEQ_CST);
+			wake_writer();
 		}
 	}
 	return NULL;
