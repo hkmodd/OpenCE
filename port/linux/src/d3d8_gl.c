@@ -874,15 +874,31 @@ static void device_store_command(void *payload)
 	memcpy((unsigned char *)&device + header->offset, header + 1, header->size);
 }
 
+/* whether two arrays of words differ (compared whole, which the compiler
+makes a few vector instructions: this runs before every draw) */
+static BOOL words_differ(const DWORD *a, const DWORD *b, unsigned long count)
+{
+	DWORD difference = 0;
+	unsigned long index;
+
+	for (index = 0; index < count; index++)
+		difference |= a[index] ^ b[index];
+	return difference != 0;
+}
+
 /* sends a field of game_device to the renderer's device, if it has
-changed since it was last sent */
+changed since it was last sent (its fields are words: pointers, counts and
+floats) */
 static void field_sync(const void *field, unsigned long size)
 {
 	unsigned long offset = (unsigned long)((const unsigned char *)field - (const unsigned char *)&game_device);
 	struct device_store_header *header;
 
-	if (!memcmp((unsigned char *)&sent.device + offset, field, size))
+	if (!words_differ((const DWORD *)((const unsigned char *)&sent.device + offset), (const DWORD *)field,
+		size / sizeof(DWORD)))
+	{
 		return;
+	}
 	memcpy((unsigned char *)&sent.device + offset, field, size);
 	header = (struct device_store_header *)render_thread_record(device_store_command, sizeof(*header) + size);
 	header->offset = offset;
@@ -910,18 +926,6 @@ static void states_command(void *payload)
 
 /* the render and texture states compared in groups of (words) */
 #define STATES_GROUP 16
-
-/* whether two arrays of words differ (compared whole, which the compiler
-makes a few vector instructions: this runs before every draw) */
-static BOOL words_differ(const DWORD *a, const DWORD *b, unsigned long count)
-{
-	DWORD difference = 0;
-	unsigned long index;
-
-	for (index = 0; index < count; index++)
-		difference |= a[index] ^ b[index];
-	return difference != 0;
-}
 
 /* the words of current that differ from sent, made the same and added to
 words as pairs of first + their index and their value; returns the new count
@@ -1040,14 +1044,15 @@ static void render_sync(void)
 has run */
 static void render_bindings_busy(void)
 {
+	unsigned long data[2 * D3DTSS_MAXSTAGES];
 	int stage;
 
 	for (stage = 0; stage < D3DTSS_MAXSTAGES; stage++)
 	{
-		if (sent.bindings[stage].textured)
-			render_thread_mark_busy(sent.bindings[stage].texture.Data);
-		render_thread_mark_busy(sent.bindings[stage].palette);
+		data[stage * 2] = sent.bindings[stage].textured ? sent.bindings[stage].texture.Data : 0;
+		data[stage * 2 + 1] = sent.bindings[stage].palette;
 	}
+	render_thread_mark_busy(data, 2 * D3DTSS_MAXSTAGES);
 }
 
 static void skipped_command(void *unused)
