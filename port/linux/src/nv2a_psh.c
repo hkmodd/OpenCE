@@ -571,14 +571,30 @@ world position the vertex program hands on and the same constants
 terms, clamped where the programs clamp them. The diffuse alpha, which the
 programs write apart (0, or planar fog's), is kept. */
 
-static void model_lighting(struct xgpu_text *text, BOOL point_lights)
+static void model_lighting(struct xgpu_text *text, BOOL point_lights, BOOL instanced)
 {
 	int light;
 
 	xgpu_text_append(text,
 		"uniform vec4 model_lights[%d];\n"
 		"in vec4 xWorldNormal;\n"
-		"%s"
+		"%s",
+		XGPU_MODEL_LIGHT_COUNT, point_lights ? "in vec3 xWorldPosition;\n" : "");
+	if (instanced)
+	{
+		/* an instanced draw's lights are its instance's registers where the
+		instance has them (XGPU_INSTANCE_GLSL), the draw's elsewhere */
+		xgpu_text_append(text, "vec4 instance_lights[%d];\nvoid instance_lights_load()\n{\n", XGPU_MODEL_LIGHT_COUNT);
+		for (light = 0; light < XGPU_MODEL_LIGHT_COUNT; light++)
+		{
+			xgpu_text_append(text,
+				"\tinstance_lights[%d] = uint(%d - instance_low) < uint(instance_span) ? "
+				"instance_vec4[xInstance + %d - instance_low] : model_lights[%d];\n",
+				light, XGPU_MODEL_LIGHT_REGISTER(light), XGPU_MODEL_LIGHT_REGISTER(light), light);
+		}
+		xgpu_text_append(text, "}\n#define model_lights instance_lights\n");
+	}
+	xgpu_text_append(text,
 		"vec3 model_lighting()\n"
 		"{\n"
 		/* the normal's direction between the vertices, at the length the
@@ -589,8 +605,7 @@ static void model_lighting(struct xgpu_text *text, BOOL point_lights)
 		back by the translucency, and the second */
 		"\tfloat facing = dot(n, -model_lights[7].xyz);\n"
 		"\tvec3 light = model_lights[11].xyz + max(max(facing, -facing * model_lights[0].z), 0.0) * model_lights[8].xyz +\n"
-		"\t\tmax(dot(n, -model_lights[9].xyz), 0.0) * model_lights[10].xyz;\n",
-		XGPU_MODEL_LIGHT_COUNT, point_lights ? "in vec3 xWorldPosition;\n" : "");
+		"\t\tmax(dot(n, -model_lights[9].xyz), 0.0) * model_lights[10].xyz;\n");
 	/* each point light: its position and 1 / radius squared, its cone's axis
 	and falloff scale, its color and falloff offset */
 	for (light = 0; point_lights && light < 2; light++)
@@ -647,12 +662,26 @@ char *nv2a_pixel_shader_to_glsl(const struct nv2a_pixel_shader_key *key)
 		"in float xFog;\n"
 		"layout(location = 0) out vec4 fragment_color;\n"
 		XGPU_PIXEL_UNIFORMS);
+	/* an instanced draw's combiner constants are its instance's, after the
+	instance's vertex constants */
+	if (key->instanced)
+	{
+		xgpu_text_append(&text,
+			XGPU_INSTANCE_GLSL
+			"flat in int xInstance;\n"
+			"vec4 ps_c0[8];\n"
+			"vec4 ps_c1[8];\n"
+			"vec4 ps_final_c0;\n"
+			"vec4 ps_final_c1;\n");
+	}
+	else
+		xgpu_text_append(&text, XGPU_PIXEL_CONSTANT_UNIFORMS);
 	for (stage = 0; stage < 4; stage++)
 		xgpu_text_append(&text, "uniform %s tex%d;\n", sampler_declaration(key->sampler_type[stage]), stage);
 	if (key->source_blend)
 		xgpu_text_append(&text, "uniform vec4 blend_constant;\n");
 	if (key->per_pixel_lighting)
-		model_lighting(&text, key->per_pixel_lighting == 2);
+		model_lighting(&text, key->per_pixel_lighting == 2, key->instanced);
 	xgpu_text_append(&text,
 		"float signed_byte(float x)\n"
 		"{\n"
@@ -669,6 +698,19 @@ char *nv2a_pixel_shader_to_glsl(const struct nv2a_pixel_shader_key *key)
 		"\tvec4 v1 = xD1;\n"
 		"\tvec4 t0 = vec4(0.0), t1 = vec4(0.0), t2 = vec4(0.0), t3 = vec4(0.0);\n"
 		"\tfloat dot0 = 0.0, dot1 = 0.0, dot2 = 0.0, dot3 = 0.0;\n");
+	if (key->instanced)
+	{
+		xgpu_text_append(&text,
+			"\tfor (int i = 0; i < 8; i++)\n"
+			"\t{\n"
+			"\t\tps_c0[i] = instance_vec4[xInstance + instance_span + i];\n"
+			"\t\tps_c1[i] = instance_vec4[xInstance + instance_span + 8 + i];\n"
+			"\t}\n"
+			"\tps_final_c0 = instance_vec4[xInstance + instance_span + 16];\n"
+			"\tps_final_c1 = instance_vec4[xInstance + instance_span + 17];\n");
+		if (key->per_pixel_lighting)
+			xgpu_text_append(&text, "\tinstance_lights_load();\n");
+	}
 	if (key->per_pixel_lighting)
 		xgpu_text_append(&text, "\tv0.rgb = model_lighting();\n");
 	if (replaces_depth(key))
