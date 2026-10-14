@@ -1,6 +1,6 @@
 """The high-res HUD's textures decoded as a map loads (hud_preload.c): each once, on threads of their own, none left
-for its first draw, those drawn, failed or with their setting off skipped, the texels held within the budget, and
-nothing decoded ahead without threads or without a GL context."""
+for its first draw, those drawn, failed or with their setting off skipped, the texels held within the budget, the
+uploads made on the render thread, and nothing decoded ahead without threads or without a GL context."""
 
 import sys
 from pathlib import Path
@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from harness import CHECK_FAILED, build, constant, function, mutated, read, run, structure  # noqa: E402
 
 SOURCE = "port/linux/src/hud_hires.c"
-CASES = ["decoded-ahead", "skipped", "undecodable", "budget", "no-threads", "no-renderer"]
+CASES = ["decoded-ahead", "skipped", "undecodable", "budget", "render-thread", "no-threads", "no-renderer"]
 
 # a fault in the preloading, and the case that must catch it
 NEGATIVE_CONTROLS = {
@@ -21,6 +21,7 @@ NEGATIVE_CONTROLS = {
     "budget-ignored": (("preload.held && preload.held + preload_size(preload.assets[index]) > PRELOAD_BUDGET", "0"),
                        "budget"),
     "failure-unmarked": (("\t\ttextures[asset].failed = 1;\n", ""), "undecodable"),
+    "uploaded-here": (("if (render_thread_elsewhere())", "if (0)"), "render-thread"),
     "one-thread": (("while (preload.threads < PRELOAD_THREADS)", "while (preload.threads < 1)"), "decoded-ahead"),
     "no-context-ignored": (("if (!wanted_count || !xgpu_gl_ready())", "if (!wanted_count)"), "no-renderer"),
 }

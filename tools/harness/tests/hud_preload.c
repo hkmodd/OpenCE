@@ -6,9 +6,10 @@ and hud_hires_override_texture; test_hud_preload.py takes them as
 under_test.inc), with the PNG decoder and GL faked: each texture is decoded
 once, on the threads, and none is left for its first draw; those drawn
 already, failed or with their setting off are not; one that cannot be
-decoded is marked so; the texels held stay within the budget; without
-threads nothing is decoded ahead; without a GL context (debug.null_renderer)
-nothing is decoded or uploaded.
+decoded is marked so; the texels held stay within the budget; with the
+render thread the uploads are made on it; without threads nothing is
+decoded ahead; without a GL context (debug.null_renderer) nothing is
+decoded or uploaded.
 */
 
 #include "harness.h"
@@ -17,6 +18,7 @@ nothing is decoded or uploaded.
 #include <stdarg.h>
 
 typedef unsigned int GLuint;
+typedef void (*render_thread_command)(void *payload);
 
 #include "world.inc"
 
@@ -48,6 +50,26 @@ static int xgpu_gl_ready(void)
 	return gl_ready;
 }
 
+/* the render thread: a call runs at once, flagged */
+static int elsewhere, in_call;
+static unsigned long calls;
+
+static int render_thread_elsewhere(void)
+{
+	return elsewhere;
+}
+
+static void render_thread_call(render_thread_command command, const void *payload, unsigned long size)
+{
+	long copy[4];
+
+	memcpy(copy, payload, size);
+	calls++;
+	in_call = 1;
+	command(copy);
+	in_call = 0;
+}
+
 static int create_fails;
 #define pthread_create(thread, attributes, start, argument) \
 	(create_fails ? 1 : pthread_create(thread, attributes, start, argument))
@@ -77,7 +99,7 @@ static void counted_free(void *pointer)
 
 static pthread_mutex_t counting = PTHREAD_MUTEX_INITIALIZER;
 static unsigned long decodes[MAXIMUM_TEXTURES];
-static int decoding, most_decoding, over_budget;
+static int decoding, most_decoding, over_budget, off_the_render_thread;
 static unsigned long first_draw_decodes;
 static char undecodable[MAXIMUM_TEXTURES];
 
@@ -120,6 +142,8 @@ static GLuint pixels_texture(const unsigned char *pixels, unsigned long width, u
 
 	CHECK(gl_ready, "a texture uploaded without a GL context");
 	CHECK(pixels && width == 1 && height == 1, "uploaded other texels");
+	if (elsewhere && !in_call)
+		off_the_render_thread = 1;
 	*levels = 1;
 	return next++;
 }
@@ -239,6 +263,16 @@ int main(int argc, char **argv)
 		preload_all(40);
 		CHECK(!over_budget, "more texels held than the budget");
 		check_drawn_without_decoding(40);
+		check_done();
+	}
+	else if (!strcmp(name, "render-thread"))
+	{
+		elsewhere = 1;
+		world(20, 0);
+		preload_all(20);
+		CHECK(!off_the_render_thread, "uploaded off the render thread");
+		CHECK(calls == 20, "%lu calls to the render thread for 20 textures", calls);
+		check_drawn_without_decoding(20);
 		check_done();
 	}
 	else if (!strcmp(name, "no-threads"))

@@ -693,6 +693,11 @@ static void preload_upload(long index)
 		&textures[asset].levels);
 }
 
+static void preload_upload_command(void *payload)
+{
+	preload_upload(*(const long *)payload);
+}
+
 /* decodes the textures of the assets (a map's, as it loads) on threads of
 their own, and uploads them, before they are first drawn; returns once
 they are */
@@ -740,7 +745,10 @@ void hud_hires_preload(const long *assets, long count)
 		while (!preload.decoded[index])
 			pthread_cond_wait(&preload.condition, &preload.lock);
 		pthread_mutex_unlock(&preload.lock);
-		preload_upload(index);
+		if (render_thread_elsewhere())
+			render_thread_call(preload_upload_command, &index, sizeof(index));
+		else
+			preload_upload(index);
 		free(preload.pixels[index]);
 		pthread_mutex_lock(&preload.lock);
 		preload.held -= preload_size(wanted[index]);
