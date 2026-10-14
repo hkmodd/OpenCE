@@ -235,6 +235,7 @@ context has the extension, never required (gl_functions.c). On ES 3.0 and
 	X(glDrawArrays) \
 	X(glDrawElements) \
 	X(glDrawElementsBaseVertex) \
+	X(glDrawElementsInstancedBaseVertex) \
 	X(glCreateShader) \
 	X(glShaderSource) \
 	X(glCompileShader) \
@@ -477,6 +478,7 @@ pointers, sees the declarations without these aliases */
 #define glDrawArrays halo_glDrawArrays
 #define glDrawElements halo_glDrawElements
 #define glDrawElementsBaseVertex halo_glDrawElementsBaseVertex
+#define glDrawElementsInstancedBaseVertex halo_glDrawElementsInstancedBaseVertex
 #define glCreateShader halo_glCreateShader
 #define glShaderSource halo_glShaderSource
 #define glCompileShader halo_glCompileShader

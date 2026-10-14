@@ -127,6 +127,12 @@ static const struct config_setting config_settings[] =
 		"start of the frames after it, instead of all in one long frame. The\n"
 		"next is begun ahead of its time by about as long as the last took: the\n"
 		"players' actions reach the world that much later." },
+	{ "display.instancing", _config_boolean, "false", "HALO_INSTANCING", _environment_value, _platform_desktop,
+		"With display.render_thread, draw the parts of many objects of a kind\n"
+		"(the bipeds of a crowded game) that are drawn with the same state as\n"
+		"one instanced draw each, instead of one draw an object: the driver's\n"
+		"cost is per draw. Opaque parts only; parts at exactly the same depth\n"
+		"may be drawn in another order." },
 	{ "display.anti_aliasing", _config_string, "\"off\"", "HALO_ANTI_ALIASING", _environment_value, _platform_all,
 		"Smoothing of jagged edges, which the Xbox did not have: \"off\"; \"fxaa\"\n"
 		"or \"smaa\" smooth the 3D view once it is drawn (the HUD and menus stay\n"
