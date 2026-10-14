@@ -759,6 +759,9 @@ static void states_command(void *payload)
 	}
 }
 
+/* the render and texture states compared in groups of (words) */
+#define STATES_GROUP 16
+
 /* whether two arrays of words differ (compared whole, which the compiler
 makes a few vector instructions: this runs before every draw) */
 static BOOL words_differ(const DWORD *a, const DWORD *b, unsigned long count)
@@ -771,38 +774,46 @@ static BOOL words_differ(const DWORD *a, const DWORD *b, unsigned long count)
 	return difference != 0;
 }
 
-static void states_sync(void)
+/* the words of current that differ from sent, made the same and added to
+words as pairs of first + their index and their value; returns the new count
+(compared a group at a time: a draw changes a few states, mostly in one or
+two groups) */
+static DWORD states_changed(DWORD *sent_words, const DWORD *current, unsigned long count, DWORD first,
+	DWORD *words, DWORD changed)
 {
-	DWORD words[1 + 2 * (D3DRS_MAX + D3DTSS_MAXSTAGES * D3DTSS_MAX)];
-	const DWORD *textures = &D3D__TextureState[0][0];
-	DWORD *sent_textures = &sent.texture_states[0][0];
-	DWORD count = 0, index;
+	unsigned long group, index;
 
-	if (words_differ(sent.render_states, D3D__RenderState, D3DRS_MAX))
+	for (group = 0; group < count; group += STATES_GROUP)
 	{
-		for (index = 0; index < D3DRS_MAX; index++)
+		unsigned long end = group + STATES_GROUP < count ? group + STATES_GROUP : count;
+
+		if (!words_differ(sent_words + group, current + group, end - group))
+			continue;
+		for (index = group; index < end; index++)
 		{
-			if (sent.render_states[index] != D3D__RenderState[index])
+			if (sent_words[index] != current[index])
 			{
-				sent.render_states[index] = D3D__RenderState[index];
-				words[1 + count * 2] = index;
-				words[2 + count * 2] = D3D__RenderState[index];
-				count++;
+				sent_words[index] = current[index];
+				words[1 + changed * 2] = first + index;
+				words[2 + changed * 2] = current[index];
+				changed++;
 			}
 		}
 	}
-	if (words_differ(sent_textures, textures, D3DTSS_MAXSTAGES * D3DTSS_MAX))
+	return changed;
+}
+
+static void states_sync(void)
+{
+	DWORD words[1 + 2 * (D3DRS_MAX + D3DTSS_MAXSTAGES * D3DTSS_MAX)];
+	DWORD count = 0;
+
+	if (words_differ(sent.render_states, D3D__RenderState, D3DRS_MAX))
+		count = states_changed(sent.render_states, D3D__RenderState, D3DRS_MAX, 0, words, count);
+	if (words_differ(&sent.texture_states[0][0], &D3D__TextureState[0][0], D3DTSS_MAXSTAGES * D3DTSS_MAX))
 	{
-		for (index = 0; index < D3DTSS_MAXSTAGES * D3DTSS_MAX; index++)
-		{
-			if (sent_textures[index] != textures[index])
-			{
-				sent_textures[index] = textures[index];
-				words[1 + count * 2] = D3DRS_MAX + index;
-				words[2 + count * 2] = textures[index];
-				count++;
-			}
-		}
+		count = states_changed(&sent.texture_states[0][0], &D3D__TextureState[0][0],
+			D3DTSS_MAXSTAGES * D3DTSS_MAX, D3DRS_MAX, words, count);
 	}
 	if (!count)
 		return;
