@@ -1,7 +1,8 @@
 /* the render thread's queue (port/linux/src/render_thread.c) with a real
 reader thread: commands run once each, in order, with their payloads intact
 across many turns of the ring; a call returns once its command has run; a
-resource is busy until the command that reads it has run */
+resource is busy until the command that reads it has run; a frame ends once
+no more than the frames asked for are queued */
 
 #include "harness.h"
 
@@ -71,6 +72,47 @@ static void gate_command(void *payload)
 	while (!__atomic_load_n(&gate_open, __ATOMIC_ACQUIRE))
 		;
 	__atomic_store_n(&gate_passed, 1, __ATOMIC_RELEASE);
+}
+
+/* gates[index], opened after its delay (open_gate_after) */
+static int gates_open[2];
+static int gates_passed[2];
+
+static void indexed_gate_command(void *payload)
+{
+	int index = *(int *)payload;
+
+	while (!__atomic_load_n(&gates_open[index], __ATOMIC_ACQUIRE))
+		;
+	__atomic_store_n(&gates_passed[index], 1, __ATOMIC_RELEASE);
+}
+
+static void record_gate(int index)
+{
+	*(int *)render_thread_record(indexed_gate_command, sizeof(int)) = index;
+}
+
+struct gate_opening
+{
+	int index;
+	long milliseconds;
+};
+
+static void *open_gate_after(void *payload)
+{
+	struct gate_opening *opening = (struct gate_opening *)payload;
+	struct timespec delay;
+
+	delay.tv_sec = opening->milliseconds / 1000;
+	delay.tv_nsec = (opening->milliseconds % 1000) * 1000000L;
+	nanosleep(&delay, NULL);
+	__atomic_store_n(&gates_open[opening->index], 1, __ATOMIC_RELEASE);
+	return NULL;
+}
+
+static int gate_passed_now(int index)
+{
+	return __atomic_load_n(&gates_passed[index], __ATOMIC_ACQUIRE);
 }
 
 static void call_command(void *payload)
@@ -225,6 +267,58 @@ int main(int argc, char **argv)
 		CHECK(__atomic_load_n(&gate_passed, __ATOMIC_ACQUIRE), "the wait returned before the command ran");
 		CHECK(!render_thread_resource_busy(0x10000), "the resource is busy once its command ran");
 		pthread_join(opener, NULL);
+	}
+	else if (!strcmp(name, "one-frame-queued"))
+	{
+		/* the frame before must have run, not the frame ending */
+		struct gate_opening first = { 0, 50 }, second = { 1, 1000 };
+		pthread_t openers[2];
+
+		record_gate(0);
+		render_thread_frame_end(1);
+		CHECK(!gate_passed_now(0), "the first frame ran with its gate shut");
+		record_gate(1);
+		pthread_create(&openers[0], NULL, open_gate_after, &first);
+		pthread_create(&openers[1], NULL, open_gate_after, &second);
+		render_thread_frame_end(1);
+		CHECK(gate_passed_now(0), "the second frame ended before the first ran");
+		CHECK(!gate_passed_now(1), "the second frame waited for itself to run");
+		pthread_join(openers[0], NULL);
+		pthread_join(openers[1], NULL);
+		render_thread_drain();
+	}
+	else if (!strcmp(name, "frame-handed-over"))
+	{
+		/* the render thread draws a frame ended with room for more */
+		struct timespec millisecond = { 0, 1000000L };
+		int waited;
+
+		gates_open[0] = 1;
+		record_gate(0);
+		render_thread_frame_end(2);
+		for (waited = 0; waited < 2000 && !gate_passed_now(0); waited++)
+			nanosleep(&millisecond, NULL);
+		CHECK(gate_passed_now(0), "a frame ended was not handed to the render thread");
+	}
+	else if (!strcmp(name, "two-frames-queued"))
+	{
+		/* two frames end without waiting; the third waits for the first */
+		struct gate_opening first = { 0, 50 }, second = { 1, 1000 };
+		pthread_t openers[2];
+
+		record_gate(0);
+		render_thread_frame_end(2);
+		record_gate(1);
+		render_thread_frame_end(2);
+		CHECK(!gate_passed_now(0), "the second frame waited for the first to run");
+		pthread_create(&openers[0], NULL, open_gate_after, &first);
+		pthread_create(&openers[1], NULL, open_gate_after, &second);
+		render_thread_frame_end(2);
+		CHECK(gate_passed_now(0), "the third frame ended before the first ran");
+		CHECK(!gate_passed_now(1), "the third frame waited for the second to run");
+		pthread_join(openers[0], NULL);
+		pthread_join(openers[1], NULL);
+		render_thread_drain();
 	}
 	else
 	{
