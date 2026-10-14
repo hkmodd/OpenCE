@@ -1105,6 +1105,11 @@ void xgpu_gl_state_invalidate(void)
 #endif
 }
 
+int xgpu_gl_ready(void)
+{
+	return device.gl_ready;
+}
+
 /* (a unit the shadows still said had it would never be bound to a new
 texture GL gives its name to; and a stage no draw samples keeps what was
 bound to it: bind_textures) */

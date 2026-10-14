@@ -46,6 +46,7 @@ long hud_hires_asset_fits(long asset, long width, long height);
 unsigned long hud_hires_asset_sprites(long asset);
 int hud_hires_sprites_drawable(long asset, unsigned long address, unsigned long level0_size);
 void hud_hires_register_placeholder(long asset, unsigned long const *texture);
+void hud_hires_preload(long const *assets, long count);
 
 void hud_hires_tags_loaded(void);
 void hud_hires_tags_unloaded(void);
@@ -142,6 +143,9 @@ void hud_hires_tags_loaded(
 	long asset_count = hud_hires_asset_count();
 	long asset;
 	long missing = 0;
+	long preload_assets[MAXIMUM_HIRES_BITMAPS + MAXIMUM_HIRES_SPRITE_BITMAPS];
+	long preload_count = 0;
+	long index;
 
 	/* (the renderer reads the lists as it uploads textures: not while they
 	change) */
@@ -213,6 +217,12 @@ void hud_hires_tags_loaded(
 	}
 	platform_log("high-res hud: %ld of %ld bitmaps in this map, %ld for some of their sprites (%ld not in it)",
 		hires_bitmap_count + hires_sprite_bitmap_count, asset_count, hires_sprite_bitmap_count, missing);
+	/* (their textures decoded now, not when first drawn) */
+	for (index = 0; index < hires_bitmap_count; index++)
+		preload_assets[preload_count++] = hires_bitmaps[index].asset;
+	for (index = 0; index < hires_sprite_bitmap_count; index++)
+		preload_assets[preload_count++] = hires_sprite_bitmaps[index].asset;
+	hud_hires_preload(preload_assets, preload_count);
 
 	return;
 }

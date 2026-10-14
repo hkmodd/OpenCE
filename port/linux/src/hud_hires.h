@@ -70,6 +70,11 @@ unsigned int hud_hires_override_texture(long asset, unsigned long *levels);
 /* a GL texture drawn from an 8-bit RGBA PNG (as the tools write them), with
 all its mip levels, and their number; 0 if it could not be */
 unsigned int hud_hires_png_texture(const void *png, unsigned long size, unsigned long *levels);
+/* decodes and uploads the textures of these assets (the map's, as it
+loads: port/linux/game/hud_hires_tags.c) not yet drawn, with their settings
+on, on threads of their own, so that their first draw does not wait for
+them; nothing on Android and the web, which decode each when first drawn */
+void hud_hires_preload(const long *assets, long count);
 /* whether its green is its coverage (d3d8_gl.c, nv2a_psh.c: coverage_alpha) */
 int hud_hires_override_coverage(long asset);
 /* the GL texture of the texture drawn for some of a bitmap's sprites whose

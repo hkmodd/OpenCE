@@ -11,6 +11,9 @@ levels, though a game draws only some (the scopes' only when zoomed), and
 the titles of the menus shown, about 3 MB each (11 MB for the carnage
 report's, a whole panel), and their button icons, about 0.3 MB each (5.3
 MB for the message icons' sheet).
+The desktop builds decode those of a map's bitmaps as it loads instead, on
+threads of their own (hud_hires_preload): decoding the HUD's when it is
+first drawn held that frame for about 150 ms.
 They are drawn with linear filtering and their mip levels (d3d8_gl.c,
 configure_sampler), as they are larger than they appear.
 
@@ -30,6 +33,10 @@ zlib (port/third_party/zlib).
 
 #include <stdlib.h>
 #include <string.h>
+
+#ifndef HALO_GLES
+#include <pthread.h>
+#endif
 
 /* the game's (port/linux/game/hud_hires_tags.c) */
 long hud_hires_asset_at(unsigned long address, long width, long height);
@@ -544,14 +551,13 @@ failed:
 	return NULL;
 }
 
-unsigned int hud_hires_png_texture(const void *png, unsigned long size, unsigned long *levels)
+/* a GL texture of the texels, with all its mip levels, and their number */
+static GLuint pixels_texture(const unsigned char *pixels, unsigned long width, unsigned long height,
+	unsigned long *levels)
 {
-	unsigned long width = 0, height = 0, largest;
-	unsigned char *pixels = png_decode(png, size, &width, &height);
+	unsigned long largest;
 	GLuint texture;
 
-	if (!pixels)
-		return 0;
 	*levels = 1;
 	for (largest = width > height ? width : height; largest > 1; largest >>= 1)
 		(*levels)++;
@@ -564,6 +570,18 @@ unsigned int hud_hires_png_texture(const void *png, unsigned long size, unsigned
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, (GLsizei)width, (GLsizei)height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
 	glGenerateMipmap(GL_TEXTURE_2D);
 	xgpu_gl_state_invalidate();
+	return texture;
+}
+
+unsigned int hud_hires_png_texture(const void *png, unsigned long size, unsigned long *levels)
+{
+	unsigned long width = 0, height = 0;
+	unsigned char *pixels = png_decode(png, size, &width, &height);
+	GLuint texture;
+
+	if (!pixels)
+		return 0;
+	texture = pixels_texture(pixels, width, height, levels);
 	free(pixels);
 	return texture;
 }
@@ -590,3 +608,157 @@ unsigned int hud_hires_override_texture(long asset, unsigned long *levels)
 	*levels = textures[asset].levels;
 	return textures[asset].texture;
 }
+
+/* ---------- preloading */
+
+#ifndef HALO_GLES
+
+/* the threads that decode a map's textures, and the most bytes they hold at
+once (rows being unfiltered and texels waiting for their upload, reckoned
+from the textures' sizes): one 2048 by 2048 texture takes 32 MB */
+#define PRELOAD_THREADS 4
+#define PRELOAD_BUDGET (96UL << 20)
+
+static struct
+{
+	pthread_mutex_t lock;
+	pthread_cond_t condition;
+	const long *assets;
+	long count;
+	/* the next to decode; each one's texels once decoded (NULL if it could
+	not be), until uploaded */
+	long next;
+	char decoded[MAXIMUM_TEXTURES];
+	unsigned char *pixels[MAXIMUM_TEXTURES];
+	unsigned long width[MAXIMUM_TEXTURES], height[MAXIMUM_TEXTURES];
+	unsigned long held;
+	int threads;
+} preload = { PTHREAD_MUTEX_INITIALIZER, PTHREAD_COND_INITIALIZER };
+
+static unsigned long preload_size(long asset)
+{
+	return (unsigned long)hud_hires_embedded[asset].width * hud_hires_embedded[asset].height * 8;
+}
+
+static void *preload_thread(void *parameter)
+{
+	(void)parameter;
+	pthread_mutex_lock(&preload.lock);
+	while (preload.next < preload.count)
+	{
+		long index = preload.next;
+		const struct hud_hires_embedded *embedded = &hud_hires_embedded[preload.assets[index]];
+		unsigned long width = 0, height = 0;
+		unsigned char *pixels;
+
+		/* (with nothing held, any one fits: its upload frees what the others
+		wait for) */
+		if (preload.held && preload.held + preload_size(preload.assets[index]) > PRELOAD_BUDGET)
+		{
+			pthread_cond_wait(&preload.condition, &preload.lock);
+			continue;
+		}
+		preload.next++;
+		preload.held += preload_size(preload.assets[index]);
+		pthread_mutex_unlock(&preload.lock);
+		pixels = png_decode((const unsigned char *)embedded->png, embedded->png_size, &width, &height);
+		pthread_mutex_lock(&preload.lock);
+		preload.pixels[index] = pixels;
+		preload.width[index] = width;
+		preload.height[index] = height;
+		preload.decoded[index] = 1;
+		pthread_cond_broadcast(&preload.condition);
+	}
+	preload.threads--;
+	pthread_cond_broadcast(&preload.condition);
+	pthread_mutex_unlock(&preload.lock);
+	return NULL;
+}
+
+/* (on the thread that holds the GL context) */
+static void preload_upload(long index)
+{
+	long asset = preload.assets[index];
+
+	if (textures[asset].texture || textures[asset].failed)
+		return;
+	if (!preload.pixels[index])
+	{
+		platform_log("high-res hud: could not decode the texture for %s bitmap %d", hud_hires_embedded[asset].tag,
+			hud_hires_embedded[asset].bitmap);
+		textures[asset].failed = 1;
+		return;
+	}
+	textures[asset].texture = pixels_texture(preload.pixels[index], preload.width[index], preload.height[index],
+		&textures[asset].levels);
+}
+
+/* decodes the textures of the assets (a map's, as it loads) on threads of
+their own, and uploads them, before they are first drawn; returns once
+they are */
+void hud_hires_preload(const long *assets, long count)
+{
+	int hud_enabled = config_boolean("display.high_res_hud");
+	int titles_enabled = config_boolean("display.high_res_text");
+	long wanted[MAXIMUM_TEXTURES];
+	long index, wanted_count = 0;
+
+	for (index = 0; index < count && wanted_count < MAXIMUM_TEXTURES; index++)
+	{
+		long asset = assets[index];
+
+		if (asset >= 0 && asset < hud_hires_asset_count() && !textures[asset].texture && !textures[asset].failed &&
+			(hud_hires_embedded[asset].title ? titles_enabled : hud_enabled))
+			wanted[wanted_count++] = asset;
+	}
+	/* (without a GL context, debug.null_renderer's, nothing is drawn) */
+	if (!wanted_count || !xgpu_gl_ready())
+		return;
+	pthread_mutex_lock(&preload.lock);
+	preload.assets = wanted;
+	preload.count = wanted_count;
+	preload.next = 0;
+	preload.held = 0;
+	memset(preload.decoded, 0, sizeof(preload.decoded));
+	while (preload.threads < PRELOAD_THREADS)
+	{
+		pthread_t thread;
+
+		if (pthread_create(&thread, NULL, preload_thread, NULL) != 0)
+			break;
+		pthread_detach(thread);
+		preload.threads++;
+	}
+	if (!preload.threads)
+	{
+		/* (drawn as before: decoded when first drawn) */
+		pthread_mutex_unlock(&preload.lock);
+		return;
+	}
+	for (index = 0; index < wanted_count; index++)
+	{
+		while (!preload.decoded[index])
+			pthread_cond_wait(&preload.condition, &preload.lock);
+		pthread_mutex_unlock(&preload.lock);
+		preload_upload(index);
+		free(preload.pixels[index]);
+		pthread_mutex_lock(&preload.lock);
+		preload.held -= preload_size(wanted[index]);
+		pthread_cond_broadcast(&preload.condition);
+	}
+	/* (the threads read wanted, which is this function's) */
+	while (preload.threads)
+		pthread_cond_wait(&preload.condition, &preload.lock);
+	pthread_mutex_unlock(&preload.lock);
+	platform_log("high-res hud: %ld textures decoded ahead of their first draw", wanted_count);
+}
+
+#else
+
+void hud_hires_preload(const long *assets, long count)
+{
+	(void)assets;
+	(void)count;
+}
+
+#endif
