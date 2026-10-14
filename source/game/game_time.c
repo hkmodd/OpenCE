@@ -78,6 +78,7 @@ symbols in this file:
 #include "scenario/scenario.h" /* port: game_time_menu_scene */
 #include "scenario/scenario_definitions.h"
 #include "profile_sections.h" /* port: port/linux/include/profile_sections.h */
+#include "tick_slices.h" /* port: port/linux/game/tick_slices.c */
 /* port/linux/game/network_distributed.c's */
 void network_distributed_tick(void);
 
@@ -85,6 +86,12 @@ void network_distributed_tick(void);
 PROFILE_SECTION(game_time_network_distributed_tick_section, "network_distributed_tick")
 PROFILE_SECTION(game_time_render_interpolation_tick_section, "render_interpolation_tick")
 PROFILE_SECTION(game_time_game_frame_section, "game_frame")
+
+/* port: set by game_time_update_sliced, the main loop's: only its frames
+may leave a tick under way (display.tick_slices); and whether the frame
+has updated the game's time */
+static boolean game_time_slicing_allowed;
+static boolean game_time_updated;
 
 /* ---------- constants */
 
@@ -283,6 +290,10 @@ real game_time_get_tick_fraction(
 
 	if (!game_time_globals || !game_time_globals->active || game_time_globals->paused)
 		return 1.0f;
+	/* port: while a tick due is under way the latest drawn is the tick
+	before it, whole (port/linux/game/tick_slices.c) */
+	if (tick_slices_counted())
+		return 1.0f;
 	fraction = game_time_globals->leftover_dt * game_time_globals->speed * TICKS_PER_SECOND;
 	return PIN(fraction, 0.0f, 1.0f);
 }
@@ -390,6 +401,47 @@ void game_time_start(
 	return;
 }
 
+/* port: a tick's steps after it (render interpolation's snapshots, the
+clocks, the netcode's), when it has run whole */
+static void game_time_tick_ended(
+	void)
+{
+	profile_scope(game_time_render_interpolation_tick_section, render_interpolation_tick();)
+	game_time_globals->server_time++;
+	game_time_globals->local_time++;
+	/* the distributed netcode's per-tick state (none of the main menu's
+	scene, which a lobby's machines do not share) */
+	if (!game_time_menu_scene())
+		profile_scope(game_time_network_distributed_tick_section, network_distributed_tick();)
+}
+
+/* port: the main loop's game_time_update: the last tick of a local game's
+frame, or the host's, may run on over the frames after it, and the next be
+begun ahead of its time (display.tick_slices) */
+void game_time_update_sliced(
+	real time_delta_sec)
+{
+	game_time_slicing_allowed = TRUE;
+	game_time_update(time_delta_sec);
+	game_time_slicing_allowed = FALSE;
+	game_time_updated = TRUE;
+}
+
+/* port: a frame that has not updated the game's time (its console is open,
+or the game is over) does not leave a tick under way, which would hold up
+what waits for it (main.c) */
+void game_time_sliced_frame_end(
+	void)
+{
+	if (!game_time_updated && tick_slices_in_flight())
+	{
+		tick_slices_finish();
+		if (game_time_globals && game_time_globals->active)
+			game_time_tick_ended();
+	}
+	game_time_updated = FALSE;
+}
+
 void game_time_update(
 	real time_delta_sec)
 {
@@ -400,6 +452,8 @@ void game_time_update(
 		long connection;
 		long ticks_elapsed;
 		real ticks_per_second = game_time_globals->speed*TICKS_PER_SECOND;
+		/* port: (display.tick_slices) */
+		boolean tick_was_in_flight = tick_slices_in_flight();
 
 		/* The native builds draw several frames per tick
 		(port/linux/game/render_interpolation.c). A frame that runs no tick has
@@ -410,6 +464,29 @@ void game_time_update(
 		run as many times too fast as there are frames per tick. On the Xbox
 		every frame ran at least one tick. */
 		game_time_globals->last_local_time_elapsed = 0;
+
+		/* port: a tick under way since an earlier frame runs on for this
+		one's share; until one that is due has ended the game's clock waits,
+		and the frame draws the tick before it. One the clock would not take
+		(the game is paused, or stopped) runs whole and is taken now. */
+		if (tick_slices_in_flight())
+		{
+			boolean take = game_time_globals->paused || ticks_per_second <= 0.f;
+			boolean ended = tick_slices_continue(!game_time_slicing_allowed || take);
+
+			if (tick_slices_counted() || take)
+			{
+				if (!ended)
+				{
+					game_time_globals->leftover_dt += time_delta_sec;
+					if (game_time_globals->leftover_dt >= 100.f)
+						game_time_globals->leftover_dt = 0.f;
+					goto frame;
+				}
+				tick_slices_release();
+				game_time_tick_ended();
+			}
+		}
 
 		if (ticks_per_second > 0.f)
 		{
@@ -507,20 +584,44 @@ void game_time_update(
 
 					for (update_index = 0; update_index < server_updates; update_index++)
 					{
-						game_tick();
-						profile_scope(game_time_render_interpolation_tick_section, render_interpolation_tick();)
-						game_time_globals->server_time++;
-						game_time_globals->local_time++;
-						/* the distributed netcode's per-tick state (port: none of
-						the main menu's scene, which a lobby's machines do not share) */
-						if (!game_time_menu_scene())
-							profile_scope(game_time_network_distributed_tick_section, network_distributed_tick();)
+						/* port: the first may have been begun ahead of its time,
+						and the last may be left under way (display.tick_slices),
+						in a local game or the host's */
+						if (tick_slices_in_flight())
+						{
+							if (!tick_slices_ended())
+							{
+								tick_slices_count();
+								break;
+							}
+							tick_slices_release();
+						}
+						else if (tick_slices_tick(game_time_slicing_allowed && update_index == server_updates - 1 &&
+							(game_connection() == _game_connection_local ||
+								game_connection() == _game_connection_network_server)))
+						{
+							break;
+						}
+						game_time_tick_ended();
 					}
 				}
 
 				/* (none while a client's clock waits: a frame that runs no tick
 				reports none) */
 				game_time_globals->last_local_time_elapsed = game_time_held() ? 0 : (short)ticks_elapsed;
+			}
+
+			/* port: the next tick begun now if, begun on the next frame, it
+			would end after it is due (display.tick_slices); not on a frame
+			that began with one under way, so that between two ticks a frame
+			runs what waits for them (main.c) */
+			if (game_time_slicing_allowed && !tick_was_in_flight && !tick_slices_in_flight() &&
+				!game_time_globals->paused &&
+				(game_connection() == _game_connection_local ||
+					game_connection() == _game_connection_network_server) && tick_slices_lead() > 0.0 &&
+				1.f / ticks_per_second - game_time_globals->leftover_dt < tick_slices_lead() + time_delta_sec)
+			{
+				tick_slices_tick_ahead();
 			}
 		}
 
@@ -529,6 +630,7 @@ void game_time_update(
 		renderer does, and the ticks above have taken their snapshots already
 		(port/linux/game/render_interpolation.c). The frames of one tick share
 		the fraction, so what they hang off is drawn where they put it. */
+	frame:
 		render_interpolation_frame_begin();
 		profile_scope(game_time_game_frame_section, game_frame(game_time_get_speed()*time_delta_sec);)
 		render_interpolation_frame_end();
