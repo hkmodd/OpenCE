@@ -24,6 +24,7 @@ STRUCTURES = ['interpolation_quaternion', 'interpolation_rotation', 'interpolate
 FUNCTIONS = ['lerp', 'point_lerp', 'vector_length', 'basis_is_rotation', 'quaternion_from_basis',
              'basis_from_quaternion', 'rotation_from_matrix', 'matrix_blend_rotations', 'correction_significant',
              'correction_advance', 'correction_drawn', 'correction_add', 'distance_squared', 'poses_snap',
+             'spin_pause', 'record_blend', 'record_claim_and_blend', 'blend_objects', 'workers_begin', 'workers_end',
              'render_interpolation_tick', 'render_interpolation_frame_begin', 'render_interpolation_frame_end',
              'render_interpolation_object_node_matrices', 'render_interpolation_correct_object']
 
@@ -33,6 +34,7 @@ def generated(fault=None):
     config = structure(read('source/math/real_math.h'), 'real_matrix4x3') + '\n'
     config += 'typedef struct real_matrix4x3 real_matrix4x3;\n'
     config += '#define MAXIMUM_INTERPOLATED_NODES %d\n' % constant(source, 'MAXIMUM_INTERPOLATED_NODES')
+    config += '#define WORKER_RECORDS %d\n' % constant(source, 'WORKER_RECORDS')
     for name in DEFINES:
         config += '#define %s %sf\n' % (name, re.search(r'#define\s+' + name + r'\s+([\d.]+)f', source).group(1))
     config += '\n'.join(structure(source, name) for name in STRUCTURES) + '\n'
