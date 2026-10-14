@@ -27,8 +27,8 @@ NEGATIVE_CONTROLS = {
     "frame-end-does-not-wait": (("if (frames_ended >= frames)", "if (0)"), "one-frame-queued"),
     "frame-end-waits-for-the-latest": (("frame_ends[(frames_ended - frames) %", "frame_ends[(frames_ended - 1) %"),
                                        "two-frames-queued"),
-    "frame-end-waits-for-itself": (("render_thread_wait_for(frame_ends[(frames_ended - frames) % RENDER_THREAD_MAXIMUM_FRAMES]);",
-                                    "render_thread_wait_for(recorded);"), "one-frame-queued"),
+    "frame-end-waits-for-itself": (("position = frame_ends[(frames_ended - frames) % RENDER_THREAD_MAXIMUM_FRAMES];",
+                                    "position = recorded;"), "one-frame-queued"),
     "frame-not-handed-over": (("frames = RENDER_THREAD_MAXIMUM_FRAMES;\n\trender_thread_submit();",
                                "frames = RENDER_THREAD_MAXIMUM_FRAMES;"), "frame-handed-over"),
 }

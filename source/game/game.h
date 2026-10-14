@@ -196,6 +196,12 @@ void game_time_start(void);
 progress: the host's) */
 void game_time_set_distributed(long time);
 void game_time_update(real time_delta_sec);
+/* port: the main loop's, which may leave a tick under way over the frames
+after it (port/linux/game/tick_slices.c) */
+void game_time_update_sliced(real time_delta_sec);
+/* port: (the main loop's, at the end of each frame) a tick under way that
+the frame's game_time_update did not run is ended and taken now */
+void game_time_sliced_frame_end(void);
 
 /* ---------- prototypes/MAIN.C */
 

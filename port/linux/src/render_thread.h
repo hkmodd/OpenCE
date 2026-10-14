@@ -41,6 +41,9 @@ void render_thread_wait_for(unsigned long position);
 once no more than frames (1 to RENDER_THREAD_MAXIMUM_FRAMES) of the frames
 ended, this one with them, have yet to run */
 void render_thread_frame_end(unsigned long frames);
+/* work for the game's thread to do while render_thread_frame_end waits:
+called again while it returns nonzero and the wait is not over */
+void render_thread_set_idle_work(int (*work)(void));
 /* hands over what is queued; nonzero while any of it has not run */
 int render_thread_busy(void);
 /* notes that the latest command recorded reads the resources whose data

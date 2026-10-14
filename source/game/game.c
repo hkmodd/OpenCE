@@ -186,6 +186,7 @@ struct game_options;
 #include "profile_console.h" /* port: port/linux/game/profile_console.c */
 #endif
 #include "profile_sections.h" /* port: port/linux/include/profile_sections.h */
+#include "tick_slices.h" /* port: port/linux/game/tick_slices.c */
 
 /* network_game_globals.c's */
 boolean network_game_distributed_client(void);
@@ -355,6 +356,9 @@ void game_tick(
 	profile_scope(game_tick_remove_quitting_players_section, remove_quitting_players_from_game();)
 	profile_scope(game_tick_allegiance_section, game_allegiance_update();)
 	profile_scope(game_tick_units_section, units_update();)
+	/* port: a tick may hand back to the frames between its steps
+	(display.tick_slices) */
+	tick_slices_yield();
 	/* (the host's actors drive the host's units, which a client of the
 	distributed netcode has from the host: its own would fight the host's
 	positions, and could place objects of their own) */
@@ -362,12 +366,14 @@ void game_tick(
 		profile_scope(game_tick_ai_section, ai_update();)
 	else
 		profile_scope(game_tick_actors_drive_section, network_actors_drive();)
+	tick_slices_yield(); /* port */
 	profile_scope(game_tick_players_before_section, players_update_before_game();)
 
 	seconds_per_tick = game_globals->players_are_double_speed
 		? 1.0f / (2 * TICKS_PER_SECOND)
 		: 1.0f / TICKS_PER_SECOND;
 	profile_scope(game_tick_effects_section, effects_update(seconds_per_tick);)
+	tick_slices_yield(); /* port */
 	/* An antenna's chain is a simulation of the Xbox's own step, an update a
 	tick: stepped a frame at a time, its springs, its carry and its points'
 	physics act against the frames' own movement of it, and a vehicle at
@@ -387,7 +393,9 @@ void game_tick(
 	if (!(network_game_distributed_client() && network_coop_active()))
 		profile_scope(game_tick_hs_section, hs_update();)
 	profile_scope(game_tick_recorded_animations_section, recorded_animations_update();)
+	tick_slices_yield(); /* port */
 	profile_scope(game_tick_objects_section, objects_update();)
+	tick_slices_yield(); /* port */
 	profile_scope(game_tick_players_after_section, players_update_after_game();)
 	profile_scope(game_tick_hud_section, hud_update();)
 	profile_scope(game_tick_player_effect_section, player_effect_update();)
@@ -906,6 +914,8 @@ void game_precache_new_map(
 void game_dispose_from_old_map(
 	void)
 {
+	/* port: a tick under way ended first (display.tick_slices) */
+	tick_slices_finish();
 	rasterizer_dispose_from_old_map();
 	game_state_dispose_from_old_map();
 	cheats_dispose_from_old_map();

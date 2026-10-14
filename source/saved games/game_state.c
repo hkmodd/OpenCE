@@ -122,6 +122,7 @@ symbols in this file:
 #include "lruv_cache.h"
 #include "memory_pool.h"
 #include "cluster_partitions.h"
+#include "tick_slices.h" /* port: port/linux/game/tick_slices.c */
 /* port: object_bounds_cache.c's and collision_sphere_memo.c's */
 void object_bounds_cache_invalidate(void);
 void collision_sphere_memo_invalidate(void);
@@ -356,6 +357,8 @@ void game_state_port_restamp_revert_time(
 void game_state_revert(
 	void)
 {
+	/* port: a tick under way ended first (display.tick_slices) */
+	tick_slices_finish();
 	if (!game_state_globals.saved_game_valid && !recover_saved_games_hack)
 	{
 		main_reset_map();
@@ -1025,6 +1028,8 @@ void game_state_load_core(
 {
 	struct game_state_header header;
 
+	/* port: a tick under way ended first (display.tick_slices) */
+	tick_slices_finish();
 	if (game_state_read_core_header(name, &header, sizeof(header))
 		&& game_state_header_valid(&header, TRUE))
 	{

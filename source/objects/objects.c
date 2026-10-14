@@ -53,6 +53,7 @@ OBJECTS.C
 #include "sound/game_sound.h"
 #include "structures/structure_bsp_definitions.h"
 #include "units/units.h"
+#include "tick_slices.h" /* port: port/linux/game/tick_slices.c */
 /* port: object_bounds_cache.c's */
 void object_bounds_cache_update(long object_index, real_point3d const *center, real radius);
 /* port: port/linux/game/first_person_legs.c's */
@@ -4519,6 +4520,9 @@ void objects_update(
 					unit_get(object_index)->unit.player_index!=NONE)
 				{
 					object_update(object_index);
+					/* port: a tick may hand back to the frames between
+					objects (display.tick_slices) */
+					tick_slices_yield();
 				}
 			}
 		}

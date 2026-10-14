@@ -463,8 +463,9 @@ def generate_android_build(n: Writer, sln: Any) -> None:
         f"-I{SDL_DIR}/include", f"-I{gl_include}", *libc_includes, f"-idirafter {XDK_INCLUDE}",
     ])
     guest_host_only = {"memory_watch.c"}  # replaced by guest_memory_watch.c
+    guest_posix = {"posix_fiber.c"}  # its stand-ins: the guest has no second stack
     for source in sorted((LINUX_DIR / "src").glob("*.c")):
-        if source.name.startswith("posix_") or source.name in guest_host_only:
+        if (source.name.startswith("posix_") and source.name not in guest_posix) or source.name in guest_host_only:
             continue
         objects.append(guest_object(source, platform_cflags))
     # the high-res HUD's textures (port/assets/hud; port/linux/src/hud_hires.c)
