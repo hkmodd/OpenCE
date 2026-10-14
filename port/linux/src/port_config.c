@@ -180,6 +180,10 @@ static const struct config_setting config_settings[] =
 		_platform_all,
 		"The size the objects' shadows are drawn at, in pixels each way: 128 as\n"
 		"on the Xbox, or 256, 512 or 1024 for smoother edges, as soft." },
+	{ "display.shader_prewarm", _config_boolean, "true", "HALO_SHADER_PREWARM", _environment_value, _platform_all,
+		"Write down the shaders each map draws with (the data root's shaders\n"
+		"folder) and compile them as the map next loads, not at their first\n"
+		"draw, which can hold a frame up in the middle of a game." },
 	{ "display.menus", _config_string, "\"pc\"", "HALO_MENUS", _environment_value, _platform_all,
 		"The menus: \"pc\" for the PC version's main menu (port/assets/menus,\n"
 		"and a menus folder here for your own), \"xbox\" for the Xbox's." },
