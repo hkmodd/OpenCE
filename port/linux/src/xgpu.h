@@ -62,6 +62,21 @@ written */
 GLuint xgpu_compile_shader(GLenum type, const char *code, const char *what);
 GLuint xgpu_link_program(GLuint vertex_shader, GLuint fragment_shader, const char *what);
 
+/* ---------- the device's shaders (xgpu_shaders.c) */
+
+/* a shader compiled from source, once for each text (source is taken),
+or 0 */
+GLuint xgpu_shader_get(GLenum type, char *source, const char *what);
+/* a program of the two linked or used: written down for the map loaded,
+the first time since it loaded (serial is the program's own, 0 at first) */
+void xgpu_shaders_linked(GLuint vertex_shader, GLuint fragment_shader, unsigned long *serial);
+/* a map has loaded (map_name: its cache file header's, at most 32 characters):
+the programs written down for it are linked ahead, with
+xgpu_program_prewarm (d3d8_gl.c), and those it uses that are not will be
+added (display.shader_prewarm) */
+void xgpu_shaders_prewarm(const char *map_name);
+void xgpu_program_prewarm(GLuint vertex_shader, GLuint fragment_shader);
+
 /* ---------- generated source text */
 
 struct xgpu_text
