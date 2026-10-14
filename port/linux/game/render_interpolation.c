@@ -107,6 +107,13 @@ struct interpolated_object
 	boolean has_previous;
 	byte latest; /* which snapshot is the latest */
 	long blended_frame;
+	/* the two snapshots compared, once a tick: alike (an object at rest),
+	or too far apart to blend; and the blend kept, the latest snapshot as
+	it is, for every frame until the next tick */
+	boolean poses_compared;
+	boolean poses_alike;
+	boolean poses_snap;
+	boolean blend_kept;
 	/* where it is drawn from where it is: a correction fading, and those
 	since the last tick, drawn whole until the next begins to fade them */
 	real_vector3d correction;
@@ -382,6 +389,31 @@ static real distance_squared(real_point3d const *a, real_point3d const *b)
 	return x * x + y * y + z * z;
 }
 
+/* the latest snapshot not blended to from the previous: the object moved
+further than a tick allows, or a node moved further in the root's frame (the
+two snapshots are different poses, not one moving). (So written that a
+position not a number snaps.) */
+static boolean poses_snap(real_matrix4x3 const *previous, real_matrix4x3 const *latest, short node_count)
+{
+	short node_index;
+
+	if (!(distance_squared(&previous[0].position, &latest[0].position) <=
+		OBJECT_SNAP_DISTANCE * OBJECT_SNAP_DISTANCE))
+	{
+		return TRUE;
+	}
+	for (node_index = 1; node_index < node_count; node_index++)
+	{
+		real_point3d previous_local, latest_local;
+
+		matrix4x3_inverse_transform_point(&previous[0], &previous[node_index].position, &previous_local);
+		matrix4x3_inverse_transform_point(&latest[0], &latest[node_index].position, &latest_local);
+		if (!(distance_squared(&previous_local, &latest_local) <= NODE_SNAP_DISTANCE * NODE_SNAP_DISTANCE))
+			return TRUE;
+	}
+	return FALSE;
+}
+
 /* ---------- ticks */
 
 void render_interpolation_tick(void)
@@ -475,6 +507,8 @@ void render_interpolation_tick(void)
 		record->tick = interpolation_tick;
 		record->has_previous = continuing;
 		record->blended_frame = NONE;
+		record->poses_compared = FALSE;
+		record->blend_kept = FALSE;
 	}
 }
 
@@ -529,28 +563,30 @@ real_matrix4x3 *render_interpolation_object_node_matrices(long object_index)
 	record = &interpolated_objects[absolute_index];
 	if (record->object_index != object_index || record->tick != interpolation_tick || !record->has_previous)
 		return NULL;
-	if (record->blended_frame != interpolation_frame)
+	if (record->blended_frame != interpolation_frame && !record->blend_kept)
 	{
 		real_matrix4x3 const *previous = record->nodes + (record->latest ^ 1) * record->node_capacity;
 		real_matrix4x3 const *latest = record->nodes + record->latest * record->node_capacity;
 		real_matrix4x3 *blended = record->nodes + 2 * record->node_capacity;
 		short node_index;
-		/* (so written that a position not a number snaps) */
-		boolean snap = !(distance_squared(&previous[0].position, &latest[0].position) <=
-			OBJECT_SNAP_DISTANCE * OBJECT_SNAP_DISTANCE);
+		boolean correcting =
+			correction_significant(&record->correction) || correction_significant(&record->correction_pending);
 
-		/* a node moved further in the root's frame than a tick allows: the
-		two snapshots are different poses, not one moving (so written that
-		a position not a number snaps) */
-		for (node_index = 1; !snap && node_index < record->node_count; node_index++)
+		/* (once a tick, not every frame: a correction moves both snapshots
+		alike, which changes neither answer) */
+		if (!record->poses_compared)
 		{
-			real_point3d previous_local, latest_local;
-
-			matrix4x3_inverse_transform_point(&previous[0], &previous[node_index].position, &previous_local);
-			matrix4x3_inverse_transform_point(&latest[0], &latest[node_index].position, &latest_local);
-			snap = !(distance_squared(&previous_local, &latest_local) <= NODE_SNAP_DISTANCE * NODE_SNAP_DISTANCE);
+			record->poses_alike = memcmp(previous, latest, record->node_count * sizeof(real_matrix4x3)) == 0;
+			record->poses_snap = !record->poses_alike && poses_snap(previous, latest, record->node_count);
+			record->poses_compared = TRUE;
 		}
-		if (!snap)
+		if (record->poses_alike || record->poses_snap)
+		{
+			memcpy(blended, latest, record->node_count * sizeof(real_matrix4x3));
+			/* (the same every frame of the tick, unless a correction fades) */
+			record->blend_kept = !correcting;
+		}
+		else
 		{
 			struct interpolation_rotation *previous_rotations =
 				record->rotations + (record->latest ^ 1) * record->node_capacity;
@@ -579,9 +615,7 @@ real_matrix4x3 *render_interpolation_object_node_matrices(long object_index)
 					&latest_rotations[node_index], interpolation_fraction, &blended[node_index]);
 			}
 		}
-		if (snap)
-			memcpy(blended, latest, record->node_count * sizeof(real_matrix4x3));
-		if (correction_significant(&record->correction) || correction_significant(&record->correction_pending))
+		if (correcting)
 		{
 			real_vector3d drawn;
 
@@ -636,6 +670,7 @@ void render_interpolation_correct_object(long object_index, real_vector3d const 
 		}
 		correction_add(&record->correction, &record->correction_pending, offset);
 		record->blended_frame = NONE;
+		record->blend_kept = FALSE;
 	}
 	/* a local player's unit (by itself, or with what it rides): its
 	first-person view, which the observer poses from it, glides with it */
