@@ -20,8 +20,8 @@ NEGATIVE_CONTROLS = {
                                     "if ((long)(recorded - position) >= 0)"), "runs-in-order-across-turns"),
     "call-does-not-wait": (("memcpy(copy, payload, size);\n\trender_thread_submit();\n\trender_thread_wait();",
                             "memcpy(copy, payload, size);\n\trender_thread_submit();"), "call-returns-once-run"),
-    "busy-from-what-has-run": (("busy_until[busy_slot(data)] = recorded;",
-                                "busy_until[busy_slot(data)] = reader_side.completed;"), "resource-busy-until-read"),
+    "busy-from-what-has-run": (("busy_until[busy_slot(data[index])] = recorded;",
+                                "busy_until[busy_slot(data[index])] = reader_side.completed;"), "resource-busy-until-read"),
 }
 
 

@@ -37,9 +37,10 @@ unsigned long render_thread_position(void);
 void render_thread_wait_for(unsigned long position);
 /* hands over what is queued; nonzero while any of it has not run */
 int render_thread_busy(void);
-/* notes that the latest command recorded reads the resource whose data is
-at that address; a resource is busy until the render thread has run it */
-void render_thread_mark_busy(unsigned long data);
+/* notes that the latest command recorded reads the resources whose data
+is at those addresses (zero for none); a resource is busy until the render
+thread has run it */
+void render_thread_mark_busy(unsigned long const *data, int count);
 int render_thread_resource_busy(unsigned long data);
 void render_thread_wait_resource(unsigned long data);
 

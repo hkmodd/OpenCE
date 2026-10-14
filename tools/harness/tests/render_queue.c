@@ -164,9 +164,10 @@ int main(int argc, char **argv)
 	else if (!strcmp(name, "resource-busy-until-read"))
 	{
 		pthread_t opener;
+		unsigned long data[3] = { 0, 0x10000, 0 };
 
 		render_thread_record(gate_command, 0);
-		render_thread_mark_busy(0x10000);
+		render_thread_mark_busy(data, 3);
 		CHECK(render_thread_resource_busy(0x10000), "a resource a queued command reads is not busy");
 		CHECK(!render_thread_resource_busy(0x20000), "a resource no command reads is busy");
 		CHECK(!__atomic_load_n(&gate_passed, __ATOMIC_ACQUIRE), "the command ran with its gate shut");
