@@ -402,6 +402,7 @@ symbols in this file:
 #include "tag_files/files.h"
 #include "custom_edition_cache.h" /* port: custom_edition_level_name */
 #include "view_fov.h" /* port: display.fov, before the projection and culling */
+#include "tick_slices.h" /* port: port/linux/game/tick_slices.c */
 
 #if defined(HALO_WINDOWS) || defined(HALO_ANDROID) || defined(__linux__)
 #define HALO_NATIVE_BUILD_INFO 1
@@ -3413,7 +3414,12 @@ static boolean main_loop_iteration(
 	while (TRUE)
 #endif
 	{
-		if (!game_in_editor())
+		/* port: none of these while a tick is under way (display.tick_slices):
+		they wait for the frame it ends on */
+		if (tick_slices_in_flight())
+		{
+		}
+		else if (!game_in_editor())
 		{
 			if (main_globals.switch_to_structure_bsp_index!=NONE)
 			{
@@ -3516,14 +3522,23 @@ static boolean main_loop_iteration(
 		{
 			render_frame = TRUE;
 
-			/* automated system link tests (port/linux/game/network_test.c) */
-			network_test_update(main_globals.main_menu_scenario_loaded, main_globals.seconds_elapsed);
+			/* port: while a tick is under way, nothing of the network's reaches
+			the game: what the machines send waits for the frame it ends on
+			(display.tick_slices) */
+			if (!tick_slices_in_flight())
+			{
+				/* automated system link tests (port/linux/game/network_test.c) */
+				network_test_update(main_globals.main_menu_scenario_loaded, main_globals.seconds_elapsed);
+			}
 			/* port: voice chat, in the lobby and in game (port/linux/game/network_voice.c) */
 			network_voice_update();
-			/* port: map sharing, in the lobby and in game (port/linux/game/map_share.c) */
-			map_share_update();
+			if (!tick_slices_in_flight())
+			{
+				/* port: map sharing, in the lobby and in game (port/linux/game/map_share.c) */
+				map_share_update();
+			}
 			profile_scope_enter(main_network_start_frame_section)
-			connection = main_globals.connection;
+			connection = tick_slices_in_flight() ? _game_connection_local : main_globals.connection; /* port */
 			if (connection==_game_connection_network_client)
 			{
 				if (!network_game_client_start_frame())
@@ -3585,7 +3600,7 @@ static boolean main_loop_iteration(
 					cheats_update();
 					player_control_update((real)main_globals.halt_time_scale*main_globals.seconds_elapsed);
 
-					connection = main_globals.connection;
+					connection = tick_slices_in_flight() ? _game_connection_local : main_globals.connection; /* port */
 					profile_scope_enter(main_network_end_frame_section)
 					if (connection>_game_connection_local && connection<=_game_connection_network_server && !network_game_client_end_frame())
 					{
@@ -3595,7 +3610,7 @@ static boolean main_loop_iteration(
 					profile_scope_exit(main_network_end_frame_section)
 
 					profile_scope(main_game_time_update_section,
-						game_time_update((real)main_globals.halt_time_scale*main_globals.seconds_elapsed);)
+						game_time_update_sliced((real)main_globals.halt_time_scale*main_globals.seconds_elapsed);) /* port: display.tick_slices */
 
 					render_frame = main_globals.main_menu_scenario_loaded ||
 						(main_globals.halt_time_scale &&
@@ -3614,7 +3629,8 @@ static boolean main_loop_iteration(
 					profile_scope_exit(main_non_deterministic_update_section)
 				}
 
-				if (main_globals.saving_map)
+				/* port: not while a tick is under way (display.tick_slices) */
+				if (main_globals.saving_map && !tick_slices_in_flight())
 				{
 					main_save_map_private();
 				}
@@ -3635,6 +3651,8 @@ static boolean main_loop_iteration(
 				profile_render_end();
 			}
 
+			/* port: display.tick_slices */
+			game_time_sliced_frame_end();
 			profile_scope(main_throttle_section, main_rasterizer_throttle();)
 
 			if (render_frame && !debug_no_drawing)
