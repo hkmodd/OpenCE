@@ -25,6 +25,15 @@ and returns once it has run */
 void render_thread_call(render_thread_command command, const void *payload, unsigned long size);
 /* nonzero while the render thread runs */
 int render_thread_running(void);
+/* (a command, on the render thread) holds back the position published as
+run at the command's own, so that what it and the commands after it read
+stays busy, until release lets go of what they left to do. release is
+called before a command that keeps returns zero for, when the game's
+thread waits for a position past the hold, and when nothing more is queued;
+release, or the renderer when it has done the work itself, calls
+render_thread_release. */
+void render_thread_hold(int (*keeps)(render_thread_command), void (*release)(void));
+void render_thread_release(void);
 
 /* The rest do nothing (or answer as for an idle queue) unless the render
 thread runs and the caller is the thread that queues. */
