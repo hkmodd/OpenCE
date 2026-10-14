@@ -138,6 +138,8 @@ symbols in this file:
 #include "custom_edition_cache.h" /* port: port/linux/game/custom_edition_cache.c */
 #include "cache_file_formats.h" /* port: CUSTOM_EDITION_TAG_CACHE_BYTES */
 #include "map_share.h" /* port: port/linux/game/map_share.c */
+/* port: port/linux/game/collision_sphere_memo.c */
+void collision_sphere_memo_invalidate(void);
 
 /* ---------- constants */
 
@@ -1481,6 +1483,9 @@ void scenario_structure_bsp_unload(
 		tag_instance->group_tag==STRUCTURE_BSP_TAG);
 	tag_instance->base_address = NULL;
 	cache_file_globals.structure_bsp_header = NULL;
+	/* port: (the answers about it forgotten: another bsp may be read where
+	it was) */
+	collision_sphere_memo_invalidate();
 
 	return;
 }
