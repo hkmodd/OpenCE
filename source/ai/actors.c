@@ -318,6 +318,7 @@ symbols in this file:
 #include "units/vehicle_definitions.h"
 #include "units/vehicles.h"
 #include "networking/network_game_globals.h"
+#include "tick_slices.h" /* port: port/linux/game/tick_slices.c */
 
 /* ---------- constants */
 
@@ -4260,6 +4261,9 @@ void actors_update(
 		else if (actor->state.mode > _actor_mode_braindead)
 		{
 			actor_update(iterator.index);
+			/* port: a tick may hand back to the frames between actors
+			(display.tick_slices) */
+			tick_slices_yield();
 		}
 	}
 

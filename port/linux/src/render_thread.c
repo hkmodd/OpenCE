@@ -86,6 +86,8 @@ static unsigned long busy_until[BUSY_SLOTS];
 ended */
 static unsigned long frame_ends[RENDER_THREAD_MAXIMUM_FRAMES];
 static unsigned long frames_ended;
+/* render_thread_set_idle_work */
+static int (*idle_work)(void);
 
 static void spin_pause(void)
 {
@@ -319,6 +321,11 @@ void render_thread_wait_for(unsigned long position)
 	wait_for_reader(position);
 }
 
+void render_thread_set_idle_work(int (*work)(void))
+{
+	idle_work = work;
+}
+
 void render_thread_frame_end(unsigned long frames)
 {
 	if (frames < 1)
@@ -328,7 +335,19 @@ void render_thread_frame_end(unsigned long frames)
 	render_thread_submit();
 	/* the frame that many before this one must have run */
 	if (frames_ended >= frames)
-		render_thread_wait_for(frame_ends[(frames_ended - frames) % RENDER_THREAD_MAXIMUM_FRAMES]);
+	{
+		unsigned long position = frame_ends[(frames_ended - frames) % RENDER_THREAD_MAXIMUM_FRAMES];
+
+		/* the time until then the game's own */
+		if (idle_work && writing())
+		{
+			while (!reached(position, __ATOMIC_ACQUIRE) && idle_work())
+			{
+			}
+			render_thread_submit();
+		}
+		render_thread_wait_for(position);
+	}
 	frame_ends[frames_ended % RENDER_THREAD_MAXIMUM_FRAMES] = recorded;
 	frames_ended++;
 }
