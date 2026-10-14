@@ -8317,12 +8317,23 @@ static void present_command(void *unused)
 	run_present_draw();
 }
 
+/* display.frames_queued (1 or 2); read again when a setting changes */
+static unsigned long frames_queued(void)
+{
+	static unsigned long read_at = (unsigned long)-1;
+	static long frames;
+
+	if (read_at != config_changes())
+	{
+		read_at = config_changes();
+		frames = config_integer("display.frames_queued");
+	}
+	return frames < 1 ? 1 : (unsigned long)frames;
+}
+
 void WINAPI D3DDevice_Present(CONST RECT *source_rectangle, CONST RECT *destination_rectangle,
 	void *unused, void *unused2)
 {
-	/* (with the render thread) the queue's position after the latest frame */
-	static unsigned long frame_queued;
-
 	(void)source_rectangle;
 	(void)destination_rectangle;
 	(void)unused;
@@ -8333,11 +8344,12 @@ void WINAPI D3DDevice_Present(CONST RECT *source_rectangle, CONST RECT *destinat
 		return;
 	}
 	render_thread_record(present_command, 0);
-	render_thread_submit();
 	/* the game makes the next frame while the render thread draws this
-	one, but no more: a frame queued at most */
-	render_thread_wait_for(frame_queued);
-	frame_queued = render_thread_position();
+	one, but no more: a frame queued at most, or two with
+	display.frames_queued, which carry a frame of the game's longer than a
+	refresh (a tick's, in a busy scene) while the render thread draws the
+	one before */
+	render_thread_frame_end(frames_queued());
 	game_device.frame++;
 	present_pace();
 }
