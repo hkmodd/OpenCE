@@ -3838,15 +3838,28 @@ void xgpu_program_prewarm(GLuint vertex_shader, GLuint fragment_shader)
 	program_get(vertex_shader, fragment_shader);
 }
 
+static void shaders_tags_loaded_command(void *payload)
+{
+	program_last = NULL;
+	xgpu_shaders_prewarm(payload);
+}
+
 /* a map's tags have loaded (cache_file_load): the programs it drew with
 before are linked now (xgpu_shaders.c); the first draw with each afterwards
 is written down for this map */
 void xgpu_shaders_tags_loaded(const char *map_name)
 {
-	if (!device.gl_ready)
+	char name[32 + 1];
+
+	if (!device.gl_ready || !map_name)
 		return;
-	program_last = NULL;
-	xgpu_shaders_prewarm(map_name);
+	/* (with display.render_thread, on the thread with the GL context; a
+	cache file header's name need not end, so at most 32 characters) */
+	snprintf(name, sizeof(name), "%.32s", map_name);
+	if (render_thread_elsewhere())
+		render_thread_call(shaders_tags_loaded_command, name, (unsigned long)strlen(name) + 1);
+	else
+		shaders_tags_loaded_command(name);
 }
 
 /* ---------- per-draw state */
