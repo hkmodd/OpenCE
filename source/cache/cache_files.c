@@ -146,6 +146,8 @@ void xgpu_static_buffers_remove(const void *buffers, long count, unsigned long s
 void xgpu_static_range_add(const void *start, unsigned long size, int indices);
 void xgpu_static_range_remove(const void *start, int indices);
 #endif
+/* port: port/linux/game/collision_sphere_memo.c */
+void collision_sphere_memo_invalidate(void);
 
 /* ---------- constants */
 
@@ -1557,6 +1559,9 @@ void scenario_structure_bsp_unload(
 		tag_instance->group_tag==STRUCTURE_BSP_TAG);
 	tag_instance->base_address = NULL;
 	cache_file_globals.structure_bsp_header = NULL;
+	/* port: (the answers about it forgotten: another bsp may be read where
+	it was) */
+	collision_sphere_memo_invalidate();
 
 	return;
 }

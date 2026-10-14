@@ -124,8 +124,9 @@ symbols in this file:
 #include "lruv_cache.h"
 #include "memory_pool.h"
 #include "cluster_partitions.h"
-/* port: object_bounds_cache.c's */
+/* port: object_bounds_cache.c's and collision_sphere_memo.c's */
 void object_bounds_cache_invalidate(void);
+void collision_sphere_memo_invalidate(void);
 
 void platform_log(const char *format, ...);
 
@@ -198,6 +199,8 @@ static game_state_before_load_proc before_load_procs[] =
 	/* port: (and the inputs their functions were computed from are not
 	theirs: objects.c's object_function_inputs) */
 	object_function_inputs_forget,
+	/* port: (and the breakable surfaces: collision_sphere_memo.c) */
+	collision_sphere_memo_invalidate,
 };
 
 static game_state_after_load_proc after_load_procs[] =
@@ -297,11 +300,13 @@ void game_state_initialize_for_new_map(
 {
 	const char *name;
 
-	/* port: (the objects are put back: object_bounds_cache.c) */
+	/* port: (the objects are put back: object_bounds_cache.c; and
+	another map's bsps loaded: collision_sphere_memo.c) */
 	object_bounds_cache_invalidate();
 	/* port: (and the inputs their functions were computed from are not
 	theirs: objects.c's object_function_inputs) */
 	object_function_inputs_forget();
+	collision_sphere_memo_invalidate();
 	game_state_note_event("map start");
 	game_state_data_arrays_new_map();
 

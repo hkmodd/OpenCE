@@ -331,6 +331,11 @@ void render_debug_collision_edge(
 	long edge_index,
 	real_matrix4x3 const *matrix,
 	real_argb_color const *color);
+/* port: collision_sphere_memo.c's */
+boolean collision_sphere_memo_find(void const *bsp, short breakable_surface_count, byte const *breakable_surface_flags,
+	real_point3d const *center, real radius, struct collision_bsp_test_sphere_result *result);
+void collision_sphere_memo_store(void const *bsp, short breakable_surface_count, byte const *breakable_surface_flags,
+	real_point3d const *center, real radius, struct collision_bsp_test_sphere_result const *result);
 
 /* ---------- globals */
 
@@ -1209,7 +1214,13 @@ boolean collision_bsp_test_sphere(
 	result->edge_count = 0;
 	result->vertex_count = 0;
 
-	bsp3d_test_sphere_recursive(&context, 0, 0);
+	/* port: (a question asked before, to the bit, answered as before:
+	collision_sphere_memo.c) */
+	if (!collision_sphere_memo_find(bsp, breakable_surface_count, breakable_surface_flags, center, radius, result))
+	{
+		bsp3d_test_sphere_recursive(&context, 0, 0);
+		collision_sphere_memo_store(bsp, breakable_surface_count, breakable_surface_flags, center, radius, result);
+	}
 	collision_log_end_time(
 		collision_function,
 		collision_bsp_usage_times.sphere.QuadPart);
