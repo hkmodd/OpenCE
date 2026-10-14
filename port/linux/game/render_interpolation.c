@@ -45,7 +45,13 @@ with their unit, and with what it rides.
 
 /* port/linux/src/port_config.c */
 int config_boolean(const char *name);
+long config_integer(const char *name);
 unsigned long config_changes(void);
+
+/* port/linux/src/worker_pool.c */
+int worker_pool_start(int count);
+void worker_pool_begin(void (*job)(void));
+void worker_pool_end(void);
 
 #include <math.h>
 #include <stdlib.h>
@@ -56,6 +62,8 @@ unsigned long config_changes(void);
 /* (by absolute index: the object array's all) */
 #define MAXIMUM_INTERPOLATED_OBJECTS MAXIMUM_OBJECTS_PER_MAP
 #define MAXIMUM_INTERPOLATED_NODES 64
+/* records a worker takes at a time (display.interpolation_threads) */
+#define WORKER_RECORDS 16
 
 /* world units (10 feet each) a node may move in one tick before it snaps:
 well beyond any vehicle, short of any teleport */
@@ -106,6 +114,9 @@ struct interpolated_object
 	short node_capacity;
 	boolean has_previous;
 	byte latest; /* which snapshot is the latest */
+	/* the frame whose blend a thread (the game's or a worker) has begun,
+	and the frame whose blend it has finished */
+	long claimed_frame;
 	long blended_frame;
 	/* the two snapshots compared, once a tick: alike (an object at rest),
 	or too far apart to blend; and the blend kept, the latest snapshot as
@@ -152,10 +163,19 @@ struct interpolated_first_person
 static struct interpolated_object *interpolated_objects;
 static struct interpolated_camera interpolated_cameras[MAXIMUM_LOCAL_PLAYERS];
 static struct interpolated_first_person interpolated_first_person[MAXIMUM_LOCAL_PLAYERS];
+/* the records in use end before this */
+static long interpolated_objects_used;
 static long interpolation_tick;
 static long interpolation_frame;
 static boolean interpolation_rendering;
 static real interpolation_fraction = 1.0f;
+/* the worker threads started (NONE: not yet asked for), and the next
+record they blend */
+static long interpolation_workers = NONE;
+static long worker_next_record;
+
+static void workers_begin(void);
+static void workers_end(void);
 
 /* ---------- blending */
 
@@ -420,8 +440,10 @@ void render_interpolation_tick(void)
 {
 	struct object_iterator iterator;
 	struct object_datum *object;
-	long previous_tick = interpolation_tick++;
+	long previous_tick;
 
+	workers_end();
+	previous_tick = interpolation_tick++;
 	if (!halo_interpolation_enabled())
 		return;
 	/* the cameras' corrections a tick on, as the objects' (below) */
@@ -447,6 +469,7 @@ void render_interpolation_tick(void)
 			interpolated_objects[index].object_index = NONE;
 	}
 
+	interpolated_objects_used = 0;
 	object_iterator_new(&iterator, _object_mask_all, 0);
 	while ((object = (struct object_datum *)object_iterator_next(&iterator)) != NULL)
 	{
@@ -457,6 +480,8 @@ void render_interpolation_tick(void)
 
 		if (absolute_index >= MAXIMUM_INTERPOLATED_OBJECTS)
 			continue;
+		if (absolute_index >= interpolated_objects_used)
+			interpolated_objects_used = absolute_index + 1;
 		record = &interpolated_objects[absolute_index];
 		if (node_count <= 0 || node_count > MAXIMUM_INTERPOLATED_NODES)
 		{
@@ -509,7 +534,11 @@ void render_interpolation_tick(void)
 		record->blended_frame = NONE;
 		record->poses_compared = FALSE;
 		record->blend_kept = FALSE;
+		record->claimed_frame = NONE;
 	}
+	/* the objects blended anew beside the game's thread, for the renderer's
+	frame (at game_frame's fraction: game_time.c) */
+	workers_begin();
 }
 
 /* a new map (game.c): its objects take the indices of the last one's, and
@@ -518,6 +547,7 @@ void render_interpolation_reset(void)
 {
 	long index;
 
+	workers_end();
 	if (interpolated_objects)
 	{
 		for (index = 0; index < MAXIMUM_INTERPOLATED_OBJECTS; index++)
@@ -533,11 +563,162 @@ void render_interpolation_reset(void)
 
 /* ---------- frames */
 
+static void spin_pause(void)
+{
+#if defined(__i386__) || defined(__x86_64__)
+	__builtin_ia32_pause();
+#endif
+}
+
+/* the record's nodes as drawn this frame */
+static void record_blend(struct interpolated_object *record)
+{
+	real_matrix4x3 const *previous = record->nodes + (record->latest ^ 1) * record->node_capacity;
+	real_matrix4x3 const *latest = record->nodes + record->latest * record->node_capacity;
+	real_matrix4x3 *blended = record->nodes + 2 * record->node_capacity;
+	short node_index;
+	boolean correcting =
+		correction_significant(&record->correction) || correction_significant(&record->correction_pending);
+
+	/* (once a tick, not every frame: a correction moves both snapshots
+	alike, which changes neither answer) */
+	if (!record->poses_compared)
+	{
+		record->poses_alike = memcmp(previous, latest, record->node_count * sizeof(real_matrix4x3)) == 0;
+		record->poses_snap = !record->poses_alike && poses_snap(previous, latest, record->node_count);
+		record->poses_compared = TRUE;
+	}
+	if (record->poses_alike || record->poses_snap)
+	{
+		memcpy(blended, latest, record->node_count * sizeof(real_matrix4x3));
+		/* (the same every frame of the tick, unless a correction fades) */
+		record->blend_kept = !correcting;
+	}
+	else
+	{
+		struct interpolation_rotation *previous_rotations =
+			record->rotations + (record->latest ^ 1) * record->node_capacity;
+		struct interpolation_rotation *latest_rotations =
+			record->rotations + record->latest * record->node_capacity;
+		short snapshot;
+
+		/* (each snapshot's rotations found once, not every frame: its
+		nodes' positions may move with a correction, their rotations
+		never) */
+		for (snapshot = 0; snapshot < 2; snapshot++)
+		{
+			if (!record->rotations_valid[snapshot])
+			{
+				real_matrix4x3 const *nodes = record->nodes + snapshot * record->node_capacity;
+				struct interpolation_rotation *rotations = record->rotations + snapshot * record->node_capacity;
+
+				for (node_index = 0; node_index < record->node_count; node_index++)
+					rotation_from_matrix(&nodes[node_index], &rotations[node_index]);
+				record->rotations_valid[snapshot] = TRUE;
+			}
+		}
+		for (node_index = 0; node_index < record->node_count; node_index++)
+		{
+			matrix_blend_rotations(&previous[node_index], &latest[node_index], &previous_rotations[node_index],
+				&latest_rotations[node_index], interpolation_fraction, &blended[node_index]);
+		}
+	}
+	if (correcting)
+	{
+		real_vector3d drawn;
+
+		correction_drawn(&record->correction, &record->correction_pending, &drawn);
+		for (node_index = 0; node_index < record->node_count; node_index++)
+		{
+			blended[node_index].position.x += drawn.i;
+			blended[node_index].position.y += drawn.j;
+			blended[node_index].position.z += drawn.k;
+		}
+	}
+}
+
+/* the record blended for this frame by whichever thread claims it first:
+TRUE when this one did */
+static boolean record_claim_and_blend(struct interpolated_object *record)
+{
+	long claimed = __atomic_load_n(&record->claimed_frame, __ATOMIC_RELAXED);
+
+	if (claimed == interpolation_frame ||
+		!__atomic_compare_exchange_n(&record->claimed_frame, &claimed, interpolation_frame, FALSE,
+			__ATOMIC_ACQUIRE, __ATOMIC_RELAXED))
+	{
+		return FALSE;
+	}
+	if (!record->blend_kept)
+		record_blend(record);
+	__atomic_store_n(&record->blended_frame, interpolation_frame, __ATOMIC_RELEASE);
+	return TRUE;
+}
+
+/* (the workers) every record that may be drawn this frame blended, a few
+at a time, before the game's thread asks for it */
+static void blend_objects(void)
+{
+	long index;
+
+	while ((index = __atomic_fetch_add(&worker_next_record, WORKER_RECORDS, __ATOMIC_RELAXED)) <
+		interpolated_objects_used)
+	{
+		long end = index + WORKER_RECORDS < interpolated_objects_used ?
+			index + WORKER_RECORDS : interpolated_objects_used;
+
+		for (; index < end; index++)
+		{
+			struct interpolated_object *record = &interpolated_objects[index];
+
+			if (record->object_index != NONE && record->tick == interpolation_tick && record->has_previous)
+				record_claim_and_blend(record);
+		}
+	}
+}
+
+/* the workers set to blend this frame's records (from frame_begin, and
+after a tick, for the frame drawn next) */
+static void workers_begin(void)
+{
+	if (interpolation_rendering && interpolation_workers > 0 && interpolated_objects)
+	{
+		worker_next_record = 0;
+		worker_pool_begin(blend_objects);
+	}
+}
+
+/* the workers back from blend_objects, before the records change: those
+left are not begun (the game's thread blends them, if they are drawn) */
+static void workers_end(void)
+{
+	if (interpolation_workers > 0)
+	{
+		__atomic_store_n(&worker_next_record, MAXIMUM_INTERPOLATED_OBJECTS, __ATOMIC_RELAXED);
+		worker_pool_end();
+	}
+}
+
 void render_interpolation_frame_begin(void)
 {
+	real fraction = game_time_get_tick_fraction();
+
 	interpolation_rendering = halo_interpolation_enabled();
+	/* a frame at the same fraction draws the same blends: game_frame's (the
+	effects on objects) and then the renderer's (a tick or a correction
+	since has its objects blended anew) */
+	if (fraction == interpolation_fraction)
+		return;
+	workers_end();
 	interpolation_frame++;
-	interpolation_fraction = game_time_get_tick_fraction();
+	interpolation_fraction = fraction;
+	if (interpolation_workers == NONE && interpolated_objects)
+	{
+		long count = config_integer("display.interpolation_threads");
+
+		interpolation_workers = count > 0 ? worker_pool_start((int)count) : 0;
+	}
+	workers_begin();
 }
 
 void render_interpolation_frame_end(void)
@@ -563,71 +744,11 @@ real_matrix4x3 *render_interpolation_object_node_matrices(long object_index)
 	record = &interpolated_objects[absolute_index];
 	if (record->object_index != object_index || record->tick != interpolation_tick || !record->has_previous)
 		return NULL;
-	if (record->blended_frame != interpolation_frame && !record->blend_kept)
+	/* (a worker has it in hand: its blend waited for) */
+	if (!record_claim_and_blend(record))
 	{
-		real_matrix4x3 const *previous = record->nodes + (record->latest ^ 1) * record->node_capacity;
-		real_matrix4x3 const *latest = record->nodes + record->latest * record->node_capacity;
-		real_matrix4x3 *blended = record->nodes + 2 * record->node_capacity;
-		short node_index;
-		boolean correcting =
-			correction_significant(&record->correction) || correction_significant(&record->correction_pending);
-
-		/* (once a tick, not every frame: a correction moves both snapshots
-		alike, which changes neither answer) */
-		if (!record->poses_compared)
-		{
-			record->poses_alike = memcmp(previous, latest, record->node_count * sizeof(real_matrix4x3)) == 0;
-			record->poses_snap = !record->poses_alike && poses_snap(previous, latest, record->node_count);
-			record->poses_compared = TRUE;
-		}
-		if (record->poses_alike || record->poses_snap)
-		{
-			memcpy(blended, latest, record->node_count * sizeof(real_matrix4x3));
-			/* (the same every frame of the tick, unless a correction fades) */
-			record->blend_kept = !correcting;
-		}
-		else
-		{
-			struct interpolation_rotation *previous_rotations =
-				record->rotations + (record->latest ^ 1) * record->node_capacity;
-			struct interpolation_rotation *latest_rotations =
-				record->rotations + record->latest * record->node_capacity;
-			short snapshot;
-
-			/* (each snapshot's rotations found once, not every frame: its
-			nodes' positions may move with a correction, their rotations
-			never) */
-			for (snapshot = 0; snapshot < 2; snapshot++)
-			{
-				if (!record->rotations_valid[snapshot])
-				{
-					real_matrix4x3 const *nodes = record->nodes + snapshot * record->node_capacity;
-					struct interpolation_rotation *rotations = record->rotations + snapshot * record->node_capacity;
-
-					for (node_index = 0; node_index < record->node_count; node_index++)
-						rotation_from_matrix(&nodes[node_index], &rotations[node_index]);
-					record->rotations_valid[snapshot] = TRUE;
-				}
-			}
-			for (node_index = 0; node_index < record->node_count; node_index++)
-			{
-				matrix_blend_rotations(&previous[node_index], &latest[node_index], &previous_rotations[node_index],
-					&latest_rotations[node_index], interpolation_fraction, &blended[node_index]);
-			}
-		}
-		if (correcting)
-		{
-			real_vector3d drawn;
-
-			correction_drawn(&record->correction, &record->correction_pending, &drawn);
-			for (node_index = 0; node_index < record->node_count; node_index++)
-			{
-				blended[node_index].position.x += drawn.i;
-				blended[node_index].position.y += drawn.j;
-				blended[node_index].position.z += drawn.k;
-			}
-		}
-		record->blended_frame = interpolation_frame;
+		while (__atomic_load_n(&record->blended_frame, __ATOMIC_ACQUIRE) != interpolation_frame)
+			spin_pause();
 	}
 	return record->nodes + 2 * record->node_capacity;
 }
@@ -642,6 +763,7 @@ void render_interpolation_correct_object(long object_index, real_vector3d const 
 	long child_index;
 	long absolute_index;
 
+	workers_end();
 	/* (so written that an offset not a number is none) */
 	if (!interpolated_objects || object_index == NONE ||
 		!(offset->i * offset->i + offset->j * offset->j + offset->k * offset->k <= OBJECT_SNAP_DISTANCE * OBJECT_SNAP_DISTANCE))
@@ -671,6 +793,7 @@ void render_interpolation_correct_object(long object_index, real_vector3d const 
 		correction_add(&record->correction, &record->correction_pending, offset);
 		record->blended_frame = NONE;
 		record->blend_kept = FALSE;
+		record->claimed_frame = NONE;
 	}
 	/* a local player's unit (by itself, or with what it rides): its
 	first-person view, which the observer poses from it, glides with it */
