@@ -531,10 +531,11 @@ struct program_entry
 	/* an instanced draw's (XGPU_INSTANCE_GLSL) */
 	GLint instance_first, instance_stride, instance_low, instance_span;
 
-	/* the vertex constants c[0..constant_count) the program uses; with
-	consecutive locations, a changed range is uploaded by itself */
+	/* the vertex constants c[0..constant_count) the program uses, and the
+	location of each c[i] once looked up (all ones: not yet), from which a
+	changed range is uploaded by itself */
 	unsigned long constant_count;
-	BOOL constants_consecutive;
+	GLint constant_locations[XGPU_VERTEX_CONSTANT_COUNT];
 	/* constants_serial at the program's last constant upload (constants_store) */
 	unsigned long long constants_serial;
 	/* draw_uniforms_serial when the uniforms below were brought up to date */
@@ -4227,6 +4228,19 @@ static GLuint fragment_shader_get(const struct nv2a_pixel_shader_key *key)
 	return entry->shader;
 }
 
+/* c[index]'s location in a program, looked up once */
+static GLint constant_location(struct program_entry *entry, unsigned long index)
+{
+	if (entry->constant_locations[index] < 0)
+	{
+		char name[16];
+
+		snprintf(name, sizeof(name), "c[%lu]", index);
+		entry->constant_locations[index] = glGetUniformLocation(entry->program, name);
+	}
+	return entry->constant_locations[index];
+}
+
 static struct program_entry *program_get(GLuint vertex_shader, GLuint fragment_shader)
 {
 	static struct program_entry *last;
@@ -4291,32 +4305,25 @@ static struct program_entry *program_get(GLuint vertex_shader, GLuint fragment_s
 	state_program(entry->program);
 	entry->constants = glGetUniformLocation(entry->program, "c");
 	entry->constant_count = XGPU_VERTEX_CONSTANT_COUNT;
+	memset(entry->constant_locations, 0xff, sizeof(entry->constant_locations));
 	if (entry->constants >= 0)
 	{
-		unsigned long index;
+		unsigned long low = 1, high = XGPU_VERTEX_CONSTANT_COUNT;
 
-		/* c[i] is usually at c's location plus i, and the compiler may
-		drop registers past the last one the program reads */
-		entry->constants_consecutive = TRUE;
-		for (index = 1; index < XGPU_VERTEX_CONSTANT_COUNT; index++)
+		/* the compiler may drop registers past the last one the program
+		reads: those it keeps are the ones below the first without a
+		location, found by halving */
+		entry->constant_locations[0] = entry->constants;
+		while (low < high)
 		{
-			char name[16];
-			GLint location;
+			unsigned long middle = (low + high) / 2;
 
-			snprintf(name, sizeof(name), "c[%lu]", index);
-			location = glGetUniformLocation(entry->program, name);
-			if (location < 0)
-			{
-				entry->constant_count = index;
-				break;
-			}
-			if (location != entry->constants + (GLint)index)
-			{
-				entry->constants_consecutive = FALSE;
-				entry->constant_count = XGPU_VERTEX_CONSTANT_COUNT;
-				break;
-			}
+			if (constant_location(entry, middle) < 0)
+				high = middle;
+			else
+				low = middle + 1;
 		}
+		entry->constant_count = low;
 	}
 	entry->viewport_scale = glGetUniformLocation(entry->program, "viewport_scale");
 	entry->viewport_offset = glGetUniformLocation(entry->program, "viewport_offset");
@@ -5402,13 +5409,10 @@ static struct program_entry *prepare_draw_as(BOOL immediate, BOOL instanced)
 				}
 			}
 		}
+		/* (the elements of an array from the one at a location on, wherever
+		the others are) */
 		if (first < entry->constant_count)
-		{
-			if (entry->constants_consecutive)
-				glUniform4fv(entry->constants + (GLint)first, (GLsizei)(last - first + 1), device.constants[first]);
-			else
-				glUniform4fv(entry->constants, XGPU_VERTEX_CONSTANT_COUNT, &device.constants[0][0]);
-		}
+			glUniform4fv(constant_location(entry, first), (GLsizei)(last - first + 1), device.constants[first]);
 		entry->constants_serial = constants_serial;
 		constants_checkpoint_serial = constants_serial;
 		constants_checkpoint_first = XGPU_VERTEX_CONSTANT_COUNT;
