@@ -89,6 +89,10 @@ symbols in this file:
 #include "cseries.h"
 #include "real_math.h"
 
+#if defined(__SSE__)
+#include <xmmintrin.h> /* port: matrix4x3_multiply */
+#endif
+
 /* ---------- constants */
 
 /* ---------- macros */
@@ -936,8 +940,39 @@ void matrix4x3_multiply(
 	real *result_elements = result->n[0];
 	real const *a_scale = &a->scale;
 
+#if defined(__SSE__)
 	{
-		/* the SSE block below: rows of b combine the rows of a, and the
+		/* port: the original's SSE block, as intrinsics. A row is x in the
+		low lane and y and z in the high two, as the original loaded them
+		(the second lane is zero), and each element is the same products
+		and sums, in the same order, as the loop below makes: the same
+		results. Everything is read before anything is written, so result
+		may be a or b. */
+		__m128 row0 = _mm_loadh_pi(_mm_load_ss(a_elements + 0), (__m64 const *)(a_elements + 1));
+		__m128 row1 = _mm_loadh_pi(_mm_load_ss(a_elements + 3), (__m64 const *)(a_elements + 4));
+		__m128 row2 = _mm_loadh_pi(_mm_load_ss(a_elements + 6), (__m64 const *)(a_elements + 7));
+		__m128 position = _mm_loadh_pi(_mm_load_ss(a_elements + 9), (__m64 const *)(a_elements + 10));
+		__m128 product[4];
+		long row;
+
+		for (row = 0; row < 4; row++)
+		{
+			product[row] = _mm_add_ps(
+				_mm_add_ps(
+					_mm_mul_ps(_mm_set1_ps(b_elements[row * 3 + 0]), row0),
+					_mm_mul_ps(_mm_set1_ps(b_elements[row * 3 + 1]), row1)),
+				_mm_mul_ps(_mm_set1_ps(b_elements[row * 3 + 2]), row2));
+		}
+		product[3] = _mm_add_ps(_mm_mul_ps(product[3], _mm_set1_ps(*a_scale)), position);
+		for (row = 0; row < 4; row++)
+		{
+			_mm_store_ss(result_elements + row * 3, product[row]);
+			_mm_storeh_pi((__m64 *)(result_elements + row * 3 + 1), product[row]);
+		}
+	}
+#else
+	{
+		/* the SSE block above: rows of b combine the rows of a, and the
 		position is scaled by a's scale before a's own is added */
 		real product[12];
 		long row, column;
@@ -958,6 +993,7 @@ void matrix4x3_multiply(
 		for (row = 0; row < 12; row++)
 			result_elements[row] = product[row];
 	}
+#endif
 
 	result->scale = a->scale * b->scale;
 
