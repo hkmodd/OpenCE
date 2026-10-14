@@ -538,6 +538,8 @@ struct program_entry
 	GLint constant_locations[XGPU_VERTEX_CONSTANT_COUNT];
 	/* constants_serial at the program's last constant upload (constants_store) */
 	unsigned long long constants_serial;
+	/* xgpu_shaders_linked's: the map it was last written down for */
+	unsigned long shaders_serial;
 	/* draw_uniforms_serial when the uniforms below were brought up to date */
 	unsigned long uniforms_serial;
 	/* what the program's other uniforms hold (all ones: unknown) */
@@ -862,6 +864,8 @@ static void program_cache_store(GLuint program, unsigned long long vertex_hash, 
 
 static struct fragment_entry *fragment_buckets[FRAGMENT_BUCKETS];
 static struct program_entry *program_buckets[PROGRAM_BUCKETS];
+/* the program last drawn with */
+static struct program_entry *program_last;
 
 /* ---------- render targets */
 
@@ -4154,8 +4158,6 @@ static GLuint vertex_shader_get(struct vertex_shader_object *program, BOOL immed
 			immediate ? 0 : device.vertex_shader->packed_mask, lit ? &program->lighting : NULL, instanced);
 
 		program->shaders_tried |= tried;
-		*shader = xgpu_compile_shader(GL_VERTEX_SHADER, source, "vertex");
-		shader_hash_set(*shader, source);
 		if (debug_settings.dump_shaders)
 		{
 			char path[512];
@@ -4169,7 +4171,7 @@ static GLuint vertex_shader_get(struct vertex_shader_object *program, BOOL immed
 				fclose(file);
 			}
 		}
-		free(source);
+		*shader = xgpu_shader_get(GL_VERTEX_SHADER, source, "vertex");
 	}
 	return *shader;
 }
@@ -4207,8 +4209,6 @@ static GLuint fragment_shader_get(const struct nv2a_pixel_shader_key *key)
 	entry->hash = hash;
 	entry->key = *key;
 	source = nv2a_pixel_shader_to_glsl(key);
-	entry->shader = xgpu_compile_shader(GL_FRAGMENT_SHADER, source, "pixel");
-	shader_hash_set(entry->shader, source);
 	if (debug_settings.dump_shaders)
 	{
 		char path[512];
@@ -4221,7 +4221,7 @@ static GLuint fragment_shader_get(const struct nv2a_pixel_shader_key *key)
 			fclose(file);
 		}
 	}
-	free(source);
+	entry->shader = xgpu_shader_get(GL_FRAGMENT_SHADER, source, "pixel");
 	entry->next = *bucket;
 	*bucket = entry;
 	recent[recent_next++ % RECENT_FRAGMENT_COUNT] = entry;
@@ -4243,21 +4243,22 @@ static GLint constant_location(struct program_entry *entry, unsigned long index)
 
 static struct program_entry *program_get(GLuint vertex_shader, GLuint fragment_shader)
 {
-	static struct program_entry *last;
 	unsigned long hash = (vertex_shader * 2654435761UL) ^ fragment_shader;
 	struct program_entry **bucket = &program_buckets[hash % PROGRAM_BUCKETS];
 	struct program_entry *entry;
 	int stage;
 
-	if (last && last->vertex_shader == vertex_shader && last->fragment_shader == fragment_shader)
-		return last;
+	if (program_last && program_last->vertex_shader == vertex_shader &&
+		program_last->fragment_shader == fragment_shader)
+		return program_last;
 	for (entry = *bucket; entry; entry = entry->next)
 	{
 		if (entry->vertex_shader == vertex_shader && entry->fragment_shader == fragment_shader)
 		{
 			if (!entry->program)
 				return NULL;
-			last = entry;
+			xgpu_shaders_linked(vertex_shader, fragment_shader, &entry->shaders_serial);
+			program_last = entry;
 			return entry;
 		}
 	}
@@ -4354,8 +4355,25 @@ static struct program_entry *program_get(GLuint vertex_shader, GLuint fragment_s
 		snprintf(name, sizeof(name), "tex%d", stage);
 		glUniform1i(glGetUniformLocation(entry->program, name), stage);
 	}
-	last = entry;
+	xgpu_shaders_linked(vertex_shader, fragment_shader, &entry->shaders_serial);
+	program_last = entry;
 	return entry;
+}
+
+void xgpu_program_prewarm(GLuint vertex_shader, GLuint fragment_shader)
+{
+	program_get(vertex_shader, fragment_shader);
+}
+
+/* a map's tags have loaded (cache_file_load): the programs it drew with
+before are linked now (xgpu_shaders.c); the first draw with each afterwards
+is written down for this map */
+void xgpu_shaders_tags_loaded(const char *map_name)
+{
+	if (!device.gl_ready)
+		return;
+	program_last = NULL;
+	xgpu_shaders_prewarm(map_name);
 }
 
 /* ---------- per-draw state */

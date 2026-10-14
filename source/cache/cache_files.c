@@ -1337,6 +1337,13 @@ long scenario_tags_load(
 
 				hud_hires_tags_loaded(cache_file_globals.tag_header->scenario_tag_index);
 			}
+			/* port: the programs the map drew with before, linked now, not at
+			their first draw (display.shader_prewarm: port/linux/src/d3d8_gl.c) */
+			{
+				extern void xgpu_shaders_tags_loaded(char const *map_name);
+
+				xgpu_shaders_tags_loaded(cache_file_globals.header.name);
+			}
 			/* port: the mods' sounds, bitmaps, text and models played over
 			the map's, last, over the menus' tags too, and with the high-res
 			HUD standing for the map's bitmaps, not a mod's (the main menu's
