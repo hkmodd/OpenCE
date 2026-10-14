@@ -560,6 +560,44 @@ boolean shader_type_is_valid_for_modifier(
 	return result;
 }
 
+/* port: the sine and cosine of the angles textures were turned by, remembered
+by the angle to the bit (a crowd's models turn their textures by the same few
+angles in a frame, and sin and cos are taken in double precision): the same
+values. An angle of zero, which has no entry, turns nothing. */
+enum
+{
+	TEXTURE_ROTATION_ENTRIES = 64
+};
+
+static struct texture_rotation
+{
+	unsigned long angle;
+	real cosine_value;
+	real sine_value;
+} texture_rotations[TEXTURE_ROTATION_ENTRIES];
+
+static void texture_rotation_get(
+	real angle_degrees,
+	real *cosine_value,
+	real *sine_value)
+{
+	unsigned long angle;
+	struct texture_rotation *entry;
+
+	memcpy(&angle, &angle_degrees, sizeof(angle));
+	entry = &texture_rotations[(angle ^ (angle >> 13)) % TEXTURE_ROTATION_ENTRIES];
+	if (entry->angle != angle)
+	{
+		real radians = DEGREES_TO_RADIANS(angle_degrees);
+
+		entry->angle = angle;
+		entry->cosine_value = cosine(radians);
+		entry->sine_value = sine(radians);
+	}
+	*cosine_value = entry->cosine_value;
+	*sine_value = entry->sine_value;
+}
+
 void shader_texture_animation_evaluate(
 	struct shader_texture_animation const *texture_animation,
 	struct render_animation const *render_animation,
@@ -672,9 +710,8 @@ void shader_texture_animation_evaluate(
 
 	if (angle_degrees != 0.0f)
 	{
-		real radians = DEGREES_TO_RADIANS(angle_degrees);
-		cosine_value = cosine(radians);
-		sine_value = sine(radians);
+		/* port: remembered (texture_rotation_get) */
+		texture_rotation_get(angle_degrees, &cosine_value, &sine_value);
 	}
 	else
 	{
