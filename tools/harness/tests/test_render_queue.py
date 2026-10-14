@@ -11,13 +11,14 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from harness import CHECK_FAILED, build, mutated, read, run  # noqa: E402
 
-CASES = ["runs-in-order-across-turns", "call-returns-once-run", "resource-busy-until-read"]
+CASES = ["runs-in-order-across-turns", "waits-for-room", "call-returns-once-run", "resource-busy-until-read"]
 
-# a fault in render_thread.c and the case that must catch it
+# a fault in render_thread.c and the case that must catch it (the ring's
+# room with the reader held, not as fast as it happens to be)
 NEGATIVE_CONTROLS = {
-    "writes-over-commands-not-run": (("else if (!reached_seen(recorded + advance - RING_SIZE))", "else if (0)"), "runs-in-order-across-turns"),
+    "writes-over-commands-not-run": (("else if (!reached_seen(recorded + advance - RING_SIZE))", "else if (0)"), "waits-for-room"),
     "room-from-its-own-position": (("if ((long)(completed_seen - position) >= 0)",
-                                    "if ((long)(recorded - position) >= 0)"), "runs-in-order-across-turns"),
+                                    "if ((long)(recorded - position) >= 0)"), "waits-for-room"),
     "call-does-not-wait": (("memcpy(copy, payload, size);\n\trender_thread_submit();\n\trender_thread_wait();",
                             "memcpy(copy, payload, size);\n\trender_thread_submit();"), "call-returns-once-run"),
     "busy-from-what-has-run": (("busy_until[busy_slot(data[index])] = recorded;",
