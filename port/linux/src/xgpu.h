@@ -217,6 +217,9 @@ lights and the ambient light) */
 #define XGPU_MODEL_LIGHT_COUNT 12
 /* the vertex constant register of each */
 #define XGPU_MODEL_LIGHT_REGISTER(light) (XGPU_VERTEX_CONSTANT_BIAS + ((light) ? -80 + (light) : -82))
+/* the vertex constant register of a model's first node matrix (c[-36],
+rasterizer_set_model_skinning's), the rest after it: the object drawn */
+#define XGPU_MODEL_NODE_REGISTER (XGPU_VERTEX_CONSTANT_BIAS - 36)
 
 /* ---------- textures */
 
