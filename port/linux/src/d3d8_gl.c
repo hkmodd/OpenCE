@@ -6604,12 +6604,18 @@ static void queued_draw_command(void *payload)
 			draw->minimum);
 }
 
+/* draws queued before they are handed to the render thread: it draws a
+frame's first ones while the game makes the rest, instead of waiting for
+the present, so the frame is drawn sooner and the game waits less for it */
+#define QUEUED_DRAWS_PER_SUBMIT 32
+
 /* queues a draw of count vertices from vertex first on, or of count
 indices: what it reads that has changed, the mirror's uploads, then the
 draw with copies of the vertices and indices not in the mirror (which the
 game may write again once it has queued them) */
 static void queue_draw(D3DPRIMITIVETYPE type, unsigned long count, unsigned long first, const WORD *indices)
 {
+	static unsigned long draws_unsubmitted;
 	struct queued_draw draw;
 	struct stream_sources sources;
 	unsigned long vertices = count, minimum, maximum, generation = 0, copied = 0, stream;
@@ -6666,6 +6672,13 @@ static void queue_draw(D3DPRIMITIVETYPE type, unsigned long count, unsigned long
 	if (indices && draw.index_segment == STREAM_NOT_MIRRORED)
 		memcpy(payload + draw.index_offset, indices, count * sizeof(WORD));
 	render_bindings_busy();
+	/* (every command recorded so far is complete: each was filled when
+	recorded) */
+	if (++draws_unsubmitted >= QUEUED_DRAWS_PER_SUBMIT)
+	{
+		draws_unsubmitted = 0;
+		render_thread_submit();
+	}
 }
 
 void WINAPI D3DDevice_DrawIndexedVertices(D3DPRIMITIVETYPE primitive_type, UINT vertex_count, CONST WORD *index_data)
