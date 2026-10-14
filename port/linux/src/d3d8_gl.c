@@ -6631,6 +6631,10 @@ its vertices was drawn, or a new batch. */
 #define INSTANCE_DRAWS 8192
 #define INSTANCE_BUCKETS 1024
 #define INSTANCE_NONE ((unsigned long)-1)
+/* the storage buffer's segments, and the most a segment holds (vec4s: 16
+MB, less where a storage block may not be a quarter that big) */
+#define INSTANCE_SEGMENTS 4
+#define INSTANCE_SEGMENT_SIZE (1UL << 20)
 
 /* what a batch's draws share: the state prepare_draw reads (but for the
 constants), and the draw */
@@ -6694,12 +6698,17 @@ static struct
 	unsigned long draw_count;
 	/* the latest batch with each hash (its index + 1, 0 for none) */
 	unsigned long buckets[INSTANCE_BUCKETS];
-	/* the draws' own registers, and the storage buffer's contents (vec4s) */
+	/* the draws' own registers (vec4s) */
 	float (*captured)[4];
 	unsigned long captured_count, captured_capacity;
-	float (*blocks)[4];
-	unsigned long blocks_capacity;
+	/* the storage buffer, mapped for good (NULL if it could not be): a ring
+	of INSTANCE_SEGMENTS segments of segment_size vec4s, written a batch's
+	blocks at a time, each segment fenced when the ring moves on from it */
 	GLuint buffer;
+	float (*ring)[4];
+	unsigned long segment_size, segment, used;
+	GLsync fences[INSTANCE_SEGMENTS];
+	BOOL ring_tried;
 	unsigned long read_at;
 	BOOL enabled;
 } instancing;
@@ -6866,6 +6875,60 @@ static void instancing_fill(const struct instance_batch *batch, float (*block)[4
 	}
 }
 
+/* room in the storage buffer for count vec4s, which is made, mapped and
+bound the first time: returns the first's index, or INSTANCE_NONE (no
+buffer, or more than a segment holds). A segment is written again only once
+the GPU has finished the draws that read it: one glBufferData a batch of
+draws waited for the driver's thread and copied every block again. */
+static unsigned long instancing_reserve(unsigned long count)
+{
+	unsigned long first;
+
+	if (!instancing.ring_tried)
+	{
+		GLbitfield flags = GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT;
+		GLint largest = 0;
+
+		instancing.ring_tried = TRUE;
+		glGetIntegerv(GL_MAX_SHADER_STORAGE_BLOCK_SIZE, &largest);
+		instancing.segment_size = (unsigned long)largest / (INSTANCE_SEGMENTS * sizeof(instancing.ring[0]));
+		if (instancing.segment_size > INSTANCE_SEGMENT_SIZE)
+			instancing.segment_size = INSTANCE_SEGMENT_SIZE;
+		if (instancing.segment_size)
+		{
+			GLsizeiptr size = (GLsizeiptr)(INSTANCE_SEGMENTS * instancing.segment_size * sizeof(instancing.ring[0]));
+
+			glGenBuffers(1, &instancing.buffer);
+			glBindBuffer(GL_SHADER_STORAGE_BUFFER, instancing.buffer);
+			glBufferStorage(GL_SHADER_STORAGE_BUFFER, size, NULL, flags);
+			instancing.ring = glMapBufferRange(GL_SHADER_STORAGE_BUFFER, 0, size, flags);
+			glBindBufferBase(GL_SHADER_STORAGE_BUFFER, XGPU_INSTANCE_BINDING, instancing.buffer);
+		}
+		if (!instancing.ring)
+			platform_log("GPU: no storage buffer for display.instancing: its draws are drawn one at a time");
+	}
+	if (!instancing.ring || count > instancing.segment_size)
+		return INSTANCE_NONE;
+	if (instancing.used + count > instancing.segment_size)
+	{
+		instancing.fences[instancing.segment] = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+		instancing.segment = (instancing.segment + 1) % INSTANCE_SEGMENTS;
+		instancing.used = 0;
+		if (instancing.fences[instancing.segment])
+		{
+			while (glClientWaitSync(instancing.fences[instancing.segment], GL_SYNC_FLUSH_COMMANDS_BIT, 100000000) ==
+				GL_TIMEOUT_EXPIRED)
+			{
+			}
+			glDeleteSync(instancing.fences[instancing.segment]);
+			instancing.fences[instancing.segment] = NULL;
+		}
+	}
+	first = instancing.segment * instancing.segment_size + instancing.used;
+	instancing.used += count;
+	return first;
+}
+
 /* draws every deferred draw, and lets go of the render thread's hold */
 static void instancing_draw_all(void)
 {
@@ -6873,7 +6936,7 @@ static void instancing_draw_all(void)
 	static struct instance_state live;
 	static struct vertex_shader_object *live_slots[VERTEX_PROGRAM_SLOTS];
 	static float live_constants[XGPU_VERTEX_CONSTANT_COUNT][4];
-	unsigned long batch_index, total = 0, first = 0;
+	unsigned long batch_index;
 
 	if (!instancing.batch_count)
 	{
@@ -6891,52 +6954,13 @@ static void instancing_draw_all(void)
 	memcpy(live_slots, device.program_slots, sizeof(live_slots));
 	memcpy(live_constants, device.constants, sizeof(live_constants));
 
-	/* every batch's blocks, in one upload */
-	for (batch_index = 0; batch_index < instancing.batch_count; batch_index++)
-	{
-		const struct instance_batch *batch = &instancing.batches[batch_index];
-
-		if (batch->count > 1)
-			total += batch->count * (instancing_span(batch) + XGPU_INSTANCE_PIXEL_CONSTANTS);
-	}
-	if (total > instancing.blocks_capacity)
-	{
-		float (*blocks)[4] = realloc(instancing.blocks, total * 2 * sizeof(blocks[0]));
-
-		if (blocks)
-		{
-			instancing.blocks = blocks;
-			instancing.blocks_capacity = total * 2;
-		}
-		else
-			total = 0;
-	}
-	if (total)
-	{
-		for (batch_index = 0; batch_index < instancing.batch_count; batch_index++)
-		{
-			const struct instance_batch *batch = &instancing.batches[batch_index];
-
-			if (batch->count > 1)
-			{
-				instancing_fill(batch, instancing.blocks + first);
-				first += batch->count * (instancing_span(batch) + XGPU_INSTANCE_PIXEL_CONSTANTS);
-			}
-		}
-		if (!instancing.buffer)
-			glGenBuffers(1, &instancing.buffer);
-		glBindBuffer(GL_SHADER_STORAGE_BUFFER, instancing.buffer);
-		glBufferData(GL_SHADER_STORAGE_BUFFER, (GLsizeiptr)(total * sizeof(instancing.blocks[0])), instancing.blocks,
-			GL_STREAM_DRAW);
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, XGPU_INSTANCE_BINDING, instancing.buffer);
-	}
-
-	first = 0;
 	for (batch_index = 0; batch_index < instancing.batch_count; batch_index++)
 	{
 		const struct instance_batch *batch = &instancing.batches[batch_index];
 		const struct instance_state *state = &batch->state;
 		unsigned long span = instancing_span(batch);
+		unsigned long first = batch->count > 1 ?
+			instancing_reserve(batch->count * (span + XGPU_INSTANCE_PIXEL_CONSTANTS)) : INSTANCE_NONE;
 		struct program_entry *entry = NULL;
 
 		memcpy(render_states, state->render_states, sizeof(render_states));
@@ -6948,8 +6972,9 @@ static void instancing_draw_all(void)
 		memcpy(device.streams, state->streams, sizeof(device.streams));
 		device.base_vertex_index = state->base_vertex_index;
 		memcpy(device.attributes, state->attributes, sizeof(device.attributes));
-		if (batch->count > 1 && total)
+		if (first != INSTANCE_NONE)
 		{
+			instancing_fill(batch, instancing.ring + first);
 			constants_store(0, batch->base, XGPU_VERTEX_CONSTANT_COUNT);
 			entry = prepare_draw_as(FALSE, TRUE);
 		}
@@ -6967,8 +6992,6 @@ static void instancing_draw_all(void)
 				(const void *)state->index_offset, (GLsizei)batch->count, -(GLint)state->minimum);
 			stats.instanced_draws++;
 		}
-		if (batch->count > 1 && total)
-			first += batch->count * (span + XGPU_INSTANCE_PIXEL_CONSTANTS);
 		instancing.buckets[batch->hash % INSTANCE_BUCKETS] = 0;
 	}
 

@@ -218,6 +218,9 @@ context has the extension, never required (gl_functions.c). On ES 3.0 and
 	X(glBufferSubData) \
 	X(glBufferStorage) \
 	X(glMapBufferRange) \
+	X(glFenceSync) \
+	X(glClientWaitSync) \
+	X(glDeleteSync) \
 	X(glBindBufferBase) \
 	X(glGenVertexArrays) \
 	X(glBindVertexArray) \
@@ -461,6 +464,9 @@ pointers, sees the declarations without these aliases */
 #define glBufferSubData halo_glBufferSubData
 #define glBufferStorage halo_glBufferStorage
 #define glMapBufferRange halo_glMapBufferRange
+#define glFenceSync halo_glFenceSync
+#define glClientWaitSync halo_glClientWaitSync
+#define glDeleteSync halo_glDeleteSync
 #define glBindBufferBase halo_glBindBufferBase
 #define glGenVertexArrays halo_glGenVertexArrays
 #define glBindVertexArray halo_glBindVertexArray
