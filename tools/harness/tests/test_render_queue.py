@@ -15,12 +15,13 @@ CASES = ["runs-in-order-across-turns", "call-returns-once-run", "resource-busy-u
 
 # a fault in render_thread.c and the case that must catch it
 NEGATIVE_CONTROLS = {
-    "writes-over-commands-not-run": (("else if (!reached(recorded + advance - RING_SIZE, __ATOMIC_ACQUIRE))",
-                                      "else if (0)"), "runs-in-order-across-turns"),
+    "writes-over-commands-not-run": (("else if (!reached_seen(recorded + advance - RING_SIZE))", "else if (0)"), "runs-in-order-across-turns"),
+    "room-from-its-own-position": (("if ((long)(completed_seen - position) >= 0)",
+                                    "if ((long)(recorded - position) >= 0)"), "runs-in-order-across-turns"),
     "call-does-not-wait": (("memcpy(copy, payload, size);\n\trender_thread_submit();\n\trender_thread_wait();",
                             "memcpy(copy, payload, size);\n\trender_thread_submit();"), "call-returns-once-run"),
     "busy-from-what-has-run": (("busy_until[busy_slot(data)] = recorded;",
-                                "busy_until[busy_slot(data)] = completed;"), "resource-busy-until-read"),
+                                "busy_until[busy_slot(data)] = reader_side.completed;"), "resource-busy-until-read"),
 }
 
 
