@@ -136,6 +136,11 @@ static const struct config_setting config_settings[] =
 	{ "display.interpolation", _config_boolean, "true", "HALO_INTERPOLATION", _environment_value, _platform_all,
 		"Draw a frame for every display refresh, blending between the game's 30\n"
 		"ticks a second; false keeps the original 30 frames a second." },
+	{ "display.interpolation_threads", _config_integer, "0", "HALO_INTERPOLATION_THREADS", _environment_value,
+		_platform_desktop,
+		"With display.interpolation, threads (up to 8) that blend the objects'\n"
+		"poses for each frame while the game's thread draws the level, which the\n"
+		"Xbox did not need: 0 blends each as it is drawn. From the next start." },
 	{ "display.direct_camera", _config_boolean, "true", "HALO_DIRECT_CAMERA", _environment_value, _platform_desktop,
 		"In first person, point the view where the player aims now instead of\n"
 		"where the last tick left it: the view turns the frame the mouse moves,\n"
