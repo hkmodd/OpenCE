@@ -63,10 +63,21 @@ static real_point3d *matrix4x3_inverse_transform_point(real_matrix4x3 const *mat
 
 static struct interpolated_object *interpolated_objects;
 static struct interpolated_camera interpolated_cameras[MAXIMUM_LOCAL_PLAYERS];
+static long interpolated_objects_used;
 static long interpolation_tick;
 static long interpolation_frame;
 static boolean interpolation_rendering;
 static real interpolation_fraction = 1.0f;
+static long interpolation_workers = NONE;
+static long worker_next_record;
+
+/* (no workers: tests/interpolation_workers.c has them) */
+static void workers_begin(void);
+static void workers_end(void);
+static long config_integer(const char *name) { return 0; }
+static int worker_pool_start(int count) { CHECK(0, "workers started"); return 0; }
+static void worker_pool_begin(void (*job)(void)) { CHECK(0, "workers begun"); }
+static void worker_pool_end(void) { CHECK(0, "workers waited for"); }
 
 #include "under_test.inc"
 
