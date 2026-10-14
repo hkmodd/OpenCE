@@ -260,21 +260,24 @@ static void quaternion_from_basis(real_matrix4x3 const *matrix, struct interpola
 	}
 }
 
-static void basis_from_quaternion(struct interpolation_quaternion const *q, real_matrix4x3 *matrix)
+/* the basis of q's rotation, q of any length but zero: scale is 2 divided by
+q's length squared (2 for a unit quaternion), every product of two of q's
+parts being that of the unit quaternion times the length squared */
+static void basis_from_quaternion(struct interpolation_quaternion const *q, real scale, real_matrix4x3 *matrix)
 {
 	real ii = q->i * q->i, jj = q->j * q->j, kk = q->k * q->k;
 	real ij = q->i * q->j, ik = q->i * q->k, jk = q->j * q->k;
 	real wi = q->w * q->i, wj = q->w * q->j, wk = q->w * q->k;
 
-	matrix->forward.i = 1.0f - 2.0f * (jj + kk);
-	matrix->forward.j = 2.0f * (ij + wk);
-	matrix->forward.k = 2.0f * (ik - wj);
-	matrix->left.i = 2.0f * (ij - wk);
-	matrix->left.j = 1.0f - 2.0f * (ii + kk);
-	matrix->left.k = 2.0f * (jk + wi);
-	matrix->up.i = 2.0f * (ik + wj);
-	matrix->up.j = 2.0f * (jk - wi);
-	matrix->up.k = 1.0f - 2.0f * (ii + jj);
+	matrix->forward.i = 1.0f - scale * (jj + kk);
+	matrix->forward.j = scale * (ij + wk);
+	matrix->forward.k = scale * (ik - wj);
+	matrix->left.i = scale * (ij - wk);
+	matrix->left.j = 1.0f - scale * (ii + kk);
+	matrix->left.k = scale * (jk + wi);
+	matrix->up.i = scale * (ik + wj);
+	matrix->up.j = scale * (jk - wi);
+	matrix->up.k = 1.0f - scale * (ii + jj);
 }
 
 static void rotation_from_matrix(real_matrix4x3 const *matrix, struct interpolation_rotation *rotation)
@@ -298,7 +301,7 @@ static void matrix_blend_rotations(
 	if (rotation_a->is_rotation && rotation_b->is_rotation)
 	{
 		struct interpolation_quaternion qa = rotation_a->quaternion, qb = rotation_b->quaternion, q;
-		real length;
+		real length_squared;
 
 		/* q and -q are the same rotation: take the shorter way round */
 		if (qa.i * qb.i + qa.j * qb.j + qa.k * qb.k + qa.w * qb.w < 0.0f)
@@ -312,14 +315,12 @@ static void matrix_blend_rotations(
 		q.j = lerp(qa.j, qb.j, t);
 		q.k = lerp(qa.k, qb.k, t);
 		q.w = lerp(qa.w, qb.w, t);
-		length = (real)sqrt(q.i * q.i + q.j * q.j + q.k * q.k + q.w * q.w);
-		if (length > 1e-6f)
+		/* normalised in the basis, with one division, not a square root
+		and four */
+		length_squared = q.i * q.i + q.j * q.j + q.k * q.k + q.w * q.w;
+		if (length_squared > 1e-12f)
 		{
-			q.i /= length;
-			q.j /= length;
-			q.k /= length;
-			q.w /= length;
-			basis_from_quaternion(&q, result);
+			basis_from_quaternion(&q, 2.0f / length_squared, result);
 			return;
 		}
 	}
