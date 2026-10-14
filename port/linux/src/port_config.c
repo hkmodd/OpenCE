@@ -121,6 +121,12 @@ static const struct config_setting config_settings[] =
 		"of the one drawn, 1 or 2: 2 carries a long frame (a tick's, in a busy\n"
 		"scene) without missing the display's refresh, and shows each frame a\n"
 		"refresh later." },
+	{ "display.tick_slices", _config_boolean, "false", "HALO_TICK_SLICES", _environment_value, _platform_desktop,
+		"With display.render_thread, run a tick longer than a share of a frame\n"
+		"in pieces, in the time the game waits for the render thread and at the\n"
+		"start of the frames after it, instead of all in one long frame. The\n"
+		"next is begun ahead of its time by about as long as the last took: the\n"
+		"players' actions reach the world that much later." },
 	{ "display.anti_aliasing", _config_string, "\"off\"", "HALO_ANTI_ALIASING", _environment_value, _platform_all,
 		"Smoothing of jagged edges, which the Xbox did not have: \"off\"; \"fxaa\"\n"
 		"or \"smaa\" smooth the 3D view once it is drawn (the HUD and menus stay\n"

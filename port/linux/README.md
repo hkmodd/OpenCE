@@ -446,6 +446,7 @@ the setting for one start of the game. It has priority over the file.
 | `display.max_fps` | `0` | `HALO_MAX_FPS` | With vsync off, the most frames each second. `0`: twice the display's refresh rate. `-1`: no limit, which can hang some Intel graphics (Raptor Lake), resetting the desktop's graphics too. |
 | `display.render_thread` | `false` | `HALO_RENDER_THREAD` | `true`: the renderer draws on a thread of its own while the game's thread goes on to the next frame, as the Xbox's GPU ran its push buffer; more frames each second where the processor limits them. Not on Android or the web. Read at start. |
 | `display.frames_queued` | `1` | `HALO_FRAMES_QUEUED` | With `display.render_thread`, how many frames the game's thread may queue ahead of the one the render thread draws, 1 or 2. `2`: a frame of the game's that is longer than a refresh of the display (a tick's, in a busy scene) does not make the display miss a refresh, and each frame reaches the screen a refresh later. A change applies from the next frame. Refer to "The render thread". |
+| `display.tick_slices` | `false` | `HALO_TICK_SLICES` | With `display.render_thread`, `true`: a tick longer than a share of a frame runs in pieces, in the time the game's thread waits for the render thread and at the start of the frames after it, instead of all in one long frame; the next is begun ahead of its time by about as long as the last took, so the actions of the players reach the world that much later. Not on Android or the web. A change applies from the next tick. Refer to "The render thread". |
 | `display.anti_aliasing` | `"off"` | `HALO_ANTI_ALIASING` | The smoothing of jagged edges, which the Xbox did not have. `"off"`: none, as on the Xbox. `"fxaa"` or `"smaa"`: a pass over the 3D view after the game draws it. The HUD and the menus stay sharp. SMAA is the sharper and costs more. `"ssaa2x"`: the game draws at two times the resolution in each direction (at most the GPU's largest texture), and the picture is scaled down. The GPU does four times the work. Not with `display.resolution_scaling = "original"`. `"msaa2x"`, `"msaa4x"` or `"msaa8x"`: each pixel of the 3D view has that many samples (at most the GPU's). On Android, `"smaa"` gives FXAA and `"ssaa2x"` none. A change applies from the next frame. Refer to "Anti-aliasing" in "What operates". |
 | `debug.gpu_flush_draws` | `-1` | `HALO_GPU_FLUSH_DRAWS` | Flush the GPU's pipeline every this many draws. `-1`: every 3 on Intel graphics with Mesa's driver, which can otherwise hang in the game's long runs of small draws and reset the desktop's graphics too. `0`: never. |
 | `display.interpolation` | `true` | `HALO_INTERPOLATION` | `true`: one frame for each refresh of the display. `false`: 30 frames each second, as on the Xbox. Refer to "Frame rate". |
@@ -679,6 +680,27 @@ the 99th percentile from 7.8–8.3 ms to 6.3–6.5 ms, in eight runs with one
 frame and seven of eight with two (the eighth met a stretch of 16 ms
 intervals, as did a run with three frames just after it, and no run after
 those). Three frames queued did no better than two.
+
+`display.tick_slices` takes the long tick out of its frame. The game runs
+the tick on a second stack of its thread (`src/posix_fiber.c`, the Windows
+build's `win32_fiber.c`, `game/tick_slices.c`), which hands back to the
+frames at points between the tick's parts (between the objects and the
+actors it updates): the tick runs for 0.3 ms of the frame it is begun on,
+then 0.1 ms at a time while the game's thread waits for the render thread,
+and 0.3 ms at the start of each frame after it; the eighth frame runs what
+is left whole. A tick that runs in pieces takes longer from its start to
+its end than it would whole, so the next is begun ahead of its time, by a
+quarter more than the last took: the frames until it is due draw the two
+ticks before it, and the clock takes it, ended, when it is due. One that
+has not ended when it is due holds the clock, and the frames draw the tick
+before it until it has. While a tick is under way, nothing else changes
+the game: the deferred actions, saving, the network's updates and map
+sharing wait for the frame after it has ended. A local game and the host
+slice their ticks, not a client. In b30 with 32 times the enemies, the
+game's thread's work in a frame (all but its wait for the render thread)
+went from 9.1 ms to 2.7–3.1 ms at the 90th percentile and from 10.0 ms to
+3.1–3.4 ms at the 99th, in a hidden window; there the ticks took about
+13 ms from their start to their end, and were begun about 16 ms ahead.
 
 ## Field of view
 
@@ -1536,6 +1558,7 @@ Other changes:
 | `game/players.c`, `networking/network_server_manager.c` | Bots (`game/bots.c`, `bots.count`): the lobby of a local Slayer game takes the bot players, each the one player of a machine of its own that no real machine is, and every tick their actions come from `game/bots.c` instead of their empty queues. Nothing changes in a system link or internet game. |
 | `input/input_xbox.c`, `physics/collision_usage.c` | The clock is read only for a button held, and for collision tests only when their times are shown: a read of the clock is slow in a browser. |
 | `main/main.c`, `interface/hud.c`, `interface/hud_unit.c`, `interface/hud_draw.c`, `game/game_engine.c` | The text chat of network games (`game/network_chat.c`): its keys are read each frame, and the debug keys are not while a line is typed; each view's HUD draws its lines, above the motion sensor, whose place the HUD notes (the left of the last picture drawn); the scoreboard's menu has Mute voice and chat, and the host's Mute for everyone. |
+| `game/game_time.c`, `game/game.c`, `objects/objects.c`, `ai/actors.c`, `main/main.c`, `saved games/game_state.c` | With `display.tick_slices`, the last tick of a frame may be left under way on a second stack and the next begun ahead of its time (`game/tick_slices.c`); the tick hands back between its parts, the objects and the actors; the game's clock takes a tick when it has ended and is due; the main loop's deferred actions, saving and network wait while one is under way, and one is ended before the game's state is disposed of, reverted or loaded. Refer to "The render thread". |
 
 The x86 inline assembly of the game is replaced by C. Thus the compiler
 can optimize that code for each processor:
