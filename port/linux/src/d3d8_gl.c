@@ -7078,7 +7078,8 @@ static struct
 	unsigned long captured_count, captured_capacity;
 	/* the storage buffer, mapped for good (NULL if it could not be): a ring
 	of INSTANCE_SEGMENTS segments of segment_size vec4s, written a batch's
-	blocks at a time, each segment fenced when the ring moves on from it */
+	blocks at a time, a frame to a segment (more if it fills one), each
+	segment fenced when the ring moves on from it */
 	GLuint buffer;
 	float (*ring)[4];
 	unsigned long segment_size, segment, used;
@@ -7255,6 +7256,24 @@ bound the first time: returns the first's index, or INSTANCE_NONE (no
 buffer, or more than a segment holds). A segment is written again only once
 the GPU has finished the draws that read it: one glBufferData a batch of
 draws waited for the driver's thread and copied every block again. */
+/* fences the segment written, and moves the ring on to the next one, once
+the GPU is done with what that one held */
+static void instancing_ring_advance(void)
+{
+	instancing.fences[instancing.segment] = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+	instancing.segment = (instancing.segment + 1) % INSTANCE_SEGMENTS;
+	instancing.used = 0;
+	if (instancing.fences[instancing.segment])
+	{
+		while (glClientWaitSync(instancing.fences[instancing.segment], GL_SYNC_FLUSH_COMMANDS_BIT, 100000000) ==
+			GL_TIMEOUT_EXPIRED)
+		{
+		}
+		glDeleteSync(instancing.fences[instancing.segment]);
+		instancing.fences[instancing.segment] = NULL;
+	}
+}
+
 static unsigned long instancing_reserve(unsigned long count)
 {
 	unsigned long first;
@@ -7285,20 +7304,7 @@ static unsigned long instancing_reserve(unsigned long count)
 	if (!instancing.ring || count > instancing.segment_size)
 		return INSTANCE_NONE;
 	if (instancing.used + count > instancing.segment_size)
-	{
-		instancing.fences[instancing.segment] = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
-		instancing.segment = (instancing.segment + 1) % INSTANCE_SEGMENTS;
-		instancing.used = 0;
-		if (instancing.fences[instancing.segment])
-		{
-			while (glClientWaitSync(instancing.fences[instancing.segment], GL_SYNC_FLUSH_COMMANDS_BIT, 100000000) ==
-				GL_TIMEOUT_EXPIRED)
-			{
-			}
-			glDeleteSync(instancing.fences[instancing.segment]);
-			instancing.fences[instancing.segment] = NULL;
-		}
-	}
+		instancing_ring_advance();
 	first = instancing.segment * instancing.segment_size + instancing.used;
 	instancing.used += count;
 	return first;
@@ -8801,6 +8807,11 @@ static void run_present_draw(void)
 #ifndef HALO_GLES
 		frame_pacing_wait();
 		visibility_read_batch();
+		/* each frame's instance blocks start a segment: glFenceSync can wait
+		for the driver to finish presenting, and here it waits with the
+		swap, not in the middle of the next frame's draws */
+		if (instancing.used)
+			instancing_ring_advance();
 #endif
 		xgpu_gl_state_invalidate();
 		memory_watch_begin_frame();
