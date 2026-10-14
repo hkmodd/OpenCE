@@ -93,6 +93,18 @@ static void *open_gate_later(void *unused)
 	return NULL;
 }
 
+/* opens the gate after much longer than the writer takes to go round the
+ring (waits-for-room) */
+static void *open_gate_much_later(void *unused)
+{
+	struct timespec delay = { 0, 300000000 };
+
+	(void)unused;
+	nanosleep(&delay, NULL);
+	__atomic_store_n(&gate_open, 1, __ATOMIC_RELEASE);
+	return NULL;
+}
+
 /* a queue that breaks may crash or stop: either is a failed check */
 static void *watchdog(void *unused)
 {
@@ -153,6 +165,36 @@ int main(int argc, char **argv)
 		CHECK(!wrong_number, "%lu commands ran out of order", wrong_number);
 		CHECK(!wrong_words, "%lu words were overwritten before they ran", wrong_words);
 		CHECK(!render_thread_busy(), "the queue is not empty once drained");
+	}
+	else if (!strcmp(name, "waits-for-room"))
+	{
+		/* the reader held at a gate: the writer must not go a turn of the
+		ring past the command it is held at, however slow or fast the reader
+		was before */
+		pthread_t opener;
+		unsigned long number, total = 0;
+
+		render_thread_record(gate_command, 0);
+		render_thread_submit();
+		pthread_create(&opener, NULL, open_gate_much_later, NULL);
+		for (number = 0; total < RING_SIZE + RING_SIZE / 2; number++)
+		{
+			unsigned long index, *words;
+
+			words = (unsigned long *)render_thread_record(numbered_command, (2 + 4096) * sizeof(unsigned long));
+			words[0] = number;
+			words[1] = 4096;
+			for (index = 0; index < 4096; index++)
+				words[2 + index] = word(number, index);
+			total += (2 + 4096) * sizeof(unsigned long);
+			render_thread_submit();
+		}
+		CHECK(__atomic_load_n(&gate_passed, __ATOMIC_ACQUIRE),
+			"the writer went a turn of the ring past a command not yet run");
+		render_thread_drain();
+		CHECK(next_number == number, "%lu of %lu commands ran", next_number, number);
+		CHECK(!wrong_number && !wrong_words, "commands ran out of order or overwritten");
+		pthread_join(opener, NULL);
 	}
 	else if (!strcmp(name, "call-returns-once-run"))
 	{
