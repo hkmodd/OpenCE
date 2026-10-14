@@ -6004,20 +6004,23 @@ thousands of times a frame, each with vertex constants (the nodes'
 matrices, the lights) and pixel combiner constants (change colors) of its
 own, and the driver's cost is per draw. On the render thread, a draw that
 can be drawn out of order (no blending, depth written and tested with LESS
-or LESSEQUAL, the stencil not written) and whose vertices and indices are all in the
-mirror is deferred into a batch of the draws with the same state but for
-those constants and the same vertices and indices. The batches are drawn,
-in the order they began, each as one instanced draw whose instances read
-their constants from a storage buffer (XGPU_INSTANCE_GLSL), before a
-command that is not state, bindings, constants or such a draw, before a
-draw that cannot be deferred, and when render_thread_hold says. Until then
-the render thread holds back its position, so that what the draws read
-stays busy.
+or LESSEQUAL, the stencil not written) and whose vertices and indices are
+all in the mirror is deferred into a batch of the draws with the same
+state but for those constants and the same vertices and indices. The
+batches are drawn, in the order they began, each as one instanced draw
+whose instances read their constants from a storage buffer
+(XGPU_INSTANCE_GLSL), before a command that is not state, bindings,
+constants or such a draw, before a draw that cannot be deferred, and when
+render_thread_hold says. Until then the render thread holds back its
+position, so that what the draws read stays busy.
 
-A draw joins the latest batch of its vertices and indices only, so that
-passes over the same vertices keep their order. Draws of different
-vertices are reordered, which for these draws changes only which of two
-wins at exactly the same depth. */
+Draws are reordered, which for these draws changes only which of two wins
+at exactly the same depth, but not an object's passes over the same
+vertices, which are drawn at the same depth: the draw of an object other
+than the latest drawn of its vertices (a model's node matrices have
+changed since, XGPU_MODEL_NODE_REGISTER) joins the latest batch of its
+vertices with its state, and any other draw one begun since the latest of
+its vertices was drawn, or a new batch. */
 
 /* batches and draws deferred at most (beyond, they are drawn) */
 #define INSTANCE_BATCHES 1024
@@ -6074,6 +6077,9 @@ struct instance_batch
 	with the same hash (its index + 1, 0 for none) */
 	unsigned long hash;
 	unsigned long earlier;
+	/* (the latest batch of its vertices and indices) the batch the latest
+	draw of them joined (its index) */
+	unsigned long latest_drawn;
 };
 
 static struct
@@ -6398,11 +6404,34 @@ static void instancing_changed(struct instance_batch *batch, unsigned long reg)
 		batch->high = reg;
 }
 
+/* whether no model's node matrix has changed since serial (constants_store):
+a draw then draws the same object as the draw at serial */
+static BOOL instancing_same_object(unsigned long long serial)
+{
+	unsigned long reg;
+
+	if (constants_serial - serial <= CONSTANT_LOG_SIZE)
+	{
+		for (serial++; serial <= constants_serial; serial++)
+		{
+			if (constant_log[serial % CONSTANT_LOG_SIZE] >= XGPU_MODEL_NODE_REGISTER)
+				return FALSE;
+		}
+		return TRUE;
+	}
+	for (reg = XGPU_MODEL_NODE_REGISTER; reg < XGPU_VERTEX_CONSTANT_COUNT; reg++)
+	{
+		if (constant_serials[reg] > serial)
+			return FALSE;
+	}
+	return TRUE;
+}
+
 /* defers a draw (instancing_eligible) */
 static void instancing_defer(const struct queued_draw *queued)
 {
 	static struct instance_state state;
-	struct instance_batch *batch = NULL;
+	struct instance_batch *batch = NULL, *latest = NULL;
 	struct instance_draw *draw;
 	unsigned long hash, index, span;
 	int constant;
@@ -6421,17 +6450,33 @@ static void instancing_defer(const struct queued_draw *queued)
 		instancing_draw_all();
 	instancing_state(&state, queued);
 	hash = instancing_hash(&state);
-	/* the latest batch of the same vertices and indices, if it has the same
-	state */
+	/* the latest batch of the same vertices and indices */
 	for (index = instancing.buckets[hash % INSTANCE_BUCKETS]; index; index = instancing.batches[index - 1].earlier)
 	{
-		struct instance_batch *candidate = &instancing.batches[index - 1];
-
-		if (candidate->hash == hash && instancing_same_draw(&candidate->state, &state))
+		if (instancing.batches[index - 1].hash == hash && instancing_same_draw(&instancing.batches[index - 1].state, &state))
 		{
-			if (instancing_same_state(&candidate->state, &state))
-				batch = candidate;
+			latest = &instancing.batches[index - 1];
 			break;
+		}
+	}
+	if (latest)
+	{
+		/* the latest with the same state, begun since the latest draw of
+		these vertices if this draws the same object */
+		unsigned long earliest = instancing_same_object(instancing.batches[latest->latest_drawn].latest_serial) ?
+			latest->latest_drawn : 0;
+
+		for (index = (unsigned long)(latest - instancing.batches) + 1; index && index - 1 >= earliest;
+			index = instancing.batches[index - 1].earlier)
+		{
+			struct instance_batch *candidate = &instancing.batches[index - 1];
+
+			if (candidate->hash == hash && instancing_same_draw(&candidate->state, &state) &&
+				instancing_same_state(&candidate->state, &state))
+			{
+				batch = candidate;
+				break;
+			}
 		}
 	}
 	if (batch)
@@ -6469,7 +6514,9 @@ static void instancing_defer(const struct queued_draw *queued)
 		batch->hash = hash;
 		batch->earlier = instancing.buckets[hash % INSTANCE_BUCKETS];
 		instancing.buckets[hash % INSTANCE_BUCKETS] = instancing.batch_count;
+		latest = batch;
 	}
+	latest->latest_drawn = (unsigned long)(batch - instancing.batches);
 
 	span = instancing_span(batch);
 	if (instancing.captured_count + span > instancing.captured_capacity)
