@@ -97,7 +97,7 @@ static void *open_gate_later(void *unused)
 ring (waits-for-room) */
 static void *open_gate_much_later(void *unused)
 {
-	struct timespec delay = { 0, 300000000 };
+	struct timespec delay = { 1, 0 };
 
 	(void)unused;
 	nanosleep(&delay, NULL);
@@ -168,19 +168,26 @@ int main(int argc, char **argv)
 	}
 	else if (!strcmp(name, "waits-for-room"))
 	{
-		/* the reader held at a gate: the writer must not go a turn of the
-		ring past the command it is held at, however slow or fast the reader
-		was before */
+		/* the reader held at a gate half way round the ring, after commands
+		it runs as they come: the writer must not go a turn of the ring past
+		the command it is held at (in the middle of a turn, not only at its
+		end, where the start of the ring is waited for), however slow or
+		fast the reader was before */
 		pthread_t opener;
 		unsigned long number, total = 0;
+		int gated = 0;
 
-		render_thread_record(gate_command, 0);
-		render_thread_submit();
-		pthread_create(&opener, NULL, open_gate_much_later, NULL);
-		for (number = 0; total < RING_SIZE + RING_SIZE / 2; number++)
+		for (number = 0; total < 2 * RING_SIZE; number++)
 		{
 			unsigned long index, *words;
 
+			if (!gated && total >= RING_SIZE / 2)
+			{
+				render_thread_record(gate_command, 0);
+				render_thread_submit();
+				pthread_create(&opener, NULL, open_gate_much_later, NULL);
+				gated = 1;
+			}
 			words = (unsigned long *)render_thread_record(numbered_command, (2 + 4096) * sizeof(unsigned long));
 			words[0] = number;
 			words[1] = 4096;
