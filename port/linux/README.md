@@ -333,6 +333,7 @@ the setting for one start of the game. It has priority over the file.
 | `display.vsync` | `true` | `HALO_NO_VSYNC=1` sets `false` | `true`: each frame waits for the display. |
 | `display.max_fps` | `0` | `HALO_MAX_FPS` | With vsync off, the most frames each second. `0`: twice the display's refresh rate. `-1`: no limit, which can hang some Intel graphics (Raptor Lake), resetting the desktop's graphics too. |
 | `display.render_thread` | `false` | `HALO_RENDER_THREAD` | `true`: the renderer draws on a thread of its own while the game's thread goes on to the next frame, as the Xbox's GPU ran its push buffer; more frames each second where the processor limits them. Not on Android or the web. Read at start. |
+| `display.frames_queued` | `1` | `HALO_FRAMES_QUEUED` | With `display.render_thread`, how many frames the game's thread may queue ahead of the one the render thread draws, 1 or 2. `2`: a frame of the game's that is longer than a refresh of the display (a tick's, in a busy scene) does not make the display miss a refresh, and each frame reaches the screen a refresh later. A change applies from the next frame. Refer to "The render thread". |
 | `display.anti_aliasing` | `"off"` | `HALO_ANTI_ALIASING` | The smoothing of jagged edges, which the Xbox did not have. `"off"`: none, as on the Xbox. `"fxaa"` or `"smaa"`: a pass over the 3D view after the game draws it. The HUD and the menus stay sharp. SMAA is the sharper and costs more. `"ssaa2x"`: the game draws at two times the resolution in each direction (at most the GPU's largest texture), and the picture is scaled down. The GPU does four times the work. Not with `display.resolution_scaling = "original"`. `"msaa2x"`, `"msaa4x"` or `"msaa8x"`: each pixel of the 3D view has that many samples (at most the GPU's). On Android, `"smaa"` gives FXAA and `"ssaa2x"` none. A change applies from the next frame. Refer to "Anti-aliasing" in "What operates". |
 | `debug.gpu_flush_draws` | `-1` | `HALO_GPU_FLUSH_DRAWS` | Flush the GPU's pipeline every this many draws. `-1`: every 3 on Intel graphics with Mesa's driver, which can otherwise hang in the game's long runs of small draws and reset the desktop's graphics too. `0`: never. |
 | `display.interpolation` | `true` | `HALO_INTERPOLATION` | `true`: one frame for each refresh of the display. `false`: 30 frames each second, as on the Xbox. Refer to "Frame rate". |
@@ -510,6 +511,20 @@ enemies, the frames with 2000 draws or more went from 154 to 176 each second
 (the medians of four runs each), all frames from 219 to 248. There the
 game's thread is the limit: the game's own work takes most of its time, and
 the queueing of the draws about an eighth.
+
+A frame that runs a tick takes the game's thread longer than the frames
+between ticks: in b30, about 2.2 ms against 1.2 ms (the medians), and with
+32 times the enemies several refreshes long. With one frame queued, the
+render thread then has nothing to draw, and the display misses refreshes.
+`display.frames_queued = 2` lets the game's thread queue a second frame,
+which the render thread draws while the game's thread finishes a long one;
+each frame reaches the screen a refresh later. In b30 with 32 times the
+enemies, in a hidden window, the intervals between presents half again as
+long as the median or longer went from 1.0–1.9% of them to 0.4–0.7%, and
+the 99th percentile from 7.8–8.3 ms to 6.3–6.5 ms, in eight runs with one
+frame and seven of eight with two (the eighth met a stretch of 16 ms
+intervals, as did a run with three frames just after it, and no run after
+those). Three frames queued did no better than two.
 
 ## Field of view
 

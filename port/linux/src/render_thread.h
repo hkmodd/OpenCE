@@ -35,6 +35,12 @@ void render_thread_drain(void);
 until the render thread has run everything before such a position */
 unsigned long render_thread_position(void);
 void render_thread_wait_for(unsigned long position);
+/* the most frames render_thread_frame_end lets the queue hold */
+#define RENDER_THREAD_MAXIMUM_FRAMES 2
+/* ends a frame, whose commands are recorded: hands them over and returns
+once no more than frames (1 to RENDER_THREAD_MAXIMUM_FRAMES) of the frames
+ended, this one with them, have yet to run */
+void render_thread_frame_end(unsigned long frames);
 /* hands over what is queued; nonzero while any of it has not run */
 int render_thread_busy(void);
 /* notes that the latest command recorded reads the resources whose data
