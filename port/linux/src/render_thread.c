@@ -82,6 +82,10 @@ static pthread_cond_t done_condition = PTHREAD_COND_INITIALIZER;
 /* the position after the latest command recorded that reads each busy
 resource (two resources in a slot: one waits for the other's commands) */
 static unsigned long busy_until[BUSY_SLOTS];
+/* the position after each of the latest frames, by the count of frames
+ended */
+static unsigned long frame_ends[RENDER_THREAD_MAXIMUM_FRAMES];
+static unsigned long frames_ended;
 
 static void spin_pause(void)
 {
@@ -313,6 +317,20 @@ void render_thread_wait_for(unsigned long position)
 		return;
 	render_thread_submit();
 	wait_for_reader(position);
+}
+
+void render_thread_frame_end(unsigned long frames)
+{
+	if (frames < 1)
+		frames = 1;
+	if (frames > RENDER_THREAD_MAXIMUM_FRAMES)
+		frames = RENDER_THREAD_MAXIMUM_FRAMES;
+	render_thread_submit();
+	/* the frame that many before this one must have run */
+	if (frames_ended >= frames)
+		render_thread_wait_for(frame_ends[(frames_ended - frames) % RENDER_THREAD_MAXIMUM_FRAMES]);
+	frame_ends[frames_ended % RENDER_THREAD_MAXIMUM_FRAMES] = recorded;
+	frames_ended++;
 }
 
 int render_thread_busy(void)
