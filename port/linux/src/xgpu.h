@@ -96,9 +96,26 @@ header). Attributes whose bit is set in packed_attribute_mask are fed as
 NORMPACKED3 32-bit integers and unpacked in the shader. With lighting (else
 NULL), the normal and world position go to the pixel shader too, which
 lights the diffuse color for each pixel (nv2a_pixel_shader_key
-per_pixel_lighting). Returns a malloc'd string. */
+per_pixel_lighting). Instanced, the constants are read as XGPU_INSTANCE_GLSL
+describes. Returns a malloc'd string. */
 char *nv2a_vertex_shader_to_glsl(const DWORD *instructions, unsigned long instruction_count,
-	unsigned long packed_attribute_mask, const struct nv2a_vertex_lighting *lighting);
+	unsigned long packed_attribute_mask, const struct nv2a_vertex_lighting *lighting, BOOL instanced);
+
+/* (display.instancing, desktop OpenGL) An instanced draw draws the same
+vertices for several objects, which differ only in their constants: each
+instance has a block of vec4s in the shader storage buffer at binding 3,
+from instance_first + gl_InstanceID * instance_stride on, which holds the
+vertex constants c[instance_low] to c[instance_low + instance_span - 1]
+(the others are the uniform's, the same for every instance), then the pixel
+combiners' constants (XGPU_INSTANCE_PIXEL_CONSTANTS: ps_c0[8], ps_c1[8],
+ps_final_c0, ps_final_c1). The vertex shader hands its block's start to the
+pixel shader. */
+#define XGPU_INSTANCE_PIXEL_CONSTANTS 18
+#define XGPU_INSTANCE_BINDING 3
+#define XGPU_INSTANCE_GLSL \
+	"layout(std430, binding = 3) readonly buffer instance_data { vec4 instance_vec4[]; };\n" \
+	"uniform int instance_low;\n" \
+	"uniform int instance_span;\n"
 
 /* ---------- pixel shaders */
 
@@ -151,6 +168,8 @@ struct nv2a_pixel_shader_key
 	blend of a constant color factor with a constant alpha one, as the
 	meters' (shader_transparent_meter) */
 	unsigned char source_blend;
+	/* the combiners' constants are the instance's (XGPU_INSTANCE_GLSL) */
+	unsigned char instanced;
 };
 
 char *nv2a_pixel_shader_to_glsl(const struct nv2a_pixel_shader_key *key);
@@ -163,12 +182,14 @@ char *nv2a_pixel_shader_to_glsl(const struct nv2a_pixel_shader_key *key);
 #endif
 
 /* the combiner registers that live in uniforms rather than in the program:
-C0/C1 of each stage and the final combiner, and texture constants */
-#define XGPU_PIXEL_UNIFORMS \
+C0/C1 of each stage and the final combiner (an instanced draw's are the
+instance's: XGPU_INSTANCE_GLSL), and texture constants */
+#define XGPU_PIXEL_CONSTANT_UNIFORMS \
 	"uniform vec4 ps_c0[8];\n" \
 	"uniform vec4 ps_c1[8];\n" \
 	"uniform vec4 ps_final_c0;\n" \
-	"uniform vec4 ps_final_c1;\n" \
+	"uniform vec4 ps_final_c1;\n"
+#define XGPU_PIXEL_UNIFORMS \
 	"uniform vec4 fog_color;\n" \
 	"uniform vec4 fog_parameters;\n" \
 	"uniform float alpha_reference;\n" \
@@ -183,6 +204,8 @@ uniform space): [0] c[-82] (the translucency in z), [1] to [11] c[-79] to
 c[-69] (rasterizer_set_model_lighting's two point lights, two distant
 lights and the ambient light) */
 #define XGPU_MODEL_LIGHT_COUNT 12
+/* the vertex constant register of each */
+#define XGPU_MODEL_LIGHT_REGISTER(light) (XGPU_VERTEX_CONSTANT_BIAS + ((light) ? -80 + (light) : -82))
 
 /* ---------- textures */
 

@@ -19,6 +19,7 @@ clip-space position again.
 
 #include "xgpu.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 
 /* ---------- instruction fields */
@@ -115,7 +116,8 @@ static void operand_fields(const DWORD *instruction, char which, struct operand_
 	}
 }
 
-static void operand(struct xgpu_text *text, const DWORD *instruction, char which, int relative)
+/* instanced: the constants through vc() (XGPU_INSTANCE_GLSL) */
+static void operand(struct xgpu_text *text, const DWORD *instruction, char which, int relative, BOOL instanced)
 {
 	static const char swizzle_names[] = "xyzw";
 	struct operand_fields fields;
@@ -139,9 +141,14 @@ static void operand(struct xgpu_text *text, const DWORD *instruction, char which
 		break;
 	case _mux_constant:
 		if (relative)
-			xgpu_text_append(text, "c[clamp(a0 + %lu, 0, %d)]", field(instruction, 1, 13, 8), XGPU_VERTEX_CONSTANT_COUNT - 1);
+		{
+			xgpu_text_append(text, instanced ? "vc(clamp(a0 + %lu, 0, %d))" : "c[clamp(a0 + %lu, 0, %d)]",
+				field(instruction, 1, 13, 8), XGPU_VERTEX_CONSTANT_COUNT - 1);
+		}
 		else
-			xgpu_text_append(text, "c[%lu]", field(instruction, 1, 13, 8));
+		{
+			xgpu_text_append(text, instanced ? "vc(%lu)" : "c[%lu]", field(instruction, 1, 13, 8));
+		}
 		break;
 	default:
 		xgpu_text_append(text, "vec4(0.0)");
@@ -384,15 +391,31 @@ static const char shader_prologue[] =
 	"}\n";
 
 char *nv2a_vertex_shader_to_glsl(const DWORD *instructions, unsigned long instruction_count,
-	unsigned long packed_attribute_mask, const struct nv2a_vertex_lighting *lighting)
+	unsigned long packed_attribute_mask, const struct nv2a_vertex_lighting *lighting, BOOL instanced)
 {
 	struct xgpu_text text = { 0 };
 	unsigned long index;
+	char scale_register[16], offset_register[16];
 
 #ifdef HALO_GLES
 	xgpu_text_append(&text, "#version %s\n", xgpu_capabilities.shading_language);
 #endif
 	xgpu_text_append(&text, "%s", shader_prologue);
+	if (instanced)
+	{
+		/* each constant the instance's, if it has it, else the uniform's */
+		xgpu_text_append(&text,
+			XGPU_INSTANCE_GLSL
+			"uniform int instance_first;\n"
+			"uniform int instance_stride;\n"
+			"flat out int xInstance;\n"
+			"int instance_base;\n"
+			"vec4 vc(int i)\n"
+			"{\n"
+			"\tint k = i - instance_low;\n"
+			"\treturn uint(k) < uint(instance_span) ? instance_vec4[instance_base + k] : c[i];\n"
+			"}\n");
+	}
 	/* (the pixel shader's model_lighting; the normal's length in w) */
 	if (lighting)
 		xgpu_text_append(&text, "out vec4 xWorldNormal;\n");
@@ -407,6 +430,8 @@ char *nv2a_vertex_shader_to_glsl(const DWORD *instructions, unsigned long instru
 	}
 
 	xgpu_text_append(&text, "void main()\n{\n");
+	if (instanced)
+		xgpu_text_append(&text, "\tinstance_base = instance_first + gl_InstanceID * instance_stride;\n\txInstance = instance_base;\n");
 	for (index = 0; index < XGPU_VERTEX_ATTRIBUTE_COUNT; index++)
 	{
 		if (packed_attribute_mask & (1UL << index))
@@ -452,9 +477,9 @@ char *nv2a_vertex_shader_to_glsl(const DWORD *instructions, unsigned long instru
 		}
 		if (lighting && lighting->lights == 2 && index == lighting->position_instruction)
 			xgpu_text_append(&text, "\txWorldPosition = r%lu.xyz;\n", lighting->position_register);
-		xgpu_text_append(&text, "\tA = "); operand(&text, instruction, 'A', relative); xgpu_text_append(&text, ";\n");
-		xgpu_text_append(&text, "\tB = "); operand(&text, instruction, 'B', relative); xgpu_text_append(&text, ";\n");
-		xgpu_text_append(&text, "\tC = "); operand(&text, instruction, 'C', relative); xgpu_text_append(&text, ";\n");
+		xgpu_text_append(&text, "\tA = "); operand(&text, instruction, 'A', relative, instanced); xgpu_text_append(&text, ";\n");
+		xgpu_text_append(&text, "\tB = "); operand(&text, instruction, 'B', relative, instanced); xgpu_text_append(&text, ";\n");
+		xgpu_text_append(&text, "\tC = "); operand(&text, instruction, 'C', relative, instanced); xgpu_text_append(&text, ";\n");
 
 		switch (mac)
 		{
@@ -530,6 +555,8 @@ char *nv2a_vertex_shader_to_glsl(const DWORD *instructions, unsigned long instru
 			break;
 	}
 
+	snprintf(scale_register, sizeof(scale_register), instanced ? "vc(%d)" : "c[%d]", XGPU_VERTEX_CONSTANT_BIAS - 38);
+	snprintf(offset_register, sizeof(offset_register), instanced ? "vc(%d)" : "c[%d]", XGPU_VERTEX_CONSTANT_BIAS - 37);
 	xgpu_text_append(&text,
 		"\t/* undo the screen-space conversion done with c[-38] and c[-37] */\n"
 		"\tvec3 scale = vec3(viewport_scale.x != 0.0 ? viewport_scale.x : 1.0,\n"
@@ -545,7 +572,7 @@ char *nv2a_vertex_shader_to_glsl(const DWORD *instructions, unsigned long instru
 		position was kept, the same result is computed without dividing. */
 		"\tvec4 position;\n"
 		"\tif (clip_captured)\n"
-		"\t\tposition = vec4((clip_position.xyz * c[%d].xyz + (c[%d].xyz + vec3(0.5 + screen_offset, 0.5, 0.0)\n"
+		"\t\tposition = vec4((clip_position.xyz * %s.xyz + (%s.xyz + vec3(0.5 + screen_offset, 0.5, 0.0)\n"
 		"\t\t\t- viewport_offset.xyz) * clip_position.w) / scale, clip_position.w);\n"
 		"\telse\n"
 		"\t{\n"
@@ -582,7 +609,7 @@ char *nv2a_vertex_shader_to_glsl(const DWORD *instructions, unsigned long instru
 		"\txT3 = oT3;\n"
 		"\txFog = oFog.x;\n"
 		"}\n",
-		XGPU_VERTEX_CONSTANT_BIAS - 38, XGPU_VERTEX_CONSTANT_BIAS - 37
+		scale_register, offset_register
 		);
 	return text.buffer;
 }

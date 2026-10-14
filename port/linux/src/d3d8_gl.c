@@ -355,6 +355,10 @@ struct vertex_shader_object
 	others), and its shaders that hand them on, as shader[] */
 	struct nv2a_vertex_lighting lighting;
 	GLuint lit_shader[2];
+	/* (display.instancing) the shaders of an instanced draw, which reads
+	its instances' constants (XGPU_INSTANCE_GLSL): [0] as shader[0], [1] as
+	lit_shader[0] */
+	GLuint instanced_shader[2];
 	/* a shader lit for each pixel failed to compile or link: lit as the
 	vertex shader lights it from then on */
 	BOOL lighting_failed;
@@ -364,9 +368,9 @@ struct vertex_shader_object
 	struct vertex_array_entry *vertex_array;
 	unsigned long vertex_array_streams;
 #endif
-	/* which of shader[] and lit_shader[] have been compiled (bits 0 and 1,
-	and 2 and 3): one that failed stays 0 and is not compiled again at each
-	draw */
+	/* which of shader[], lit_shader[] and instanced_shader[] have been
+	compiled (bits 0 and 1, 2 and 3, 4 and 5): one that failed stays 0 and is
+	not compiled again at each draw */
 	unsigned char shaders_tried;
 };
 
@@ -422,6 +426,8 @@ struct program_entry
 	constants_serial at their last upload */
 	GLint model_lights;
 	unsigned long long model_lights_serial;
+	/* an instanced draw's (XGPU_INSTANCE_GLSL) */
+	GLint instance_first, instance_stride, instance_low, instance_span;
 
 	/* the vertex constants c[0..constant_count) the program uses; with
 	consecutive locations, a changed range is uploaded by itself */
@@ -3324,17 +3330,19 @@ static BOOL words_equal(const void *a, const void *b, unsigned long size)
 }
 
 /* lit: the shader that hands the lighting's normal and position on
-(vertex_shader_object lit_shader) */
-static GLuint vertex_shader_get(struct vertex_shader_object *program, BOOL immediate, BOOL lit)
+(vertex_shader_object lit_shader); instanced: the shader of an instanced
+draw, which is never immediate (instanced_shader) */
+static GLuint vertex_shader_get(struct vertex_shader_object *program, BOOL immediate, BOOL lit, BOOL instanced)
 {
 	int variant = immediate ? 1 : 0;
-	GLuint *shader = lit ? &program->lit_shader[variant] : &program->shader[variant];
-	unsigned char tried = (unsigned char)(1 << (variant + (lit ? 2 : 0)));
+	GLuint *shader = instanced ? &program->instanced_shader[lit ? 1 : 0] :
+		lit ? &program->lit_shader[variant] : &program->shader[variant];
+	unsigned char tried = (unsigned char)(instanced ? 1 << (4 + (lit ? 1 : 0)) : 1 << (variant + (lit ? 2 : 0)));
 
 	if (!*shader && !(program->shaders_tried & tried))
 	{
 		char *source = nv2a_vertex_shader_to_glsl(program->instructions, program->instruction_count,
-			immediate ? 0 : device.vertex_shader->packed_mask, lit ? &program->lighting : NULL);
+			immediate ? 0 : device.vertex_shader->packed_mask, lit ? &program->lighting : NULL, instanced);
 
 		program->shaders_tried |= tried;
 		*shader = xgpu_compile_shader(GL_VERTEX_SHADER, source, "vertex");
@@ -3343,8 +3351,8 @@ static GLuint vertex_shader_get(struct vertex_shader_object *program, BOOL immed
 			char path[512];
 			FILE *file;
 
-			snprintf(path, sizeof(path), "%s/vs%03lu_%d%s.glsl", debug_settings.dump_shaders, program->id, variant,
-				lit ? "_lit" : "");
+			snprintf(path, sizeof(path), "%s/vs%03lu_%d%s%s.glsl", debug_settings.dump_shaders, program->id, variant,
+				lit ? "_lit" : "", instanced ? "_instanced" : "");
 			if ((file = fopen(path, "w")) != NULL)
 			{
 				fputs(source, file);
@@ -3488,6 +3496,10 @@ static struct program_entry *program_get(GLuint vertex_shader, GLuint fragment_s
 	entry->screen_offset = glGetUniformLocation(entry->program, "screen_offset");
 	entry->blend_constant = glGetUniformLocation(entry->program, "blend_constant");
 	entry->model_lights = glGetUniformLocation(entry->program, "model_lights");
+	entry->instance_first = glGetUniformLocation(entry->program, "instance_first");
+	entry->instance_stride = glGetUniformLocation(entry->program, "instance_stride");
+	entry->instance_low = glGetUniformLocation(entry->program, "instance_low");
+	entry->instance_span = glGetUniformLocation(entry->program, "instance_span");
 	for (stage = 0; stage < D3DTSS_MAXSTAGES; stage++)
 	{
 		char name[8];
@@ -4316,14 +4328,9 @@ static BOOL per_pixel_lighting(void)
 	return enabled;
 }
 
-/* the vertex constant register of each of the per-pixel lighting's
-(XGPU_MODEL_LIGHT_COUNT) */
-static unsigned long model_light_register(int light)
-{
-	return (unsigned long)(XGPU_VERTEX_CONSTANT_BIAS + (light ? -80 + light : -82));
-}
-
-static struct program_entry *prepare_draw(BOOL immediate)
+/* instanced: the draw is instanced (display.instancing), and its programs
+read its instances' constants (XGPU_INSTANCE_GLSL) */
+static struct program_entry *prepare_draw_as(BOOL immediate, BOOL instanced)
 {
 	struct vertex_shader_object *program = current_program();
 	struct nv2a_pixel_shader_key key;
@@ -4386,6 +4393,7 @@ static struct program_entry *prepare_draw(BOOL immediate)
 	key.fog_enable = render_state[D3DRS_FOGENABLE] != 0;
 	key.source_blend = source_blend_in_shader();
 	key.fog_table_mode = (unsigned char)render_state[D3DRS_FOGTABLEMODE];
+	key.instanced = (unsigned char)instanced;
 #ifdef HALO_GLES
 	key.count_samples = device.visibility_test_active && xgpu_capabilities.atomic_counters;
 #endif
@@ -4394,7 +4402,7 @@ static struct program_entry *prepare_draw(BOOL immediate)
 	if (program->lighting.lights && !program->lighting_failed && per_pixel_lighting())
 	{
 		key.per_pixel_lighting = (unsigned char)program->lighting.lights;
-		entry = program_get(vertex_shader_get(program, immediate, TRUE), fragment_shader_get(&key));
+		entry = program_get(vertex_shader_get(program, immediate, TRUE, instanced), fragment_shader_get(&key));
 		if (!entry)
 		{
 			/* drawn as the vertex shader lights it instead (not at all,
@@ -4406,7 +4414,7 @@ static struct program_entry *prepare_draw(BOOL immediate)
 		}
 	}
 	if (!entry)
-		entry = program_get(vertex_shader_get(program, immediate, FALSE), fragment_shader_get(&key));
+		entry = program_get(vertex_shader_get(program, immediate, FALSE, instanced), fragment_shader_get(&key));
 	if (!entry)
 	{
 		stats.skipped_link++;
@@ -4500,7 +4508,7 @@ static struct program_entry *prepare_draw(BOOL immediate)
 
 		for (light = 0; light < XGPU_MODEL_LIGHT_COUNT; light++)
 		{
-			if (constant_serials[model_light_register(light)] > entry->model_lights_serial)
+			if (constant_serials[XGPU_MODEL_LIGHT_REGISTER(light)] > entry->model_lights_serial)
 				break;
 		}
 		if (light < XGPU_MODEL_LIGHT_COUNT)
@@ -4508,7 +4516,7 @@ static struct program_entry *prepare_draw(BOOL immediate)
 			float lights[XGPU_MODEL_LIGHT_COUNT][4];
 
 			for (light = 0; light < XGPU_MODEL_LIGHT_COUNT; light++)
-				memcpy(lights[light], device.constants[model_light_register(light)], sizeof(lights[0]));
+				memcpy(lights[light], device.constants[XGPU_MODEL_LIGHT_REGISTER(light)], sizeof(lights[0]));
 			glUniform4fv(entry->model_lights, XGPU_MODEL_LIGHT_COUNT, lights[0]);
 		}
 		entry->model_lights_serial = constants_serial;
@@ -4612,6 +4620,11 @@ static struct program_entry *prepare_draw(BOOL immediate)
 	uniform_float(entry->screen_offset, &entry->uniforms.screen_offset, draw_uniforms.screen_offset);
 	uniform_vec4(entry->texture_lod_bias, entry->uniforms.texture_lod_bias, draw_uniforms.texture_lod_bias, 1);
 	return entry;
+}
+
+static struct program_entry *prepare_draw(BOOL immediate)
+{
+	return prepare_draw_as(immediate, FALSE);
 }
 
 /* ---------- tracing (debug.gpu_trace_frame) */
