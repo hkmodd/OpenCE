@@ -116,6 +116,11 @@ static const struct config_setting config_settings[] =
 		"Draw on a thread of its own, beside the game's, which the Xbox did not\n"
 		"need: more frames a second where the processor limits them. From the\n"
 		"next start." },
+	{ "display.frames_queued", _config_integer, "1", "HALO_FRAMES_QUEUED", _environment_value, _platform_desktop,
+		"With display.render_thread, how many frames the game may queue ahead\n"
+		"of the one drawn, 1 or 2: 2 carries a long frame (a tick's, in a busy\n"
+		"scene) without missing the display's refresh, and shows each frame a\n"
+		"refresh later." },
 	{ "display.anti_aliasing", _config_string, "\"off\"", "HALO_ANTI_ALIASING", _environment_value, _platform_all,
 		"Smoothing of jagged edges, which the Xbox did not have: \"off\"; \"fxaa\"\n"
 		"or \"smaa\" smooth the 3D view once it is drawn (the HUD and menus stay\n"
