@@ -309,17 +309,52 @@ static short decal_batch_count = 0;
 
 static void rasterizer_decals_draw_batch(void);
 
-/* port: the order the decals of a cluster are drawn in. Where it makes no
-difference (a run of decals whose blend functions commute: they do not
-write depth, and multiplying, adding, the least or the most of the
-framebuffer and them comes to the same in any order, but for rounding in
-the last bit), they go by their
-blend function and bitmap, so that more of them share a batch
-(decal_batch): a definition's decals pick among its bitmaps at random. */
-static long decal_draw_order[MAXIMUM_DECALS_PER_MAP];
-static unsigned long decal_draw_keys[MAXIMUM_DECALS_PER_MAP];
-static long decal_sort_scratch[MAXIMUM_DECALS_PER_MAP];
-static unsigned long decal_sort_scratch_keys[MAXIMUM_DECALS_PER_MAP];
+/* port: the order the decals of a layer are drawn in. Each decal joins the
+last batch (decal_batch) of its blend function and bitmap, so long as no
+batch after that one holds a decal it must stay after; otherwise it starts
+a batch of its own after the others. A decal must stay after an earlier one
+unless the two can be drawn in either order: their blend function is the
+same and commutes with itself (multiplying, adding, subtracting, the least
+or the most of the framebuffer and them comes to the same in any order, but
+for rounding in the last bit), except in the alpha-tested layer, which
+writes the stencil; or they cover no pixel in common, which their
+rectangles on the screen show (rasterizer_decal_screen_bounds). In a fight
+most decals are bullet holes, whose blend function (doubling the product)
+does not commute, and a definition picks among its bitmaps at random: in
+the order they were made, one decal after another changed bitmap. Every
+pair of decals that cover a pixel in common is drawn in the order it was
+before, so the picture is the same. */
+#define DECAL_ORDER_MAXIMUM_DECALS MAXIMUM_DECALS_PER_MAP
+/* (the decals and batches a decal is tested against, past which it starts a
+batch of its own) */
+#define DECAL_ORDER_MAXIMUM_TESTS 256
+/* (each rectangle is widened by this much of the normalized device
+coordinates, 1/128 of the screen each way, which the rounding of
+rasterization is well inside) */
+#define DECAL_ORDER_SCREEN_MARGIN (1.0f / 64.0f)
+/* (a vertex nearer the camera's plane than this, in w, makes its decal's
+rectangle the whole plane) */
+#define DECAL_ORDER_MINIMUM_W 0.0001f
+static struct
+{
+	long decal_index;
+	long next_entry_index;
+	real_rectangle2d bounds;
+} decal_order_entries[DECAL_ORDER_MAXIMUM_DECALS];
+static struct
+{
+	short framebuffer_blend_function;
+	long bitmap_group_index;
+	byte bitmap_index;
+	long first_entry_index;
+	long last_entry_index;
+	real_rectangle2d bounds;
+} decal_order_batches[DECAL_ORDER_MAXIMUM_DECALS];
+static long decal_order_entry_count = 0;
+static long decal_order_batch_count = 0;
+static long decal_draw_order[DECAL_ORDER_MAXIMUM_DECALS];
+
+static void rasterizer_decals_draw_ordered(void);
 
 static boolean rasterizer_decal_blend_function_commutes(
 	short framebuffer_blend_function)
@@ -331,75 +366,162 @@ static boolean rasterizer_decal_blend_function_commutes(
 		framebuffer_blend_function == _shader_framebuffer_blend_function_reverse_subtract;
 }
 
-/* sorts first to last (exclusive) of decal_draw_order by decal_draw_keys,
-keeping the order of equal keys (a merge sort) */
-static void rasterizer_decals_sort_run(
-	long first,
-	long last)
+/* the rectangle the vertices cover on the screen, in normalized device
+coordinates, widened by DECAL_ORDER_SCREEN_MARGIN: the window's world to
+view and projection, as rasterizer_set_view_transform gives the vertex
+shaders. A quad seen from in front covers only the rectangle of its
+corners; one with a corner near or behind the camera may cover any of the
+screen. */
+static void rasterizer_decal_screen_bounds(
+	struct decal_vertex const *vertices,
+	short vertex_count,
+	real_rectangle2d *bounds)
 {
-	long width, start;
+	real_matrix4x3 const *world_to_view = &global_window_parameters.frustum.world_to_view;
+	real (*projection)[4] = global_window_parameters.frustum.projection_matrix;
+	short vertex_index;
 
-	for (width = 1; width < last - first; width *= 2)
+	bounds->x0 = REAL_MAX;
+	bounds->x1 = REAL_MIN;
+	bounds->y0 = REAL_MAX;
+	bounds->y1 = REAL_MIN;
+	for (vertex_index = 0; vertex_index < vertex_count; vertex_index++)
 	{
-		for (start = first; start < last; start += 2 * width)
+		real_point3d const *point = &vertices[vertex_index].position;
+		real view[3];
+		real x, y, w;
+		short axis;
+
+		for (axis = 0; axis < 3; axis++)
 		{
-			long middle = MIN(start + width, last);
-			long end = MIN(start + 2 * width, last);
-			long left = start, right = middle, out = start;
-
-			while (left < middle || right < end)
-			{
-				long from = right < end && (left >= middle || decal_draw_keys[right] < decal_draw_keys[left]) ?
-					right++ : left++;
-
-				decal_sort_scratch[out] = decal_draw_order[from];
-				decal_sort_scratch_keys[out] = decal_draw_keys[from];
-				out++;
-			}
+			view[axis] = point->x * world_to_view->n[0][axis] + point->y * world_to_view->n[1][axis] +
+				point->z * world_to_view->n[2][axis] + world_to_view->n[3][axis];
 		}
-		csmemcpy(&decal_draw_order[first], &decal_sort_scratch[first], (last - first) * sizeof(long));
-		csmemcpy(&decal_draw_keys[first], &decal_sort_scratch_keys[first], (last - first) * sizeof(unsigned long));
+		w = view[0] * projection[0][3] + view[1] * projection[1][3] + view[2] * projection[2][3] + projection[3][3];
+		if (!global_window_parameters.frustum.projection_valid || !(w > DECAL_ORDER_MINIMUM_W))
+		{
+			bounds->x0 = REAL_MIN;
+			bounds->x1 = REAL_MAX;
+			bounds->y0 = REAL_MIN;
+			bounds->y1 = REAL_MAX;
+			return;
+		}
+		x = (view[0] * projection[0][0] + view[1] * projection[1][0] + view[2] * projection[2][0] + projection[3][0]) / w;
+		y = (view[0] * projection[0][1] + view[1] * projection[1][1] + view[2] * projection[2][1] + projection[3][1]) / w;
+		bounds->x0 = MIN(bounds->x0, x);
+		bounds->x1 = MAX(bounds->x1, x);
+		bounds->y0 = MIN(bounds->y0, y);
+		bounds->y1 = MAX(bounds->y1, y);
 	}
+	bounds->x0 -= DECAL_ORDER_SCREEN_MARGIN;
+	bounds->x1 += DECAL_ORDER_SCREEN_MARGIN;
+	bounds->y0 -= DECAL_ORDER_SCREEN_MARGIN;
+	bounds->y1 += DECAL_ORDER_SCREEN_MARGIN;
 
 	return;
 }
 
-/* the cluster's decals of the layer in the order they are drawn, into
-decal_draw_order; their count */
-static long rasterizer_decals_draw_order(
-	short cluster_index)
+static boolean rasterizer_decal_rectangles_overlap(
+	real_rectangle2d const *a,
+	real_rectangle2d const *b)
 {
-	long count = 0, first, decal_index;
+	return a->x0 <= b->x1 && b->x0 <= a->x1 && a->y0 <= b->y1 && b->y0 <= a->y1;
+}
 
-	for (decal_index = decal_get_first_decal_index(cluster_index, local_layer);
-		decal_index != NONE && count < MAXIMUM_DECALS_PER_MAP;
-		decal_index = DECAL_GET(decal_index)->next_decal_index)
+/* the decal into its batch (decal_order_batches), as the first comment above
+says; vertices NULL when they cannot be read, which lets it pass nothing */
+static void rasterizer_decal_order_add(
+	long decal_index,
+	short framebuffer_blend_function,
+	long bitmap_group_index,
+	byte bitmap_index,
+	struct decal_vertex const *vertices,
+	short vertex_count)
+{
+	boolean commutes = local_layer != _decal_layer_alpha_tested &&
+		rasterizer_decal_blend_function_commutes(framebuffer_blend_function);
+	long entry_index, batch_index, tests = 0;
+
+	/* (more than a layer's decals cannot come: those so far are drawn first) */
+	if (decal_order_entry_count == DECAL_ORDER_MAXIMUM_DECALS)
+		rasterizer_decals_draw_ordered();
+	entry_index = decal_order_entry_count++;
+	decal_order_entries[entry_index].decal_index = decal_index;
+	decal_order_entries[entry_index].next_entry_index = NONE;
+	if (vertices)
 	{
-		struct decal_datum *decal = DECAL_GET(decal_index);
-		struct decal_definition *definition = decal_definition_get(decal->definition_index);
-		short framebuffer_blend_function = definition->shader.framebuffer_blend_function;
-
-		decal_draw_order[count] = decal_index;
-		decal_draw_keys[count] = rasterizer_decal_blend_function_commutes(framebuffer_blend_function) &&
-			local_layer != _decal_layer_alpha_tested ?
-			((unsigned long)(framebuffer_blend_function & 0xF) << 28) |
-				((unsigned long)(definition->shader.map.index & 0xFFFFF) << 8) |
-				(decal->bitmap_index & 0xFF) :
-			0xFFFFFFFF;
-		count++;
+		rasterizer_decal_screen_bounds(vertices, vertex_count, &decal_order_entries[entry_index].bounds);
 	}
-	for (first = 0; first < count; )
+	else
 	{
-		long last = first;
-
-		while (last < count && decal_draw_keys[last] != 0xFFFFFFFF)
-			last++;
-		if (last - first > 1)
-			rasterizer_decals_sort_run(first, last);
-		first = last + 1;
+		decal_order_entries[entry_index].bounds.x0 = REAL_MIN;
+		decal_order_entries[entry_index].bounds.x1 = REAL_MAX;
+		decal_order_entries[entry_index].bounds.y0 = REAL_MIN;
+		decal_order_entries[entry_index].bounds.y1 = REAL_MAX;
 	}
 
-	return count;
+	for (batch_index = decal_order_batch_count - 1; batch_index >= 0; batch_index--)
+	{
+		long other_index;
+
+		if (decal_order_batches[batch_index].framebuffer_blend_function == framebuffer_blend_function &&
+			decal_order_batches[batch_index].bitmap_group_index == bitmap_group_index &&
+			decal_order_batches[batch_index].bitmap_index == bitmap_index)
+		{
+			break;
+		}
+		if (commutes && decal_order_batches[batch_index].framebuffer_blend_function == framebuffer_blend_function)
+			continue;
+		if (++tests > DECAL_ORDER_MAXIMUM_TESTS)
+		{
+			batch_index = NONE;
+			break;
+		}
+		if (!rasterizer_decal_rectangles_overlap(&decal_order_entries[entry_index].bounds,
+			&decal_order_batches[batch_index].bounds))
+		{
+			continue;
+		}
+		for (other_index = decal_order_batches[batch_index].first_entry_index;
+			other_index != NONE;
+			other_index = decal_order_entries[other_index].next_entry_index)
+		{
+			if (++tests > DECAL_ORDER_MAXIMUM_TESTS ||
+				rasterizer_decal_rectangles_overlap(&decal_order_entries[entry_index].bounds,
+					&decal_order_entries[other_index].bounds))
+			{
+				break;
+			}
+		}
+		if (other_index != NONE)
+		{
+			batch_index = NONE;
+			break;
+		}
+	}
+
+	if (batch_index == NONE)
+	{
+		batch_index = decal_order_batch_count++;
+		decal_order_batches[batch_index].framebuffer_blend_function = framebuffer_blend_function;
+		decal_order_batches[batch_index].bitmap_group_index = bitmap_group_index;
+		decal_order_batches[batch_index].bitmap_index = bitmap_index;
+		decal_order_batches[batch_index].first_entry_index = entry_index;
+		decal_order_batches[batch_index].bounds = decal_order_entries[entry_index].bounds;
+	}
+	else
+	{
+		real_rectangle2d *bounds = &decal_order_batches[batch_index].bounds;
+
+		decal_order_entries[decal_order_batches[batch_index].last_entry_index].next_entry_index = entry_index;
+		bounds->x0 = MIN(bounds->x0, decal_order_entries[entry_index].bounds.x0);
+		bounds->x1 = MAX(bounds->x1, decal_order_entries[entry_index].bounds.x1);
+		bounds->y0 = MIN(bounds->y0, decal_order_entries[entry_index].bounds.y0);
+		bounds->y1 = MAX(bounds->y1, decal_order_entries[entry_index].bounds.y1);
+	}
+	decal_order_batches[batch_index].last_entry_index = entry_index;
+
+	return;
 }
 
 /* ---------- public code */
@@ -747,7 +869,6 @@ void _rasterizer_decals_draw(
 	short cluster_index)
 {
 	long decal_index;
-	long decal_count, decal_order_index; /* port: (rasterizer_decals_draw_order) */
 
 	match_assert(
 		"c:\\halo\\SOURCE\\rasterizer\\xbox\\rasterizer_xbox_decals.c",
@@ -758,8 +879,56 @@ void _rasterizer_decals_draw(
 	if (!rasterizer_debug_options.draw_environment_decals)
 		return;
 
-	/* port: in the order rasterizer_decals_draw_order gives */
-	decal_count = rasterizer_decals_draw_order(cluster_index);
+	/* port: into the layer's order (rasterizer_decal_order_add), which
+	_rasterizer_decals_end draws */
+	{
+		byte *vertex_data;
+		long count = 0;
+
+		IDirect3DVertexBuffer8_Lock(local_d3d_vertex_buffer, 0, 0, &vertex_data, D3DLOCK_READONLY);
+		for (decal_index = decal_get_first_decal_index(cluster_index, local_layer);
+			decal_index != NONE && count < MAXIMUM_DECALS_PER_MAP;
+			decal_index = DECAL_GET(decal_index)->next_decal_index)
+		{
+			struct decal_datum *decal = DECAL_GET(decal_index);
+			struct decal_definition *definition = decal_definition_get(decal->definition_index);
+
+			rasterizer_decal_order_add(
+				decal_index,
+				definition->shader.framebuffer_blend_function,
+				definition->shader.map.index,
+				decal->bitmap_index,
+				vertex_data ?
+					(struct decal_vertex const *)(vertex_data +
+						(unsigned long)lruv_block_get_address(local_vertex_cache, decal_index)) :
+					NULL,
+				(short)(4 * decal->quad_count));
+			count++;
+		}
+	}
+
+	return;
+}
+
+/* port: draws the layer's decals in their order (rasterizer_decal_order_add),
+as _rasterizer_decals_draw drew a cluster's */
+static void rasterizer_decals_draw_ordered(
+	void)
+{
+	long decal_index;
+	long decal_count = 0, decal_order_index, batch_index, entry_index;
+
+	for (batch_index = 0; batch_index < decal_order_batch_count; batch_index++)
+	{
+		for (entry_index = decal_order_batches[batch_index].first_entry_index;
+			entry_index != NONE;
+			entry_index = decal_order_entries[entry_index].next_entry_index)
+		{
+			decal_draw_order[decal_count++] = decal_order_entries[entry_index].decal_index;
+		}
+	}
+	decal_order_entry_count = 0;
+	decal_order_batch_count = 0;
 	for (decal_order_index = 0; decal_order_index < decal_count; decal_order_index++)
 	{
 		struct decal_datum *decal = DECAL_GET(decal_index = decal_draw_order[decal_order_index]);
@@ -891,8 +1060,6 @@ void _rasterizer_decals_draw(
 		}
 
 	}
-	/* port: (the batch goes on into the next cluster's decals:
-	_rasterizer_decals_end draws it) */
 
 	return;
 }
@@ -931,6 +1098,7 @@ static void rasterizer_decals_draw_batch(
 void _rasterizer_decals_end(
 	void)
 {
+	rasterizer_decals_draw_ordered(); /* port: (rasterizer_decal_order_add) */
 	rasterizer_decals_draw_batch(); /* port: (decal_batch) */
 	if (local_layer == _decal_layer_alpha_tested)
 		rasterizer_set_stencil_mode(RASTERIZER_STENCIL_MODE_REJECT);
