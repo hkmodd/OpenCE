@@ -42,6 +42,7 @@ with their unit, and with what it rides.
 #include "game/players.h"
 #include "render/render_cameras.h"
 #include "units/units.h"
+#include "tick_slices.h"
 
 /* port/linux/src/port_config.c */
 int config_boolean(const char *name);
@@ -136,6 +137,8 @@ struct interpolated_first_person
 	long tick;
 	short node_count;
 	boolean has_previous;
+	/* latest holds the pose of the tick drawn */
+	boolean has_latest;
 	real_matrix4x3 previous[MAXIMUM_INTERPOLATED_NODES];
 	real_matrix4x3 latest[MAXIMUM_INTERPOLATED_NODES];
 };
@@ -146,6 +149,9 @@ static struct interpolated_object *interpolated_objects;
 static struct interpolated_camera interpolated_cameras[MAXIMUM_LOCAL_PLAYERS];
 static struct interpolated_first_person interpolated_first_person[MAXIMUM_LOCAL_PLAYERS];
 static long interpolation_tick;
+/* the tick the first-person weapons' animation has last run in
+(render_interpolation_first_person_updated) */
+static long first_person_updated_tick;
 static long interpolation_frame;
 static boolean interpolation_rendering;
 static real interpolation_fraction = 1.0f;
@@ -494,6 +500,7 @@ void render_interpolation_reset(void)
 	{
 		interpolated_first_person[index].node_count = 0;
 		interpolated_first_person[index].has_previous = FALSE;
+		interpolated_first_person[index].has_latest = FALSE;
 	}
 }
 
@@ -527,7 +534,14 @@ real_matrix4x3 *render_interpolation_object_node_matrices(long object_index)
 	if (absolute_index >= MAXIMUM_INTERPOLATED_OBJECTS)
 		return NULL;
 	record = &interpolated_objects[absolute_index];
-	if (record->object_index != object_index || record->tick != interpolation_tick || !record->has_previous)
+	if (record->object_index != object_index || record->tick != interpolation_tick)
+		return NULL;
+	/* One first taken on the tick drawn has no pose to blend from: drawn as
+	it stands, unless a tick is under way (display.tick_slices), which may
+	have moved it on a tick: then as it stood at the tick drawn (where it
+	stands, moved by the netcode or not, until that tick moves it: no
+	correction drawn, as none is from where it stands). */
+	if (!record->has_previous && !tick_slices_in_flight())
 		return NULL;
 	if (record->blended_frame != interpolation_frame)
 	{
@@ -536,7 +550,8 @@ real_matrix4x3 *render_interpolation_object_node_matrices(long object_index)
 		real_matrix4x3 *blended = record->nodes + 2 * record->node_capacity;
 		short node_index;
 		/* (so written that a position not a number snaps) */
-		boolean snap = !(distance_squared(&previous[0].position, &latest[0].position) <=
+		boolean snap = !record->has_previous ||
+			!(distance_squared(&previous[0].position, &latest[0].position) <=
 			OBJECT_SNAP_DISTANCE * OBJECT_SNAP_DISTANCE);
 
 		/* a node moved further in the root's frame than a tick allows: the
@@ -581,7 +596,8 @@ real_matrix4x3 *render_interpolation_object_node_matrices(long object_index)
 		}
 		if (snap)
 			memcpy(blended, latest, record->node_count * sizeof(real_matrix4x3));
-		if (correction_significant(&record->correction) || correction_significant(&record->correction_pending))
+		if (record->has_previous &&
+			(correction_significant(&record->correction) || correction_significant(&record->correction_pending)))
 		{
 			real_vector3d drawn;
 
@@ -867,6 +883,15 @@ static struct observer_result const *render_interpolation_blended_camera(
 
 /* ---------- first-person weapon */
 
+/* The first-person weapons' animation has run in a tick (game.c): the
+tick after the one drawn until the clock takes it. A tick left under way by
+the frames, or begun ahead of its time (display.tick_slices), runs it while
+the frames still draw the tick before. */
+void render_interpolation_first_person_updated(void)
+{
+	first_person_updated_tick = interpolation_tick + 1;
+}
+
 /* The first-person weapon and hands are posed in world space from the drawn
 camera each frame, from animation state that changes once a tick: blend the
 pose relative to the camera. */
@@ -879,8 +904,10 @@ void render_interpolation_first_person(
 	struct interpolated_first_person *first_person;
 	real_matrix4x3 camera_matrix;
 	real_matrix4x3 inverse_camera;
+	real_matrix4x3 current[MAXIMUM_INTERPOLATED_NODES];
 	struct interpolation_rotation previous_rotations[MAXIMUM_INTERPOLATED_NODES];
 	struct interpolation_rotation latest_rotations[MAXIMUM_INTERPOLATED_NODES];
+	boolean kept;
 	short node_index;
 
 	if (!interpolation_rendering ||
@@ -901,10 +928,31 @@ void render_interpolation_first_person(
 			first_person->node_count == node_count;
 		memcpy(first_person->previous, first_person->latest, sizeof(first_person->previous));
 		first_person->tick = interpolation_tick;
+		first_person->has_latest = FALSE;
 	}
 	for (node_index = 0; node_index < node_count; node_index++)
-		matrix4x3_multiply(&inverse_camera, &node_matrices[node_index], &first_person->latest[node_index]);
-	first_person->node_count = node_count;
+		matrix4x3_multiply(&inverse_camera, &node_matrices[node_index], &current[node_index]);
+	/* The pose is the tick drawn's until the tick after it animates the
+	weapon (display.tick_slices): then the one taken before it is kept,
+	unless there is none (that tick ran before this frame) or the tick has
+	put another weapon in the hands: a node further from the kept pose than
+	a tick moves it (so written that a position not a number is another),
+	drawn as it stands. */
+	kept = first_person->has_latest && first_person_updated_tick > interpolation_tick &&
+		first_person->node_count == node_count;
+	for (node_index = 0; kept && node_index < node_count; node_index++)
+	{
+		kept = distance_squared(&current[node_index].position, &first_person->latest[node_index].position) <=
+			FIRST_PERSON_SNAP_DISTANCE * FIRST_PERSON_SNAP_DISTANCE;
+	}
+	if (!kept)
+	{
+		if (first_person->has_latest && first_person_updated_tick > interpolation_tick)
+			first_person->has_previous = FALSE;
+		memcpy(first_person->latest, current, node_count * sizeof(real_matrix4x3));
+		first_person->node_count = node_count;
+		first_person->has_latest = TRUE;
+	}
 	if (!first_person->has_previous)
 		return;
 	/* a node that jumped further in the camera's frame than a tick allows:
