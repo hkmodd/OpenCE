@@ -1,5 +1,6 @@
 """The real mixer of dsound_sdl.c on known signals (mixer.c): its resampler against the same low pass worked out in
-double precision, sines through it as the ear hears them, voices out of earshot and mono voices.
+double precision, sines through it as the ear hears them, voices out of earshot and mono voices, and its lock
+wanted by another thread while it mixes.
 
     python tools/harness/tests/test_mixer.py metrics   the figures
     python tools/harness/tests/test_mixer.py bench [voices] [out of earshot] [indoor]   a game's worth of voices, timed
@@ -16,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from harness import CHECK_FAILED, build, mutated, read, run  # noqa: E402
 
 SOURCE = "port/linux/src/dsound_sdl.c"
-CASES = ["reference", "impulse", "sines", "aliases", "silent-voice", "mono"]
+CASES = ["reference", "impulse", "sines", "aliases", "silent-voice", "mono", "waiter", "waiter-release"]
 
 # a fault in the mixer, and the case that must catch it
 NEGATIVE_CONTROLS = {
@@ -25,6 +26,8 @@ NEGATIVE_CONTROLS = {
     "phase-not-blended": (("for (phase = 0; phase <= RESAMPLER_TABLE_STEPS; phase++)",
                            "for (phase = 0; phase <= RESAMPLER_TABLE_STEPS; phase += 2)"), "impulse"),
     "no-stretch": (("#define RESAMPLER_MAXIMUM_STRETCH 2", "#define RESAMPLER_MAXIMUM_STRETCH 1"), "aliases"),
+    "mixer-keeps-lock": (("if (__atomic_load_n(&lock_waiters, __ATOMIC_RELAXED))", "if (0)"), "waiter"),
+    "release-forgets-mixer": (("if (mix_next == stream)", "if (0)"), "waiter-release"),
 }
 
 

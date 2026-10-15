@@ -12,7 +12,10 @@ signals:
 	  the band, and what else comes out (images and aliases) under the tone;
 	- a voice out of earshot, which is not resampled, moves on as one heard
 	  does, and is heard the same once it comes into earshot;
-	- mono voices heard as stereo ones with both channels the same are.
+	- mono voices heard as stereo ones with both channels the same are;
+	- the game's thread waiting for the lock while the mixer mixes has it
+	  between two voices, the mix the same, and a voice it releases then
+	  is not mixed again.
 "render" writes voices at each rate and a scene's whole mix as raw floats
 (test_mixer.py compares the resampler adding four taps at a time with it
 adding tap by tap), "metrics" prints the figures and "bench" times a game's
@@ -23,6 +26,7 @@ worth of voices.
 
 #include <math.h>
 #include <pthread.h>
+#include <sched.h>
 
 typedef int BOOL;
 typedef unsigned long DWORD;
@@ -410,6 +414,105 @@ static void scene_approach(void)
 	}
 }
 
+/* ---------- the lock, wanted by another thread while the mixer mixes */
+
+#define LOCK_VOICES 320
+#define LOCK_CHUNKS 16
+#define LOCK_VICTIMS 16
+/* the waits the mixer's thread mixes on for, past LOCK_CHUNKS (one core lets
+the waiting thread run only between the mixer's time slices) */
+#define LOCK_WANTED 32
+#define LOCK_SECONDS 20
+
+static float lock_output[LOCK_CHUNKS * CHUNK * 2];
+static int lock_done;
+static unsigned long lock_wanted;
+
+/* the scene's voices go */
+static void scene_clear(void)
+{
+	while (streams)
+	{
+		struct sdl_stream *stream = streams;
+
+		streams = stream->next;
+		voice_delete(stream);
+	}
+}
+
+/* the mixer's thread, as the sound device's: LOCK_CHUNKS mixes into
+lock_output, and more until the lock has been wanted LOCK_WANTED times */
+static void *lock_mixer(void *unused)
+{
+	static float spare[CHUNK * 2];
+	struct timespec start, now;
+	unsigned long chunk;
+
+	(void)unused;
+	clock_gettime(CLOCK_MONOTONIC, &start);
+	for (chunk = 0;; chunk++)
+	{
+		clock_gettime(CLOCK_MONOTONIC, &now);
+		if (chunk >= LOCK_CHUNKS && (__atomic_load_n(&lock_wanted, __ATOMIC_RELAXED) >= LOCK_WANTED
+			|| now.tv_sec - start.tv_sec > LOCK_SECONDS))
+			break;
+		mix(chunk < LOCK_CHUNKS ? lock_output + chunk * CHUNK * 2 : spare, CHUNK);
+	}
+	__atomic_store_n(&lock_done, 1, __ATOMIC_RELEASE);
+	return NULL;
+}
+
+/* waits for the mixer to be among the voices, past last, with the lock, then
+takes it as the game's thread does (stream_lock): FALSE once the mixer is
+done, else TRUE with the lock held */
+static BOOL lock_while_mixing(const struct sdl_stream *last)
+{
+	for (;;)
+	{
+		struct sdl_stream *next = __atomic_load_n(&mix_next, __ATOMIC_RELAXED);
+
+		if (__atomic_load_n(&lock_done, __ATOMIC_ACQUIRE))
+			return FALSE;
+		if (next && next != last)
+		{
+			if (pthread_mutex_trylock(&mixer_lock))
+			{
+				stream_lock();
+				__atomic_fetch_add(&lock_wanted, 1, __ATOMIC_RELAXED);
+				return TRUE;
+			}
+			/* (the mixer between two voices) */
+			pthread_mutex_unlock(&mixer_lock);
+		}
+		sched_yield();
+	}
+}
+
+/* a scene of LOCK_VOICES voices mixed by the mixer's thread from the start
+of the scene (the limiter's and reverb's state as they were): LOCK_CHUNKS
+mixes, and more until the lock has been wanted LOCK_WANTED times (counting
+from wanted) */
+static void lock_scene(pthread_t *mixer, unsigned long wanted)
+{
+	static BOOL saved;
+	static char limiter_state[sizeof(limiter)], reverb_state[sizeof(reverb)];
+
+	scene_clear();
+	scene(LOCK_VOICES, LOCK_VOICES / 4, FALSE, 1.0);
+	if (!saved)
+	{
+		memcpy(limiter_state, &limiter, sizeof(limiter));
+		memcpy(reverb_state, &reverb, sizeof(reverb));
+		saved = TRUE;
+	}
+	memcpy(&limiter, limiter_state, sizeof(limiter));
+	memcpy(&reverb, reverb_state, sizeof(reverb));
+	mix_next = NULL;
+	lock_done = 0;
+	lock_wanted = wanted;
+	pthread_create(mixer, NULL, lock_mixer, NULL);
+}
+
 static void bench(unsigned long voices, unsigned long silent, BOOL indoor, double seconds)
 {
 	unsigned long chunks = (unsigned long)(seconds * OUTPUT_RATE / CHUNK), chunk;
@@ -611,6 +714,71 @@ int main(int argc, char **argv)
 		free(pairs);
 		free(samples);
 		free(signal);
+		return 0;
+	}
+	/* the game's thread wanting the lock while the mixer mixes a battle's
+	worth of voices has it between two voices, not once the whole mix is
+	over; and the mix is the one mixed with nobody waiting */
+	CASE("waiter")
+	{
+		static float alone[LOCK_CHUNKS * CHUNK * 2];
+		unsigned long waits = 0, mixing = 0;
+		struct sdl_stream *last = NULL;
+		pthread_t mixer;
+
+		lock_scene(&mixer, LOCK_WANTED);
+		pthread_join(mixer, NULL);
+		memcpy(alone, lock_output, sizeof(alone));
+		lock_scene(&mixer, 0);
+		while (lock_while_mixing(last))
+		{
+			waits++;
+			last = mix_next;
+			mixing += last != NULL;
+			pthread_mutex_unlock(&mixer_lock);
+		}
+		pthread_join(mixer, NULL);
+		printf("%lu waits, %lu let in between two voices\n", waits, mixing);
+		CHECK(waits >= 16, "the lock was wanted only %lu times while the mixer had it", waits);
+		CHECK(mixing * 4 >= waits * 3, "the mixer kept the lock: %lu of %lu waits had it only once the mix was over",
+			waits - mixing, waits);
+		CHECK(!memcmp(lock_output, alone, sizeof(alone)), "letting a thread in changed the mix");
+		return 0;
+	}
+	/* a voice released while the mixer has let the game's thread in, the one
+	it was to go on to, is not mixed again (it is freed once released) */
+	CASE("waiter-release")
+	{
+		struct sdl_stream *victims[LOCK_VICTIMS], *last = NULL, *stream;
+		unsigned long cursors[LOCK_VICTIMS], counts[LOCK_VICTIMS], released = 0, voices = 0, index;
+		pthread_t mixer;
+
+		lock_scene(&mixer, 0);
+		while (lock_while_mixing(last))
+		{
+			if (mix_next && released < LOCK_VICTIMS)
+			{
+				victims[released] = mix_next;
+				cursors[released] = mix_next->cursor;
+				counts[released] = mix_next->history_count;
+				streams_remove(mix_next);
+				released++;
+			}
+			last = mix_next;
+			pthread_mutex_unlock(&mixer_lock);
+		}
+		pthread_join(mixer, NULL);
+		for (stream = streams; stream; stream = stream->next)
+			voices++;
+		printf("%lu voices released while the mixer waited\n", released);
+		CHECK(released == LOCK_VICTIMS, "only %lu voices released while the mixer waited", released);
+		CHECK(voices == LOCK_VOICES + LOCK_VOICES / 4 - released, "%lu voices left", voices);
+		for (index = 0; index < released; index++)
+		{
+			CHECK(victims[index]->cursor == cursors[index] && victims[index]->history_count == counts[index],
+				"voice %lu was mixed once it had been released", index);
+			voice_delete(victims[index]);
+		}
 		return 0;
 	}
 	CASE("metrics")
