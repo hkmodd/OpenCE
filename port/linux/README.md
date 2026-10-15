@@ -773,12 +773,15 @@ ticks before it, and the clock takes it, ended, when it is due. One that
 has not ended when it is due holds the clock, and the frames draw the tick
 before it until it has. While a tick is under way, nothing else changes
 the game: the deferred actions, saving, the network's updates and map
-sharing wait for the frame after it has ended. A local game and the host
-slice their ticks, not a client. In b30 with 32 times the enemies, the
-game's thread's work in a frame (all but its wait for the render thread)
-went from 9.1 ms to 2.7–3.1 ms at the 90th percentile and from 10.0 ms to
-3.1–3.4 ms at the 99th, in a hidden window; there the ticks took about
-13 ms from their start to their end, and were begun about 16 ms ahead.
+sharing wait for the frame after it has ended. Every game but a film
+slices its ticks, a client's once the host has started its game. In b30
+with 32 times the enemies, the game's thread's work in a frame (all but
+its wait for the render thread) went from 9.1 ms to 2.7–3.1 ms at the 90th
+percentile and from 10.0 ms to 3.1–3.4 ms at the 99th, in a hidden window;
+there the ticks took about 13 ms from their start to their end, and were
+begun about 16 ms ahead. A client of a co-operative b30 of 36 players, at
+356 frames a second, worked 8–9% less a frame with its ticks sliced, with
+7–37% fewer frames over 4.2 ms (two runs).
 
 ## Field of view
 
