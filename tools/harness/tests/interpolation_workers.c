@@ -53,6 +53,8 @@ static int changed_under_blend;
 static int slow_blends;
 
 static boolean halo_interpolation_enabled(void) { return TRUE; }
+/* (no tick under way: display.tick_slices) */
+static boolean tick_slices_in_flight(void) { return FALSE; }
 static real game_time_get_tick_fraction(void) { return tick_fraction; }
 static long player_control_get_unit_index(short local_player_index) { return NONE; }
 static long config_integer(const char *name) { return workers_asked; }
