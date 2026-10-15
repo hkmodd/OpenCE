@@ -99,6 +99,26 @@ extern struct pixel_shader_definition pixel_shader;
 
 static boolean bss_00465e27 = {0};
 
+/* port: the blips (_rasterizer_hud_motion_sensor_blip_draw) drawn together,
+a list of quads for each of the two bitmaps, instead of a draw each: the
+motion sensor shows each blip of its last ten sweeps, a hundred and more
+with sixteen players about. They are added to the target (one, one), which
+comes to the same in any order. The batch is drawn when the blips end
+(_rasterizer_hud_motion_sensor_blip_end) and when it is full; the bitmap
+the last blip set is set again after it. */
+#define BLIP_BATCH_MAXIMUM_BLIPS 512
+static struct blip_batch_blip
+{
+	real_point2d position;
+	real radius;
+	real_rgb_color color;
+} blip_batch[2][BLIP_BATCH_MAXIMUM_BLIPS];
+static short blip_batch_count[2] = {0, 0};
+static struct bitmap_data *blip_batch_bitmaps[2] = {NULL, NULL};
+static struct bitmap_data *blip_batch_last_bitmap = NULL;
+
+static void rasterizer_hud_motion_sensor_blips_draw(void);
+
 /* ---------- public code */
 
 void _rasterizer_hud_motion_sensor_blip_begin(
@@ -256,49 +276,90 @@ void _rasterizer_hud_motion_sensor_blip_draw(
 		109,
 		global_d3d_device);
 
-	rasterizer_set_texture_bitmap_data(
-		0,
-		large_blip ? large_blip_bitmap : blip_bitmap);
+	/* port: set when the batch is drawn (blip_batch) */
+	blip_batch_last_bitmap = large_blip ? large_blip_bitmap : blip_bitmap;
 	if (rasterizer_debug_options.draw_hud_motion_sensor && bss_00465e27)
 	{
 		radius = size * 0.0625f;
 		scaled_position.x = position->x * -0.03125f;
 		scaled_position.y = position->y * -0.03125f;
 
-		IDirect3DDevice8_Begin(global_d3d_device, D3DPT_TRIANGLEFAN);
-		IDirect3DDevice8_SetVertexData4f(
-			global_d3d_device,
-			9,
-			color->red * intensity,
-			color->green * intensity,
-			color->blue * intensity,
-			1.0f);
-		IDirect3DDevice8_SetVertexData2s(global_d3d_device, 4, 0, 0);
-		IDirect3DDevice8_SetVertexData2f(
-			global_d3d_device,
-			0,
-			scaled_position.x - radius,
-			scaled_position.y + radius);
-		IDirect3DDevice8_SetVertexData2s(global_d3d_device, 4, 1, 0);
-		IDirect3DDevice8_SetVertexData2f(
-			global_d3d_device,
-			0,
-			scaled_position.x + radius,
-			scaled_position.y + radius);
-		IDirect3DDevice8_SetVertexData2s(global_d3d_device, 4, 1, 1);
-		IDirect3DDevice8_SetVertexData2f(
-			global_d3d_device,
-			0,
-			scaled_position.x + radius,
-			scaled_position.y - radius);
-		IDirect3DDevice8_SetVertexData2s(global_d3d_device, 4, 0, 1);
-		IDirect3DDevice8_SetVertexData2f(
-			global_d3d_device,
-			0,
-			scaled_position.x - radius,
-			scaled_position.y - radius);
-		IDirect3DDevice8_End(global_d3d_device);
+		/* port: into the batch (blip_batch), in place of a TRIANGLEFAN of
+		the same corners */
+		{
+			short batch_index = large_blip ? 1 : 0;
+			struct blip_batch_blip *blip;
+
+			if (blip_batch_count[batch_index] == BLIP_BATCH_MAXIMUM_BLIPS)
+				rasterizer_hud_motion_sensor_blips_draw();
+			blip = &blip_batch[batch_index][blip_batch_count[batch_index]++];
+			blip_batch_bitmaps[batch_index] = large_blip ? large_blip_bitmap : blip_bitmap;
+			blip->position = scaled_position;
+			blip->radius = radius;
+			blip->color.red = color->red * intensity;
+			blip->color.green = color->green * intensity;
+			blip->color.blue = color->blue * intensity;
+		}
 	}
+
+	return;
+}
+
+/* port: draws the blips batched (blip_batch) */
+static void rasterizer_hud_motion_sensor_blips_draw(
+	void)
+{
+	short batch_index;
+
+	for (batch_index = 0; batch_index < 2; batch_index++)
+	{
+		short blip_index;
+
+		if (!blip_batch_count[batch_index])
+			continue;
+		rasterizer_set_texture_bitmap_data(0, blip_batch_bitmaps[batch_index]);
+		IDirect3DDevice8_Begin(global_d3d_device, D3DPT_QUADLIST);
+		for (blip_index = 0; blip_index < blip_batch_count[batch_index]; blip_index++)
+		{
+			struct blip_batch_blip const *blip = &blip_batch[batch_index][blip_index];
+
+			IDirect3DDevice8_SetVertexData4f(
+				global_d3d_device,
+				9,
+				blip->color.red,
+				blip->color.green,
+				blip->color.blue,
+				1.0f);
+			IDirect3DDevice8_SetVertexData2s(global_d3d_device, 4, 0, 0);
+			IDirect3DDevice8_SetVertexData2f(
+				global_d3d_device,
+				0,
+				blip->position.x - blip->radius,
+				blip->position.y + blip->radius);
+			IDirect3DDevice8_SetVertexData2s(global_d3d_device, 4, 1, 0);
+			IDirect3DDevice8_SetVertexData2f(
+				global_d3d_device,
+				0,
+				blip->position.x + blip->radius,
+				blip->position.y + blip->radius);
+			IDirect3DDevice8_SetVertexData2s(global_d3d_device, 4, 1, 1);
+			IDirect3DDevice8_SetVertexData2f(
+				global_d3d_device,
+				0,
+				blip->position.x + blip->radius,
+				blip->position.y - blip->radius);
+			IDirect3DDevice8_SetVertexData2s(global_d3d_device, 4, 0, 1);
+			IDirect3DDevice8_SetVertexData2f(
+				global_d3d_device,
+				0,
+				blip->position.x - blip->radius,
+				blip->position.y - blip->radius);
+		}
+		IDirect3DDevice8_End(global_d3d_device);
+		blip_batch_count[batch_index] = 0;
+	}
+	if (blip_batch_last_bitmap)
+		rasterizer_set_texture_bitmap_data(0, blip_batch_last_bitmap);
 
 	return;
 }
@@ -328,6 +389,8 @@ void _rasterizer_hud_motion_sensor_blip_end(
 		"c:\\halo\\SOURCE\\rasterizer\\xbox\\rasterizer_xbox_motion_sensor.c",
 		156,
 		global_d3d_device);
+	rasterizer_hud_motion_sensor_blips_draw(); /* port: (blip_batch) */
+	blip_batch_last_bitmap = NULL; /* port: (blip_batch) */
 
 	if (rasterizer_debug_options.draw_hud_motion_sensor)
 	{
