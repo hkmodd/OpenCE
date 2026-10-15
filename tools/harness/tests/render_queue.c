@@ -2,7 +2,8 @@
 reader thread: commands run once each, in order, with their payloads intact
 across many turns of the ring; a call returns once its command has run; a
 resource is busy until the command that reads it has run; a frame ends once
-no more than the frames asked for are queued */
+no more than the frames asked for are queued; a writer waiting is woken once
+the position it waits for has run, not at each command before */
 
 #include "harness.h"
 
@@ -31,7 +32,18 @@ static void platform_video_make_current(int current)
 	(void)current;
 }
 
+/* the times the reader wakes a waiting writer */
+static unsigned long writer_wakes;
+
+static int counted_broadcast(pthread_cond_t *condition)
+{
+	__atomic_add_fetch(&writer_wakes, 1, __ATOMIC_RELAXED);
+	return pthread_cond_broadcast(condition);
+}
+
+#define pthread_cond_broadcast counted_broadcast
 #include "under_test.inc"
+#undef pthread_cond_broadcast
 
 /* commands, as the render thread runs them */
 static unsigned long next_number;
@@ -319,6 +331,29 @@ int main(int argc, char **argv)
 		pthread_join(openers[0], NULL);
 		pthread_join(openers[1], NULL);
 		render_thread_drain();
+	}
+	else if (!strcmp(name, "wakes-writer-once-reached"))
+	{
+		/* the writer waits, asleep, behind a gate for the end of 1000
+		commands: woken once they have run, not at each of them */
+		struct gate_opening opening = { 0, 200 };
+		pthread_t opener;
+		unsigned long number;
+
+		record_gate(0);
+		for (number = 0; number < 1000; number++)
+		{
+			unsigned long *words = (unsigned long *)render_thread_record(numbered_command, 2 * sizeof(unsigned long));
+
+			words[0] = number;
+			words[1] = 0;
+		}
+		render_thread_submit();
+		pthread_create(&opener, NULL, open_gate_after, &opening);
+		render_thread_wait();
+		CHECK(next_number == 1000, "the wait returned after %lu of 1000 commands", next_number);
+		CHECK(writer_wakes <= 2, "the writer was woken %lu times for one wait", writer_wakes);
+		pthread_join(opener, NULL);
 	}
 	else
 	{
