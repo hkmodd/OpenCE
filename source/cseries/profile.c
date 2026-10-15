@@ -1202,11 +1202,18 @@ void profile_tick_end(
 {
 	struct profile_timer *timer;
 
-	match_assert("c:\\halo\\SOURCE\\cseries\\profile.c", 320,
-		(profile_globals.current_frame.game_tick_count > 0) && (profile_globals.current_frame.game_tick_count <= MAXIMUM_GAME_TICKS_PER_FRAME));
+	/* port: a tick run in pieces (display.tick_slices, tick_slices.c) can
+	end in a later frame than it began in, which has no timer of it: a
+	release build, past the assertion, ended the timer before the frame's
+	first */
+	if (profile_globals.current_frame.game_tick_count > 0)
+	{
+		match_assert("c:\\halo\\SOURCE\\cseries\\profile.c", 320,
+			(profile_globals.current_frame.game_tick_count > 0) && (profile_globals.current_frame.game_tick_count <= MAXIMUM_GAME_TICKS_PER_FRAME));
 
-	timer = &profile_globals.current_frame.game_ticks[profile_globals.current_frame.game_tick_count-1];
-	profile_timesection_end_now(timer);
+		timer = &profile_globals.current_frame.game_ticks[profile_globals.current_frame.game_tick_count-1];
+		profile_timesection_end_now(timer);
+	}
 #ifdef HALO_PROFILE
 	profile_trace_end(profile_trace_timer_names.game_tick);
 #endif
