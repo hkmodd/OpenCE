@@ -1,6 +1,7 @@
 """The real render thread's queue (render_thread.c) with a real reader thread: commands run once each, in order and
 intact across many turns of the ring; a call returns once its command has run; a resource is busy until the command
-that reads it has run; a frame ends, handed over, once no more than the frames asked for are queued."""
+that reads it has run; a frame ends, handed over, once no more than the frames asked for are queued; a writer waiting
+is woken once the position it waits for has run, not at each command before."""
 
 import re
 import sys
@@ -12,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from harness import CHECK_FAILED, build, mutated, read, run  # noqa: E402
 
 CASES = ["runs-in-order-across-turns", "waits-for-room", "call-returns-once-run", "resource-busy-until-read",
-         "one-frame-queued", "two-frames-queued", "frame-handed-over"]
+         "one-frame-queued", "two-frames-queued", "frame-handed-over", "wakes-writer-once-reached"]
 
 # a fault in render_thread.c and the case that must catch it (the ring's
 # room with the reader held, not as fast as it happens to be)
@@ -31,6 +32,11 @@ NEGATIVE_CONTROLS = {
                                     "position = recorded;"), "one-frame-queued"),
     "frame-not-handed-over": (("frames = RENDER_THREAD_MAXIMUM_FRAMES;\n\trender_thread_submit();",
                                "frames = RENDER_THREAD_MAXIMUM_FRAMES;"), "frame-handed-over"),
+    "wakes-writer-at-each-command": (("\n\t\t&& (long)(position - __atomic_load_n(&writer_side.wanted, __ATOMIC_RELAXED)) >= 0)",
+                                      ")"), "wakes-writer-once-reached"),
+    # the writer never woken at the very position it waits for: the call stops
+    "wakes-writer-only-past-its-position": (("&writer_side.wanted, __ATOMIC_RELAXED)) >= 0)",
+                                             "&writer_side.wanted, __ATOMIC_RELAXED)) > 0)"), "call-returns-once-run"),
 }
 
 
