@@ -550,8 +550,8 @@ build's `win32_fiber.c`, `game/tick_slices.c`), which hands back to the
 frames at points between the tick's parts (between the objects and the
 actors it updates): the tick runs for 0.3 ms of the frame it is begun on,
 then 0.1 ms at a time while the game's thread waits for the render thread,
-and 0.3 ms at the start of each frame after it; the eighth frame runs what
-is left whole. A tick that runs in pieces takes longer from its start to
+and 0.3 ms at the start of each frame after it; the eighth frame after it
+falls due runs what is left whole. A tick that runs in pieces takes longer from its start to
 its end than it would whole, so the next is begun ahead of its time, by a
 quarter more than the last took: the frames until it is due draw the two
 ticks before it, and the clock takes it, ended, when it is due. One that

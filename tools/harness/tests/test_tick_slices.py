@@ -1,6 +1,6 @@
 """A long tick run in pieces on a second stack (display.tick_slices): its share of the frame it is begun on, the rest in
-the spare time and the frames after it, run whole once it has taken too many, and the next begun ahead of its time by
-as long as the last took."""
+the spare time and the frames after it, run whole once it has been due for too many, and the next begun ahead of its
+time by as long as the last took."""
 import re
 import sys
 from pathlib import Path
@@ -10,9 +10,11 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from harness import CHECK_FAILED, build, mutated, read, run
 
-CASES = ['disabled', 'short', 'spare', 'held', 'forced', 'lead', 'finish', 'collision']
+CASES = ['disabled', 'short', 'spare', 'held', 'forced', 'ahead', 'lead', 'finish', 'collision']
 CONTROLS = [
     ('whole = TRUE;', 'whole = FALSE;', 'forced'),
+    ('if (tick_pending_counted)\n\t\t\tframes_due++;', 'frames_due++;', 'ahead'),
+    ('\tframes_due = 0;\n', '\n', 'ahead'),
     ('return !tick_pending_ended;', 'return FALSE;', 'spare'),
     ('tick_duration * 1.25', 'tick_duration * 1.0', 'lead'),
     ('tick_pending_counted = counted;', 'tick_pending_counted = TRUE;', 'lead'),
