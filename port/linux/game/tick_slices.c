@@ -5,7 +5,7 @@ A tick in pieces (display.tick_slices). A tick of a crowded level can take
 longer than a frame of a fast display: run whole, it holds up the one
 frame it falls on. With the render thread, the game's thread waits at the
 end of each frame for the frame queued before it to be drawn; that wait is
-spare time. The last tick a local game's frame runs (or the host's) is run
+spare time. The last tick a frame runs, in any game but a film, is run
 on a second stack (posix_fiber.c, win32_fiber.c), from which it hands back
 at its yield points once its share of the frame is used, and goes on in the
 spare time and at the start of the frames after it.

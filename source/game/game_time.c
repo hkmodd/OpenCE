@@ -366,6 +366,15 @@ boolean game_time_menu_scene(
 	return global_scenario && global_scenario->type == _scenario_type_main_menu;
 }
 
+/* port: whether the main loop's frame may leave a tick under way or begin
+one ahead of its time (display.tick_slices): in any game but a film's, and
+not while a client's clock waits for the host */
+static boolean game_time_ticks_may_slice(
+	void)
+{
+	return game_time_slicing_allowed && game_connection() != _game_connection_film_playback && !game_time_held();
+}
+
 void game_time_start(
 	void)
 {
@@ -586,7 +595,7 @@ void game_time_update(
 					{
 						/* port: the first may have been begun ahead of its time,
 						and the last may be left under way (display.tick_slices),
-						in a local game or the host's */
+						in any game but a film's */
 						if (tick_slices_in_flight())
 						{
 							if (!tick_slices_ended())
@@ -596,9 +605,7 @@ void game_time_update(
 							}
 							tick_slices_release();
 						}
-						else if (tick_slices_tick(game_time_slicing_allowed && update_index == server_updates - 1 &&
-							(game_connection() == _game_connection_local ||
-								game_connection() == _game_connection_network_server)))
+						else if (tick_slices_tick(update_index == server_updates - 1 && game_time_ticks_may_slice()))
 						{
 							break;
 						}
@@ -615,10 +622,8 @@ void game_time_update(
 			would end after it is due (display.tick_slices); not on a frame
 			that began with one under way, so that between two ticks a frame
 			runs what waits for them (main.c) */
-			if (game_time_slicing_allowed && !tick_was_in_flight && !tick_slices_in_flight() &&
-				!game_time_globals->paused &&
-				(game_connection() == _game_connection_local ||
-					game_connection() == _game_connection_network_server) && tick_slices_lead() > 0.0 &&
+			if (game_time_ticks_may_slice() && !tick_was_in_flight && !tick_slices_in_flight() &&
+				!game_time_globals->paused && tick_slices_lead() > 0.0 &&
 				1.f / ticks_per_second - game_time_globals->leftover_dt < tick_slices_lead() + time_delta_sec)
 			{
 				tick_slices_tick_ahead();
