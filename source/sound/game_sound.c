@@ -924,8 +924,12 @@ void game_sound_set_mouth_aperture(
 render_interpolation.c), and the sound manager refreshes every sound each
 frame; on the Xbox, frames and ticks were one. A sound's obstruction, a
 collision test from the camera, is computed once per tick and reused by the
-tick's other frames. */
-#define OBSTRUCTION_CACHE_SLOTS 128
+tick's other frames. A position takes the first of OBSTRUCTION_CACHE_PROBES
+slots from its own not yet taken this tick: with one slot each, a battle's
+fifty sounds pushed each other out and half of them were tested again every
+frame. */
+#define OBSTRUCTION_CACHE_SLOTS 1024
+#define OBSTRUCTION_CACHE_PROBES 8
 
 static struct
 {
@@ -953,19 +957,31 @@ void compute_sound_obstruction(
 	real distance)
 {
 	struct observer_result const *camera = observer_get_camera(local_player_index);
-	long slot = obstruction_cache_slot(local_player_index, &source->location.position);
+	long home = obstruction_cache_slot(local_player_index, &source->location.position);
 	long now = game_time_get();
+	long slot = home;
+	long probe;
 
-	if (obstruction_cache[slot].valid &&
-		obstruction_cache[slot].game_time == now &&
-		obstruction_cache[slot].local_player_index == local_player_index &&
-		obstruction_cache[slot].position.x == source->location.position.x &&
-		obstruction_cache[slot].position.y == source->location.position.y &&
-		obstruction_cache[slot].position.z == source->location.position.z)
+	for (probe = 0; probe < OBSTRUCTION_CACHE_PROBES; probe++)
 	{
-		source->obstruction = obstruction_cache[slot].obstruction;
-		source->occlusion = obstruction_cache[slot].occlusion;
-		return;
+		long index = (home + probe) % OBSTRUCTION_CACHE_SLOTS;
+
+		/* (slots are only taken within a tick: a free one ends the search,
+		and the test made is kept in it) */
+		if (!obstruction_cache[index].valid || obstruction_cache[index].game_time != now)
+		{
+			slot = index;
+			break;
+		}
+		if (obstruction_cache[index].local_player_index == local_player_index &&
+			obstruction_cache[index].position.x == source->location.position.x &&
+			obstruction_cache[index].position.y == source->location.position.y &&
+			obstruction_cache[index].position.z == source->location.position.z)
+		{
+			source->obstruction = obstruction_cache[index].obstruction;
+			source->occlusion = obstruction_cache[index].occlusion;
+			return;
+		}
 	}
 
 	match_assert(
