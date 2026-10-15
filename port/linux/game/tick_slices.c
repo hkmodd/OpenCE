@@ -48,7 +48,8 @@ enum
 	/* how long it runs at a time in the spare time, between checks of
 	whether the frame waited for has been drawn */
 	TICK_SLICE_SPARE_SHARE = 100,
-	/* the frames after it a tick may run over before one runs it whole */
+	/* the frames a tick that is due may run on before one runs it whole
+	(one begun ahead of its time holds nothing up until it falls due) */
 	TICK_SLICE_MAXIMUM_FRAMES = 8
 };
 
@@ -61,7 +62,8 @@ static boolean tick_pending;
 static boolean tick_pending_ended;
 static boolean tick_pending_counted;
 static unsigned long long tick_pending_began;
-static short frames_under_way;
+/* the frames it has run on since it fell due */
+static short frames_due;
 /* how long the latest ticks took from their beginning to their end,
 smoothed (microseconds) */
 static unsigned long tick_duration;
@@ -158,7 +160,7 @@ static void tick_slices_begin(boolean counted)
 	tick_pending_ended = FALSE;
 	tick_pending_counted = counted;
 	tick_pending_began = platform_fiber_clock();
-	frames_under_way = 0;
+	frames_due = 0;
 	tick_slices_run(TICK_SLICE_FRAME_SHARE);
 }
 
@@ -216,8 +218,9 @@ boolean tick_slices_continue(boolean whole)
 		return TRUE;
 	if (!tick_pending_ended)
 	{
-		frames_under_way++;
-		if (frames_under_way >= TICK_SLICE_MAXIMUM_FRAMES)
+		if (tick_pending_counted)
+			frames_due++;
+		if (frames_due >= TICK_SLICE_MAXIMUM_FRAMES)
 			whole = TRUE;
 		tick_slices_run(whole ? 0 : TICK_SLICE_FRAME_SHARE);
 	}

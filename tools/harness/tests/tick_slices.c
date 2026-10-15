@@ -174,6 +174,32 @@ int main(int argc, char **argv)
 		tick_slices_release();
 		return 0;
 	}
+	CASE("ahead")
+	{
+		int frame;
+
+		/* one begun ahead of its time holds nothing up: it runs on in
+		pieces, and is run whole on the eighth frame after it falls due */
+		enable(TRUE);
+		tick_points = 100;
+		tick_slices_tick_ahead();
+		CHECK(tick_slices_in_flight() && !tick_slices_counted(), "the tick begun ahead counted by the clock");
+		for (frame = 1; frame < 12; frame++)
+			CHECK(!tick_slices_continue(FALSE), "the tick not yet due ended on frame %d", frame);
+		CHECK(points_done == 36, "the frames' shares ran to step %d", points_done);
+		tick_slices_count();
+		for (frame = 1; frame < 8; frame++)
+			CHECK(!tick_slices_continue(FALSE), "the tick ended on frame %d after it fell due", frame);
+		CHECK(tick_slices_continue(FALSE) && ticks_run == 1 && points_done == 100,
+			"the eighth frame after it fell due did not run it whole");
+		tick_slices_release();
+		/* (the next counts its own frames) */
+		points_done = 0;
+		CHECK(tick_slices_tick(TRUE) && !tick_slices_continue(FALSE), "the next tick ran whole on its first frame after");
+		tick_slices_finish();
+		CHECK(ticks_run == 2 && points_done == 100, "the next tick was not finished");
+		return 0;
+	}
 	CASE("lead")
 	{
 		int tick;
