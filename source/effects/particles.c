@@ -201,6 +201,9 @@ static boolean particle_update_frame_time(
 static boolean particle_update_physics(
 	long particle_index,
 	real dt);
+static boolean particle_update_physics_stepped(
+	long particle_index,
+	real dt);
 
 /* ---------- globals */
 
@@ -219,6 +222,31 @@ static long particles_update_ticks = 0;
 static long particles_tick_frame_indices[MAXIMUM_PARTICLE_UNRENDERED_FRAME_COUNT + 1];
 static long particles_tick_frame_head = 0;
 
+/* port: a particle's physics was a step a frame, a 30th of a second on the
+Xbox. Stepped every frame of the native builds, a free particle's collision
+test ran several times a tick, and every contact added its deterioration to
+the span of its animation's frames as often. A free particle steps a 30th of
+a second at a time instead, ahead of the frame drawn, and is drawn between
+its last two steps; at 30 frames a second or fewer it steps once a frame, as
+before. Each slot remembers the particle it was stepped for and where it was
+last drawn, so a new particle, or one moved by something else, starts again
+from where it is. */
+#define PARTICLE_STEP_SECONDS (1.0f / TICKS_PER_SECOND)
+
+struct particle_step
+{
+	long particle_index;
+	real lead;
+	real_point3d previous_position;
+	real_point3d position;
+	real_point3d shown_position;
+	real previous_rotation;
+	real rotation;
+	real shown_rotation;
+};
+
+static struct particle_step particle_steps[HALO_PORT_MAXIMUM_PARTICLES];
+
 static char const *particle_effect_marker_names[NUMBER_OF_PARTICLE_EFFECT_MARKERS] =
 {
 	"velocity",
@@ -236,6 +264,12 @@ void particles_initialize(
 	particle_data = game_state_data_new("particle", HALO_PORT_MAXIMUM_PARTICLES, 0x70);
 	if (!particle_data)
 		error(_error_immediate, "couldn't allocate particle globals");
+	{
+		long step_index;
+
+		for (step_index = 0; step_index < HALO_PORT_MAXIMUM_PARTICLES; step_index++)
+			particle_steps[step_index].particle_index = NONE;
+	}
 
 	return;
 }
@@ -807,6 +841,71 @@ static boolean particle_update_physics(
 	return TRUE;
 }
 
+/* port: particle_steps */
+static boolean particle_update_physics_stepped(
+	long particle_index,
+	real dt)
+{
+	struct particle_datum *particle = particle_get(particle_index);
+	struct particle_step *step = &particle_steps[DATUM_INDEX_TO_ABSOLUTE_INDEX(particle_index)];
+
+	if (step->particle_index != particle_index ||
+		particle->position.x != step->shown_position.x ||
+		particle->position.y != step->shown_position.y ||
+		particle->position.z != step->shown_position.z ||
+		particle->rotation != step->shown_rotation)
+	{
+		step->particle_index = particle_index;
+		step->lead = 0.0f;
+		step->previous_position = particle->position;
+		step->position = particle->position;
+		step->previous_rotation = particle->rotation;
+		step->rotation = particle->rotation;
+	}
+
+	step->lead -= dt;
+	if (step->lead < 0.0f)
+	{
+		/* a step, or the whole frame when it is longer */
+		real step_dt = MAX(PARTICLE_STEP_SECONDS, -step->lead);
+
+		particle->position = step->position;
+		particle->rotation = step->rotation;
+		/* dead or deleted, it is left where it stepped to */
+		if (!particle_update_physics(particle_index, step_dt))
+			return FALSE;
+
+		step->previous_position = step->position;
+		step->previous_rotation = step->rotation;
+		step->position = particle->position;
+		step->rotation = particle->rotation;
+		step->lead += step_dt;
+	}
+
+	if (step->lead > 0.0f)
+	{
+		real fraction = 1.0f - step->lead / PARTICLE_STEP_SECONDS;
+
+		particle->position.x = step->previous_position.x +
+			(step->position.x - step->previous_position.x) * fraction;
+		particle->position.y = step->previous_position.y +
+			(step->position.y - step->previous_position.y) * fraction;
+		particle->position.z = step->previous_position.z +
+			(step->position.z - step->previous_position.z) * fraction;
+		particle->rotation = step->previous_rotation +
+			(step->rotation - step->previous_rotation) * fraction;
+	}
+	else
+	{
+		particle->position = step->position;
+		particle->rotation = step->rotation;
+	}
+	step->shown_position = particle->position;
+	step->shown_rotation = particle->rotation;
+
+	return TRUE;
+}
+
 void particle_new(
 	struct new_particle_data const *data)
 {
@@ -1051,8 +1150,14 @@ void particles_update(
 			}
 			else
 			{
+				/* port: a free particle in 30ths of a second (particle_steps) */
 				if (particle_update_frame_time(particle_index, dt))
-					particle_update_physics(particle_index, dt);
+				{
+					if (particle->object_index == NONE)
+						particle_update_physics_stepped(particle_index, dt);
+					else
+						particle_update_physics(particle_index, dt);
+				}
 			}
 		}
 	}
