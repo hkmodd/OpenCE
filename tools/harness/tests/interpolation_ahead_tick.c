@@ -1,5 +1,6 @@
 #include "harness.h"
 #include <math.h>
+#include <xmmintrin.h>
 
 /* The frames between two ticks draw a blend of them (render_interpolation.c).
 With display.tick_slices the next tick runs in pieces between those frames,
@@ -71,6 +72,14 @@ static long first_person_updated_tick;
 static long interpolation_frame;
 static boolean interpolation_rendering;
 static real interpolation_fraction = 1.0f;
+/* (no worker threads: display.interpolation_threads) */
+static long interpolated_objects_used;
+static long interpolation_workers = NONE;
+static long worker_next_record;
+static void worker_pool_begin(void (*job)(void)) { (void)job; }
+static void worker_pool_end(void) {}
+static void workers_begin(void);
+static void workers_end(void);
 
 #include "under_test.inc"
 
