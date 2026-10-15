@@ -194,9 +194,14 @@ static int hold_blocks_writer(unsigned long position)
 	return (long)(wanted - held_from) > 0 && (long)(position - wanted) >= 0;
 }
 
-static void wake_writer(void)
+/* (the reader, having published position) wakes the writer if it waits
+for no more than position, not at each command of a frame whose end it
+waits for (one thread waits: a waiter seen is seen with its position, and
+one not seen yet finds position published) */
+static void wake_writer(unsigned long position)
 {
-	if (__atomic_load_n(&writer_side.waiters, __ATOMIC_SEQ_CST))
+	if (__atomic_load_n(&writer_side.waiters, __ATOMIC_SEQ_CST)
+		&& (long)(position - __atomic_load_n(&writer_side.wanted, __ATOMIC_RELAXED)) >= 0)
 	{
 		pthread_mutex_lock(&lock);
 		pthread_cond_broadcast(&done_condition);
@@ -226,7 +231,7 @@ static void *render_thread_main(void *unused)
 		if (holding && end == position)
 		{
 			hold_end(position);
-			wake_writer();
+			wake_writer(position);
 		}
 		if (end == position)
 		{
@@ -240,6 +245,7 @@ static void *render_thread_main(void *unused)
 		while (position != end)
 		{
 			struct command_header *header = (struct command_header *)(ring + (position & (RING_SIZE - 1)));
+			unsigned long published;
 
 			if (holding && header->command && !hold_keeps(header->command))
 				hold_end(position);
@@ -250,8 +256,9 @@ static void *render_thread_main(void *unused)
 			if (holding && hold_blocks_writer(position))
 				hold_end(position);
 			/* after each command: a busy resource waits for its own only */
-			__atomic_store_n(&reader_side.completed, holding ? held_from : position, __ATOMIC_SEQ_CST);
-			wake_writer();
+			published = holding ? held_from : position;
+			__atomic_store_n(&reader_side.completed, published, __ATOMIC_SEQ_CST);
+			wake_writer(published);
 		}
 	}
 	return NULL;
