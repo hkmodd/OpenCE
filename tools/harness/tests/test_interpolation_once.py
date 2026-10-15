@@ -11,8 +11,7 @@ from harness import CHECK_FAILED, build, constant, function, mutated, read, run,
 
 CASES = ['at_rest', 'moving', 'snapped', 'corrected', 'fading']
 CONTROLS = [
-    ('record->poses_alike = memcmp(previous, latest, record->node_count * sizeof(real_matrix4x3)) == 0;',
-     'record->poses_alike = FALSE;', 'at_rest'),
+    ('memcmp(previous, latest, record->node_count * sizeof(real_matrix4x3)) == 0;', 'FALSE;', 'at_rest'),
     ('record->poses_compared = FALSE;\n\t\trecord->blend_kept = FALSE;', 'record->blend_kept = FALSE;', 'at_rest'),
     ('record->poses_compared = TRUE;', ';', 'moving'),
     ('record->blend_kept = !correcting;', 'record->blend_kept = TRUE;', 'fading'),

@@ -27,19 +27,21 @@ CONTROLS = {
     # a new object drawn as the tick under way left it, then blended back from the tick drawn
     "new-object-live": (("if (!record->has_previous && !tick_slices_in_flight())", "if (!record->has_previous)"),
                         "new-object-ahead"),
-    "new-object-blended": (("boolean snap = !record->has_previous ||", "boolean snap ="), "new-object-ahead"),
-    "new-object-glides": (("if (record->has_previous &&\n\t\t\t(correction_significant",
-                           "if (TRUE &&\n\t\t\t(correction_significant"), "new-object-corrected-ahead"),
+    "new-object-blended": (("record->poses_snap = !record->has_previous ||", "record->poses_snap ="),
+                           "new-object-ahead"),
+    "new-object-glides": (("boolean correcting = record->has_previous &&", "boolean correcting = TRUE &&"),
+                          "new-object-corrected-ahead"),
 }
 
 INTERPOLATION = "port/linux/game/render_interpolation.c"
 HELPERS = ["lerp", "point_lerp", "vector_length", "vector_nlerp", "basis_is_rotation", "quaternion_from_basis",
            "basis_from_quaternion", "rotation_from_matrix", "matrix_blend_rotations", "correction_significant",
-           "correction_advance", "correction_drawn", "correction_add", "distance_squared"]
+           "correction_advance", "correction_drawn", "correction_add", "distance_squared", "poses_snap", "spin_pause",
+           "record_blend", "record_claim_and_blend", "blend_objects", "workers_begin", "workers_end"]
 UNDER_TEST = ["render_interpolation_tick", "render_interpolation_object_node_matrices",
               "render_interpolation_correct_object", "render_interpolation_first_person_updated",
               "render_interpolation_first_person"]
-DEFINES = ["MAXIMUM_INTERPOLATED_NODES", "OBJECT_SNAP_DISTANCE", "NODE_SNAP_DISTANCE", "FIRST_PERSON_SNAP_DISTANCE",
+DEFINES = ["MAXIMUM_INTERPOLATED_NODES", "WORKER_RECORDS","OBJECT_SNAP_DISTANCE", "NODE_SNAP_DISTANCE", "FIRST_PERSON_SNAP_DISTANCE",
            "CORRECTION_DECAY", "CORRECTION_NEGLIGIBLE", "CORRECTION_MAXIMUM"]
 
 

@@ -32,6 +32,8 @@ static real tick_fraction;
 static int inverse_transforms;
 
 static boolean halo_interpolation_enabled(void) { return TRUE; }
+/* (no tick under way: display.tick_slices) */
+static boolean tick_slices_in_flight(void) { return FALSE; }
 static real game_time_get_tick_fraction(void) { return tick_fraction; }
 static long player_control_get_unit_index(short local_player_index) { return NONE; }
 static struct object_datum *object_get(long index) { CHECK(index == OBJECT, "not the object"); return &object; }
