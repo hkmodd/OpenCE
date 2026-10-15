@@ -24,6 +24,7 @@ struct observer_result const *render_interpolation_camera(short local_player_ind
 	struct observer_result const *observer);
 void render_interpolation_first_person(short local_player_index, struct real_matrix4x3 *node_matrices,
 	short node_count, struct render_camera const *camera);
+void render_interpolation_first_person_updated(void);
 float render_interpolation_game_time_sec(long ticks);
 
 /* the port's menus' screen for one of ui.map's, by name, else the name

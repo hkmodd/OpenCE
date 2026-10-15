@@ -384,6 +384,9 @@ void game_tick(
 		lock_global_random_seed();
 		rumble_update();
 		first_person_weapons_update();
+		/* port: the frames keep the pose of the tick they draw
+		(render_interpolation.c) */
+		render_interpolation_first_person_updated();
 		unlock_global_random_seed();)
 	profile_scope(game_tick_game_engine_section, game_engine_update();)
 	profile_scope(game_tick_editor_section, editor_update();)
