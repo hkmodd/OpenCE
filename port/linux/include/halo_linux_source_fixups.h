@@ -69,6 +69,10 @@ void halo_screen_anti_alias(short x0, short y0, short x1, short y1);
 /* display.hdr's tone mapping of a window's 3D view, before its
 anti-aliasing (source/render/render.c) */
 void halo_screen_tone_map(short x0, short y0, short x1, short y1);
+/* an immediate draw's vertices at once, each the four floats of each
+register in registers (a mask with register 0), lowest first, as writing
+them one register at a time would give (port/linux/src/d3d8_gl.c) */
+void halo_immediate_vertices(unsigned long registers, const float *vertices, unsigned long count);
 /* the mouse in the menus (source/interface/ui_widget.c) */
 #include "halo_ui_pointer.h"
 
