@@ -100,6 +100,13 @@ per_pixel_lighting). Instanced, the constants are read as XGPU_INSTANCE_GLSL
 describes. Returns a malloc'd string. */
 char *nv2a_vertex_shader_to_glsl(const DWORD *instructions, unsigned long instruction_count,
 	unsigned long packed_attribute_mask, const struct nv2a_vertex_lighting *lighting, BOOL instanced);
+/* (desktop OpenGL, GL_ARB_shader_viewport_layer_array) the immediate shader
+of a draw of an instance a layer, of up to XGPU_LAYERED_INSTANCES: instance
+i draws into layer shadow_layers[i].y, and hands its source's layer,
+shadow_layers[i].x, to the pixel shader (nv2a_pixel_shader_key layered).
+Returns a malloc'd string, or NULL. */
+#define XGPU_LAYERED_INSTANCES 8
+char *nv2a_vertex_shader_to_layered_glsl(const DWORD *instructions, unsigned long instruction_count);
 
 /* (display.instancing, desktop OpenGL) An instanced draw draws the same
 vertices for several objects, which differ only in their constants: each
@@ -170,6 +177,9 @@ struct nv2a_pixel_shader_key
 	unsigned char source_blend;
 	/* the combiners' constants are the instance's (XGPU_INSTANCE_GLSL) */
 	unsigned char instanced;
+	/* a draw of an instance a layer (nv2a_vertex_shader_to_layered_glsl): the
+	2D stages sample arrays, at the instance's layer (xLayer) */
+	unsigned char layered;
 };
 
 char *nv2a_pixel_shader_to_glsl(const struct nv2a_pixel_shader_key *key);
