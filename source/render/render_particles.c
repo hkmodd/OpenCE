@@ -128,6 +128,82 @@ static int __cdecl compare_rendered_particles(
 	return result;
 }
 
+/* port: one byte of a rendered particle's place in compare_rendered_particles'
+order, the least significant first: its first-person flag, then its cluster
+and its definition, each a short taken in its signed order */
+static unsigned int rendered_particle_sort_digit(
+	struct rendered_particle_datum const *particle,
+	short digit)
+{
+	unsigned int cluster = (unsigned short)particle->cluster_index ^ 0x8000;
+	unsigned int definition = (unsigned short)particle->definition_index ^ 0x8000;
+	unsigned int result;
+
+	switch (digit)
+	{
+	case 0: result = particle->attached_to_first_person_weapon; break;
+	case 1: result = cluster & 0xFF; break;
+	case 2: result = cluster >> 8; break;
+	case 3: result = definition & 0xFF; break;
+	default: result = definition >> 8; break;
+	}
+
+	return result;
+}
+
+/* port: sorts the rendered particles as compare_rendered_particles orders
+them, keeping the order of equal ones (their order in particle_data): a
+radix sort, a byte at a time, in place of qsort, which left equal particles
+in each C library's own order and spent hundreds of microseconds calling
+the comparison in a fight (thousands of particles in view). A byte that
+every particle shares is skipped, as most of the high ones are. */
+static void sort_rendered_particles(
+	struct rendered_particle_datum *particles,
+	long count)
+{
+	enum { NUMBER_OF_DIGITS = 5 };
+	static struct rendered_particle_datum scratch[MAXIMUM_RENDERED_PARTICLES];
+	static long digit_counts[NUMBER_OF_DIGITS][256];
+	struct rendered_particle_datum *from = particles;
+	struct rendered_particle_datum *to = scratch;
+	struct rendered_particle_datum *swap;
+	long index;
+	short digit;
+
+	csmemset(digit_counts, 0, sizeof(digit_counts));
+	for (index = 0; index < count; index++)
+	{
+		for (digit = 0; digit < NUMBER_OF_DIGITS; digit++)
+			digit_counts[digit][rendered_particle_sort_digit(&particles[index], digit)]++;
+	}
+	for (digit = 0; digit < NUMBER_OF_DIGITS; digit++)
+	{
+		long *counts = digit_counts[digit];
+		long first = 0;
+		short value;
+
+		if (count == 0 || counts[rendered_particle_sort_digit(&particles[0], digit)] == count)
+			continue;
+		/* (each value's first place, then the particles in their order) */
+		for (value = 0; value < 256; value++)
+		{
+			long value_count = counts[value];
+
+			counts[value] = first;
+			first += value_count;
+		}
+		for (index = 0; index < count; index++)
+			to[counts[rendered_particle_sort_digit(&from[index], digit)]++] = from[index];
+		swap = from;
+		from = to;
+		to = swap;
+	}
+	if (from != particles)
+		csmemcpy(particles, from, count * sizeof(*particles));
+
+	return;
+}
+
 void render_particles(
 	void)
 {
@@ -193,11 +269,8 @@ void render_particles(
 		{
 			short group_count = 0;
 
-			qsort(
-				rendered_particles,
-				rendered_particle_count,
-				sizeof(struct rendered_particle_datum),
-				compare_rendered_particles);
+			/* port: (sort_rendered_particles, not qsort) */
+			sort_rendered_particles(rendered_particles, rendered_particle_count);
 
 			{
 				struct rendered_particle_datum *rendered_particle =
