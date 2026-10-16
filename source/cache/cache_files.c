@@ -715,6 +715,31 @@ long tag_loaded(
 	return result;
 }
 
+/* port: the tag of the group and name, found first at the index given
+(a reference's, which a map holds its tag's index in) and walked for as
+tag_loaded walks only when it is not that tag: the HUD looks its bitmaps up
+by their references every frame (verify_tag_reference), each a walk of
+thousands of tags. The two differ only for a group with two tags of a
+name, which no map has, and which verify_tag_reference asserts against */
+long tag_loaded_at(
+	long group_tag,
+	char const *name,
+	long tag_index)
+{
+	long absolute_index = DATUM_INDEX_TO_ABSOLUTE_INDEX(tag_index);
+
+	if (cache_file_globals.tags_loaded && tag_index != NONE && global_tag_instances &&
+		absolute_index < global_tag_count &&
+		global_tag_instances[absolute_index].tag_index == tag_index &&
+		global_tag_instances[absolute_index].group_tag == group_tag &&
+		!_stricmp(name, global_tag_instances[absolute_index].name))
+	{
+		return tag_index;
+	}
+
+	return tag_loaded(group_tag, name);
+}
+
 void cache_files_enable_writes(
 	void)
 {
