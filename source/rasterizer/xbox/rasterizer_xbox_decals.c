@@ -353,6 +353,8 @@ static struct
 static long decal_order_entry_count = 0;
 static long decal_order_batch_count = 0;
 static long decal_draw_order[DECAL_ORDER_MAXIMUM_DECALS];
+/* (whether each decal drawn in that order holds any of the screen) */
+static boolean decal_draw_on_screen[DECAL_ORDER_MAXIMUM_DECALS];
 
 static void rasterizer_decals_draw_ordered(void);
 
@@ -419,6 +421,15 @@ static void rasterizer_decal_screen_bounds(
 	bounds->y1 += DECAL_ORDER_SCREEN_MARGIN;
 
 	return;
+}
+
+/* port: whether a decal's rectangle (rasterizer_decal_screen_bounds) holds
+any of the screen: a decal wholly beyond one of its edges covers no pixel,
+and is drawn without its vertices (rasterizer_decals_draw_ordered) */
+static boolean rasterizer_decal_on_screen(
+	real_rectangle2d const *bounds)
+{
+	return bounds->x0 <= 1.0f && bounds->x1 >= -1.0f && bounds->y0 <= 1.0f && bounds->y1 >= -1.0f;
 }
 
 static boolean rasterizer_decal_rectangles_overlap(
@@ -924,6 +935,7 @@ static void rasterizer_decals_draw_ordered(
 			entry_index != NONE;
 			entry_index = decal_order_entries[entry_index].next_entry_index)
 		{
+			decal_draw_on_screen[decal_count] = rasterizer_decal_on_screen(&decal_order_entries[entry_index].bounds);
 			decal_draw_order[decal_count++] = decal_order_entries[entry_index].decal_index;
 		}
 	}
@@ -1034,12 +1046,14 @@ static void rasterizer_decals_draw_ordered(
 			511,
 			vertex_data_offset%sizeof(struct decal_vertex)==0);
 		/* port: batched (decal_batch), in place of
-		SetVertexData4ub(9, color) and DrawPrimitive(D3DPT_QUADLIST) */
+		SetVertexData4ub(9, color) and DrawPrimitive(D3DPT_QUADLIST); a
+		decal off the screen changes the states as it did, but its quads,
+		which would cover no pixel, are left out */
 		{
 			byte *vertex_data;
 
 			IDirect3DVertexBuffer8_Lock(local_d3d_vertex_buffer, 0, 0, &vertex_data, D3DLOCK_READONLY);
-			if (vertex_data)
+			if (vertex_data && decal_draw_on_screen[decal_order_index])
 			{
 				if (decal_batch_count == DECAL_BATCH_MAXIMUM_DECALS)
 					rasterizer_decals_draw_batch();
