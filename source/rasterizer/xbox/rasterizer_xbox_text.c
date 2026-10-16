@@ -167,21 +167,37 @@ void rasterizer_text_end(
 void rasterizer_text_flush(
 	void)
 {
+	/* each vertex's registers 0 (its position), 4 (its texture coordinates)
+	and 9 (its color), handed over at once (halo_immediate_vertices): the
+	values SetVertexDataColor(9), SetVertexData2f(4) and SetVertexData2f(0)
+	for each gave, a call each */
+	static real vertex_data[TEXT_BATCH_MAXIMUM_CHARACTERS * 4][3][4];
 	short vertex_count = text_batch_character_count * 4;
 	short vertex_index;
 
 	if (!vertex_count)
 		return;
 	text_batch_character_count = 0;
-	IDirect3DDevice8_Begin(global_d3d_device, D3DPT_QUADLIST);
 	for (vertex_index = 0; vertex_index < vertex_count; vertex_index++)
 	{
-		IDirect3DDevice8_SetVertexDataColor(global_d3d_device, 9, text_batch_vertices[vertex_index].color);
-		IDirect3DDevice8_SetVertexData2f(global_d3d_device, 4,
-			text_batch_vertices[vertex_index].u, text_batch_vertices[vertex_index].v);
-		IDirect3DDevice8_SetVertexData2f(global_d3d_device, 0,
-			text_batch_vertices[vertex_index].x, text_batch_vertices[vertex_index].y);
+		struct rasterizer_text_vertex const *vertex = &text_batch_vertices[vertex_index];
+		real (*data)[4] = vertex_data[vertex_index];
+
+		data[0][0] = vertex->x;
+		data[0][1] = vertex->y;
+		data[0][2] = 0.0f;
+		data[0][3] = 1.0f;
+		data[1][0] = vertex->u;
+		data[1][1] = vertex->v;
+		data[1][2] = 0.0f;
+		data[1][3] = 1.0f;
+		data[2][0] = ((vertex->color >> 16) & 0xFF) / 255.0f;
+		data[2][1] = ((vertex->color >> 8) & 0xFF) / 255.0f;
+		data[2][2] = (vertex->color & 0xFF) / 255.0f;
+		data[2][3] = ((vertex->color >> 24) & 0xFF) / 255.0f;
 	}
+	IDirect3DDevice8_Begin(global_d3d_device, D3DPT_QUADLIST);
+	halo_immediate_vertices((1UL << 0) | (1UL << 4) | (1UL << 9), &vertex_data[0][0][0], vertex_count);
 	if (IDirect3DDevice8_End(global_d3d_device) < 0)
 		error(2, "### ERROR rasterizer_text_flush failed");
 
