@@ -477,10 +477,13 @@ void game_time_update(
 		/* port: a tick under way since an earlier frame runs on for this
 		one's share; until one that is due has ended the game's clock waits,
 		and the frame draws the tick before it. One the clock would not take
-		(the game is paused, or stopped) runs whole and is taken now. */
+		(the game is paused, or stopped, or a client's clock waits for the
+		host: the menus' game when the server browser makes its client) runs
+		whole and is taken now; left under way, it would hold off the network
+		update the clock waits for (main.c) */
 		if (tick_slices_in_flight())
 		{
-			boolean take = game_time_globals->paused || ticks_per_second <= 0.f;
+			boolean take = game_time_globals->paused || ticks_per_second <= 0.f || game_time_held();
 			boolean ended = tick_slices_continue(!game_time_slicing_allowed || take);
 
 			if (tick_slices_counted() || take)
