@@ -541,7 +541,13 @@ frame with no time to spare is not made later by a tick that is not due
 yet, and the waits run the rest. A client of a co-op game of 48 players,
 held to 356 frames a second with one frame queued, had 1.4% of its frames
 over 2.75 ms instead of 3.0% where it had time to spare, and 10.9% instead
-of 12.2% where it had little. A tick that runs in pieces takes longer from its start to
+of 12.2% where it had little. One that is due runs at the start of a
+frame for 0.3 ms or for longer: for what is left of as long as the latest
+ticks ran, spread over the frames before the eighth, so that the eighth
+is not left most of a long tick. In the same game, where the render
+averaged 2–2.4 ms, 24.9% of the frames were over 2.75 ms instead of 29.2%,
+and 2.5% over 3.5 ms instead of 3.4%; 151 ticks were run whole instead
+of 479. A tick that runs in pieces takes longer from its start to
 its end than it would whole, so the next is begun ahead of its time, by a
 quarter more than the last took: the frames until it is due draw the two
 ticks before it, and the clock takes it, ended, when it is due. One that
