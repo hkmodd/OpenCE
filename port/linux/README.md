@@ -769,7 +769,14 @@ frames at points between the tick's parts (between the objects and the
 actors it updates): the tick runs for 0.3 ms of the frame it is begun on,
 then 0.1 ms at a time while the game's thread waits for the render thread,
 and 0.3 ms at the start of each frame after it; the eighth frame after it
-falls due runs what is left whole. A tick that runs in pieces takes longer from its start to
+falls due runs what is left whole. One begun ahead of its time runs at the
+start of a frame only for as long as the frame before had to spare (its
+wait for the render thread, and the tick's own share), less 0.2 ms: a
+frame with no time to spare is not made later by a tick that is not due
+yet, and the waits run the rest. A client of a co-op game of 48 players,
+held to 356 frames a second with one frame queued, had 1.4% of its frames
+over 2.75 ms instead of 3.0% where it had time to spare, and 10.9% instead
+of 12.2% where it had little. A tick that runs in pieces takes longer from its start to
 its end than it would whole, so the next is begun ahead of its time, by a
 quarter more than the last took: the frames until it is due draw the two
 ticks before it, and the clock takes it, ended, when it is due. One that

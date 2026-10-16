@@ -53,6 +53,10 @@ void render_thread_frame_end(unsigned long frames);
 /* work for the game's thread to do while render_thread_frame_end waits:
 called again while it returns nonzero and the wait is not over */
 void render_thread_set_idle_work(int (*work)(void));
+/* how long the latest render_thread_frame_end had to spare, its idle work
+with it, before the frame it waited for had run (platform_fiber_clock's
+counts; 0 if it waited for none); *frame is the count of frames ended */
+unsigned long long render_thread_frame_room(unsigned long *frame);
 /* hands over what is queued; nonzero while any of it has not run */
 int render_thread_busy(void);
 /* notes that the latest command recorded reads the resources whose data

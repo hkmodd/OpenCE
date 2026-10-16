@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from harness import CHECK_FAILED, build, mutated, read, run  # noqa: E402
 
 CASES = ["runs-in-order-across-turns", "waits-for-room", "call-returns-once-run", "resource-busy-until-read",
-         "one-frame-queued", "two-frames-queued", "frame-handed-over", "wakes-writer-once-reached"]
+         "one-frame-queued", "two-frames-queued", "frame-handed-over", "wakes-writer-once-reached", "frame-room"]
 
 # a fault in render_thread.c and the case that must catch it (the ring's
 # room with the reader held, not as fast as it happens to be)
@@ -37,6 +37,8 @@ NEGATIVE_CONTROLS = {
     # the writer never woken at the very position it waits for: the call stops
     "wakes-writer-only-past-its-position": (("&writer_side.wanted, __ATOMIC_RELAXED)) >= 0)",
                                              "&writer_side.wanted, __ATOMIC_RELAXED)) > 0)"), "call-returns-once-run"),
+    "frame-room-not-measured": (("frame_room = platform_fiber_clock() - began;", ";"), "frame-room"),
+    "frame-room-not-counted": (("*frame = frames_ended;", "*frame = 0;"), "frame-room"),
 }
 
 

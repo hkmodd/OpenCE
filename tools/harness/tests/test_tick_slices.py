@@ -10,7 +10,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from harness import CHECK_FAILED, build, mutated, read, run
 
-CASES = ['disabled', 'short', 'spare', 'held', 'forced', 'ahead', 'lead', 'finish', 'collision']
+CASES = ['disabled', 'short', 'spare', 'held', 'forced', 'ahead', 'room', 'room-due', 'lead', 'finish', 'collision']
 CONTROLS = [
     ('whole = TRUE;', 'whole = FALSE;', 'forced'),
     ('if (tick_pending_counted)\n\t\t\tframes_due++;', 'frames_due++;', 'ahead'),
@@ -21,7 +21,13 @@ CONTROLS = [
     ('platform_fiber_clock() >= slice_deadline', 'platform_fiber_clock() > slice_deadline', 'held'),
     ('collision_log_continue_period(0);', ';', 'collision'),
     ('share * clock_rate / 1000000u', 'share', 'spare'),
-    ('* 1000000u / clock_rate', '', 'lead'),
+    ('(now - tick_pending_began) * 1000000u / clock_rate', '(now - tick_pending_began)', 'lead'),
+    ('if (tick_pending_counted)\n\t\treturn TICK_SLICE_FRAME_SHARE;', '', 'room-due'),
+    ('room += share_used;', ';', 'room'),
+    ('if (share_frame + 1 == frame)', 'if (1)', 'room'),
+    ('spare -= TICK_SLICE_MARGIN;', ';', 'room'),
+    ('if (!share)\n\t\treturn;', '', 'room'),
+    ('render_thread_frame_room(&share_frame);', ';', 'room'),
 ]
 
 
