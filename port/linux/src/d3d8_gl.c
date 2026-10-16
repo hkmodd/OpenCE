@@ -458,6 +458,9 @@ struct vertex_shader_object
 	its instances' constants (XGPU_INSTANCE_GLSL): [0] as shader[0], [1] as
 	lit_shader[0] */
 	GLuint instanced_shader[2];
+	/* the immediate shader of a draw of an instance a layer
+	(layered_vertex_shader_get) */
+	GLuint layered_shader;
 	/* a shader lit for each pixel failed to compile or link: lit as the
 	vertex shader lights it from then on */
 	BOOL lighting_failed;
@@ -467,9 +470,9 @@ struct vertex_shader_object
 	struct vertex_array_entry *vertex_array;
 	unsigned long vertex_array_streams;
 #endif
-	/* which of shader[], lit_shader[] and instanced_shader[] have been
-	compiled (bits 0 and 1, 2 and 3, 4 and 5): one that failed stays 0 and is
-	not compiled again at each draw */
+	/* which of shader[], lit_shader[], instanced_shader[] and layered_shader
+	have been compiled (bits 0 and 1, 2 and 3, 4 and 5, 6): one that failed
+	stays 0 and is not compiled again at each draw */
 	unsigned char shaders_tried;
 };
 
@@ -529,6 +532,8 @@ struct program_entry
 	unsigned long long model_lights_serial;
 	/* an instanced draw's (XGPU_INSTANCE_GLSL) */
 	GLint instance_first, instance_stride, instance_low, instance_span;
+	/* a draw of an instance a layer's layers (shadow_instances) */
+	GLint shadow_layers;
 
 	/* the vertex constants c[0..constant_count) the program uses, and the
 	location of each c[i] once looked up (all ones: not yet), from which a
@@ -577,6 +582,9 @@ struct render_target_entry
 	multisampled with multisampling (render_target_multisample) */
 	BOOL screen_buffer;
 	enum render_target_kind kind;
+	/* a shadow map's layer of the array its texture is a view of, plus 1, or 0
+	(shadow_layer_take) */
+	int shadow_layer;
 };
 
 /* every draw looks up its targets and whether its textures are render
@@ -1723,6 +1731,127 @@ static BOOL surface_is_shadow_map(const D3DSurface *surface)
 		description.height == SHADOW_MAP_SIZE;
 }
 
+/* ---------- shadow layers */
+
+/* The shadow maps' blurs (rasterizer_xbox_shadows.c) are drawn a batch of
+shadows at a time, each pass of the blur one draw: each pass reads the map
+the pass before it drew, and so waits for it, and one shadow's seven passes
+into larger maps (display.shadow_resolution) left the GPU mostly waiting.
+The maps are the layers of one array texture, each map's texture a view of
+its layer (shadow_layer_take); a pass's draw draws an instance a shadow
+into the layered framebuffer, each writing its destination's layer
+(gl_Layer, GL_ARB_shader_viewport_layer_array) from its source's (xLayer).
+halo_shadow_layers names the next immediate draw's instances. Without the
+extension the game draws its shadows one at a time; an instance whose maps
+have no layers (the array full, or the maps' size changed while it had
+others) is drawn by a draw of its own (shadow_instance_bind). */
+#ifndef HALO_GLES
+#define SHADOW_LAYER_INSTANCES HALO_SHADOW_LAYERS_MAXIMUM
+#define SHADOW_LAYER_COUNT (2 * SHADOW_LAYER_INSTANCES)
+
+typedef char shadow_layer_instances_assert[SHADOW_LAYER_INSTANCES <= XGPU_LAYERED_INSTANCES ? 1 : -1];
+
+static struct
+{
+	/* GL_ARB_shader_viewport_layer_array (gl_initialize) */
+	BOOL supported;
+	GLuint array, framebuffer;
+	unsigned long width, height;
+	/* the layers views have, a bit each */
+	unsigned long taken;
+} shadow_layers;
+
+/* the next immediate draw's instances, as halo_shadow_layers named them */
+struct shadow_layers_request
+{
+	int count;
+	D3DSurface sources[SHADOW_LAYER_INSTANCES];
+	D3DSurface destinations[SHADOW_LAYER_INSTANCES];
+};
+
+static struct shadow_layers_request shadow_layers_requested;
+
+
+/* the instances of the immediate draw under way (shadow_layers_resolve):
+layered, one instanced draw into the array; else a draw each */
+static struct
+{
+	int count;
+	BOOL layered;
+	/* each instance's source and destination layer */
+	GLint layers[2 * SHADOW_LAYER_INSTANCES];
+	struct render_target_entry *sources[SHADOW_LAYER_INSTANCES];
+	struct render_target_entry *destinations[SHADOW_LAYER_INSTANCES];
+} shadow_instances;
+
+static void shadow_layers_forget(void)
+{
+	glDeleteFramebuffers(1, &shadow_layers.framebuffer);
+	glDeleteTextures(1, &shadow_layers.array);
+	shadow_layers.framebuffer = 0;
+	shadow_layers.array = 0;
+}
+
+/* a new shadow map's texture made a view of a free layer of the array, which
+is made the first time, and again when the maps' size changed and the maps
+of the size before are gone; a map that gets no layer keeps its texture */
+static void shadow_layer_take(struct render_target_entry *entry)
+{
+	GLenum draw_buffer = GL_COLOR_ATTACHMENT0;
+	int layer;
+
+	if (!shadow_layers.supported)
+		return;
+	if (shadow_layers.array && !shadow_layers.taken &&
+		(shadow_layers.width != entry->target.gl_width || shadow_layers.height != entry->target.gl_height))
+	{
+		shadow_layers_forget();
+	}
+	if (!shadow_layers.array)
+	{
+		shadow_layers.width = entry->target.gl_width;
+		shadow_layers.height = entry->target.gl_height;
+		glGenTextures(1, &shadow_layers.array);
+		glBindTexture(GL_TEXTURE_2D_ARRAY, shadow_layers.array);
+		glTexStorage3D(GL_TEXTURE_2D_ARRAY, 1, GL_RGBA8, (GLsizei)shadow_layers.width, (GLsizei)shadow_layers.height,
+			SHADOW_LAYER_COUNT);
+		glGenFramebuffers(1, &shadow_layers.framebuffer);
+		glBindFramebuffer(GL_FRAMEBUFFER, shadow_layers.framebuffer);
+		glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, shadow_layers.array, 0);
+		glDrawBuffers(1, &draw_buffer);
+		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+		{
+			platform_log("GPU: the shadow maps cannot be layers of an array: their blurs are drawn one at a time");
+			shadow_layers_forget();
+			shadow_layers.supported = FALSE;
+		}
+		xgpu_gl_state_invalidate();
+		if (!shadow_layers.supported)
+			return;
+	}
+	if (shadow_layers.width != entry->target.gl_width || shadow_layers.height != entry->target.gl_height)
+		return;
+	for (layer = 0; layer < SHADOW_LAYER_COUNT && (shadow_layers.taken & (1UL << layer)); layer++)
+		;
+	if (layer == SHADOW_LAYER_COUNT)
+		return;
+	glDeleteTextures(1, &entry->target.texture);
+	glGenTextures(1, &entry->target.texture);
+	glTextureView(entry->target.texture, GL_TEXTURE_2D, shadow_layers.array, GL_RGBA8, 0, 1, (GLuint)layer, 1);
+	shadow_layers.taken |= 1UL << layer;
+	entry->shadow_layer = layer + 1;
+}
+#endif
+
+unsigned char halo_shadow_layers_supported(void)
+{
+#ifdef HALO_GLES
+	return 0;
+#else
+	return (unsigned char)shadow_layers.supported;
+#endif
+}
+
 /* the secondary render target, the size of the Xbox's (rasterizer_xbox.c) */
 #define SECONDARY_TARGET_WIDTH 320
 #define SECONDARY_TARGET_HEIGHT 240
@@ -1839,6 +1968,10 @@ static struct render_target_entry *render_target_get(const D3DSurface *surface)
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
 	render_target_storage(&entry->target);
 	xgpu_gl_state_invalidate();
+#ifndef HALO_GLES
+	if (kind == _render_target_shadow_map && !depth)
+		shadow_layer_take(entry);
+#endif
 	entry->next = render_targets;
 	render_targets = entry;
 	entry->next_in_bucket = *render_target_bucket(entry->target.data);
@@ -2328,6 +2461,11 @@ static void gl_initialize(void)
 		if (renderbuffer_size < maximum_target_size)
 			maximum_target_size = renderbuffer_size;
 	}
+#ifndef HALO_GLES
+	shadow_layers.supported = SDL_GL_ExtensionSupported("GL_ARB_shader_viewport_layer_array");
+	platform_log("GPU: the shadow maps' blurs drawn %s",
+		shadow_layers.supported ? "a batch at a time" : "one at a time (no GL_ARB_shader_viewport_layer_array)");
+#endif
 	xgpu_gl_state_invalidate();
 	device.gl_ready = TRUE;
 	if (anti_aliasing_value < 0)
@@ -3800,6 +3938,23 @@ static BOOL words_equal(const void *a, const void *b, unsigned long size)
 	return difference == 0;
 }
 
+#ifndef HALO_GLES
+/* the immediate shader of a draw of an instance a layer (shadow layers) */
+static GLuint layered_vertex_shader_get(struct vertex_shader_object *program)
+{
+	if (!program->layered_shader && !(program->shaders_tried & 0x40))
+	{
+		char *source = nv2a_vertex_shader_to_layered_glsl(program->instructions, program->instruction_count);
+
+		program->shaders_tried |= 0x40;
+		if (source)
+			program->layered_shader = xgpu_compile_shader(GL_VERTEX_SHADER, source, "vertex");
+		free(source);
+	}
+	return program->layered_shader;
+}
+#endif
+
 /* lit: the shader that hands the lighting's normal and position on
 (vertex_shader_object lit_shader); instanced: the shader of an instanced
 draw, which is never immediate (instanced_shader) */
@@ -3977,6 +4132,7 @@ static struct program_entry *program_get(GLuint vertex_shader, GLuint fragment_s
 	entry->instance_stride = glGetUniformLocation(entry->program, "instance_stride");
 	entry->instance_low = glGetUniformLocation(entry->program, "instance_low");
 	entry->instance_span = glGetUniformLocation(entry->program, "instance_span");
+	entry->shadow_layers = glGetUniformLocation(entry->program, "shadow_layers");
 	for (stage = 0; stage < D3DTSS_MAXSTAGES; stage++)
 	{
 		char name[8];
@@ -4289,6 +4445,10 @@ static void render_target_delete(struct render_target_entry *entry)
 			}
 		}
 	}
+#ifndef HALO_GLES
+	if (entry->shadow_layer)
+		shadow_layers.taken &= ~(1UL << (entry->shadow_layer - 1));
+#endif
 	xgpu_gl_texture_deleted(entry->target.texture);
 	glDeleteTextures(1, &entry->target.texture);
 	free(entry);
@@ -4936,11 +5096,29 @@ static struct program_entry *prepare_draw_as(BOOL immediate, BOOL instanced)
 	which binds framebuffers of its own, and the back buffer can be both
 	sampled and drawn into */
 	bind_textures(&key, uniforms.texture_scale);
+#ifndef HALO_GLES
+	/* (an instance a layer: the array on the stages that sample the first's
+	map, shadow_layers_resolve) */
+	if (shadow_instances.layered && immediate && !instanced && !program->lighting.lights)
+	{
+		for (stage = 0; stage < 4; stage++)
+		{
+			if (key.sampler_type[stage] == _xgpu_sampler_2d)
+				glBindTextures((GLuint)stage, 1, &shadow_layers.array);
+		}
+		key.layered = 1;
+	}
+	shadow_instances.layered = key.layered;
+#endif
 	if (!bind_targets(&has_depth))
 	{
 		stats.skipped_no_target++;
 		return NULL;
 	}
+#ifndef HALO_GLES
+	if (key.layered)
+		state_framebuffer(shadow_layers.framebuffer);
+#endif
 	apply_raster_state(has_depth);
 	for (stage = 0; stage < D3DTSS_MAXSTAGES; stage++)
 	{
@@ -4981,6 +5159,21 @@ static struct program_entry *prepare_draw_as(BOOL immediate, BOOL instanced)
 			key.per_pixel_lighting = 0;
 		}
 	}
+#ifndef HALO_GLES
+	if (key.layered)
+	{
+		entry = program_get(layered_vertex_shader_get(program), fragment_shader_get(&key));
+		if (!entry)
+		{
+			/* (the instances drawn a draw each instead, from here on) */
+			platform_log("GPU: the shadow maps' layered blur cannot be built (refer to the shader log above): "
+				"their blurs are drawn one at a time");
+			shadow_layers.supported = FALSE;
+			shadow_instances.layered = FALSE;
+			return prepare_draw_as(immediate, instanced);
+		}
+	}
+#endif
 	if (!entry)
 		entry = program_get(vertex_shader_get(program, immediate, FALSE, instanced), fragment_shader_get(&key));
 	if (!entry)
@@ -4999,6 +5192,10 @@ static struct program_entry *prepare_draw_as(BOOL immediate, BOOL instanced)
 #endif
 	draw_flush();
 	state_program(entry->program);
+#ifndef HALO_GLES
+	if (key.layered && entry->shadow_layers >= 0)
+		glUniform2iv(entry->shadow_layers, shadow_instances.count, shadow_instances.layers);
+#endif
 	if (key.source_blend && entry->blend_constant >= 0)
 	{
 		float blend_constant[4];
@@ -7412,6 +7609,114 @@ static void immediate_emit(void)
 	game->immediate_count++;
 }
 
+#ifndef HALO_GLES
+static void shadow_layers_command(void *payload)
+{
+	shadow_layers_requested = *(struct shadow_layers_request *)payload;
+}
+#endif
+
+void halo_shadow_layers(short count, struct D3DSurface *const *sources, struct D3DSurface *const *destinations)
+{
+#ifndef HALO_GLES
+	struct shadow_layers_request request;
+	int index;
+
+	memset(&request, 0, sizeof(request));
+	request.count = count > 0 && count <= SHADOW_LAYER_INSTANCES ? count : 0;
+	for (index = 0; index < request.count; index++)
+	{
+		request.sources[index] = *sources[index];
+		request.destinations[index] = *destinations[index];
+	}
+	if (queued())
+		memcpy(render_thread_record(shadow_layers_command, sizeof(request)), &request, sizeof(request));
+	else
+		shadow_layers_requested = request;
+#endif
+}
+
+#ifndef HALO_GLES
+/* the immediate draw's instances (halo_shadow_layers), taken if the draw's
+own target and textures are the first's, and the maps are render targets
+the size of the first's */
+static void shadow_layers_resolve(D3DPRIMITIVETYPE type)
+{
+	struct shadow_layers_request *request = &shadow_layers_requested;
+	struct render_target_entry *source, *destination;
+	int count = request->count, index, stage;
+	BOOL layered = shadow_layers.supported && shadow_layers.array;
+	BOOL first = TRUE;
+
+	shadow_instances.count = 0;
+	shadow_instances.layered = FALSE;
+	request->count = 0;
+	if (count < 2)
+		return;
+	if (type == D3DPT_QUADLIST || !device.render_target || device.render_target->Data != request->destinations[0].Data)
+		first = FALSE;
+	for (stage = 0; stage < 4; stage++)
+	{
+		if (!device.textures[stage] || device.textures[stage]->Data != request->sources[0].Data)
+			first = FALSE;
+	}
+	for (index = first ? 0 : count + 1; index < count; index++)
+	{
+		source = render_target_get(&request->sources[index]);
+		destination = render_target_get(&request->destinations[index]);
+		if (!source || !destination || source == destination || source->target.depth || destination->target.depth ||
+			source->target.samples || destination->target.samples ||
+			source->target.gl_width != destination->target.gl_width ||
+			source->target.gl_height != destination->target.gl_height ||
+			(index && (destination->target.gl_width != shadow_instances.destinations[0]->target.gl_width ||
+			destination->target.gl_height != shadow_instances.destinations[0]->target.gl_height)))
+		{
+			break;
+		}
+		layered = layered && source->shadow_layer && destination->shadow_layer;
+		shadow_instances.layers[index * 2] = source->shadow_layer - 1;
+		shadow_instances.layers[index * 2 + 1] = destination->shadow_layer - 1;
+		shadow_instances.sources[index] = source;
+		shadow_instances.destinations[index] = destination;
+	}
+	if (index != count)
+	{
+		static BOOL logged;
+
+		/* (only the first's maps are blurred) */
+		if (!logged)
+			platform_log("GPU: a shadow blur's instances do not match its draw");
+		logged = TRUE;
+		return;
+	}
+	for (index = 1; index < count; index++)
+	{
+		shadow_instances.destinations[index]->last_rendered = device.frame + 1;
+		shadow_instances.destinations[index]->target.written = ++render_target_write_serial;
+	}
+	shadow_instances.count = count;
+	shadow_instances.layered = layered;
+}
+
+/* binds instance index's maps in place of the first's, for a draw of its
+own: its source on the four stages, its destination the target */
+static void shadow_instance_bind(int index)
+{
+	GLuint texture = shadow_instances.sources[index]->target.texture;
+	int stage;
+
+	for (stage = 0; stage < 4; stage++)
+	{
+		if (gl_state.textures[stage][0] != texture)
+		{
+			glBindTextures((GLuint)stage, 1, &texture);
+			gl_state.textures[stage][0] = texture;
+		}
+	}
+	state_framebuffer(framebuffer_get(shadow_instances.destinations[index]->target.texture, 0));
+}
+#endif
+
 static void run_end(void)
 {
 	unsigned long stride = XGPU_VERTEX_ATTRIBUTE_COUNT * 4 * sizeof(float);
@@ -7422,8 +7727,16 @@ static void run_end(void)
 	unsigned long first_vertex = 0;
 
 	device.immediate_active = FALSE;
+#ifndef HALO_GLES
+	shadow_layers_resolve(type);
+#endif
 	if (!count || !prepare_draw(TRUE))
+	{
+#ifndef HALO_GLES
+		shadow_instances.count = 0;
+#endif
 		return;
+	}
 	/* (the fixed-function pipeline's: positions into clip space. A vertex
 	holds the registers written, in order: the position, register 0, first) */
 	if (device.fixed_function && (device.immediate_written & 1))
@@ -7595,11 +7908,31 @@ static void run_end(void)
 		}
 		free(indices);
 	}
+#ifndef HALO_GLES
+	else if (shadow_instances.layered)
+	{
+		/* (the layers it reads, the passes before it drew) */
+		glTextureBarrier();
+		glDrawArraysInstanced(primitive_mode(type), (GLint)first_vertex, (GLsizei)count,
+			(GLsizei)shadow_instances.count);
+	}
+#endif
 	else
 	{
 		glDrawArrays(primitive_mode(type), (GLint)first_vertex, (GLsizei)count);
+#ifndef HALO_GLES
+		for (index = 1; index < (unsigned long)shadow_instances.count; index++)
+		{
+			shadow_instance_bind((int)index);
+			glDrawArrays(primitive_mode(type), (GLint)first_vertex, (GLsizei)count);
+		}
+#endif
 	}
 	gl_check_errors("immediate draw");
+#ifndef HALO_GLES
+	shadow_instances.count = 0;
+	shadow_instances.layered = FALSE;
+#endif
 }
 
 /* (with the render thread) an immediate draw queued, its vertices after it */

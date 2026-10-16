@@ -21,6 +21,7 @@ clip-space position again.
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 /* ---------- instruction fields */
 
@@ -659,5 +660,33 @@ char *nv2a_fixed_function_glsl(void)
 		"\txT3 = v12_in;\n"
 		"\txFog = 1.0;\n"
 		"}\n");
+	return text.buffer;
+}
+
+char *nv2a_vertex_shader_to_layered_glsl(const DWORD *instructions, unsigned long instruction_count)
+{
+	char *source = nv2a_vertex_shader_to_glsl(instructions, instruction_count, 0, NULL, FALSE);
+	char *version_end = source ? strchr(source, '\n') : NULL;
+	char *main_end = source ? strrchr(source, '}') : NULL;
+	struct xgpu_text text = { 0 };
+
+	if (!version_end || !main_end || main_end < version_end)
+	{
+		free(source);
+		return NULL;
+	}
+	/* (the extension after the #version line, and before anything else;
+	the layer at the end of main) */
+	xgpu_text_append(&text, "%.*s", (int)(version_end + 1 - source), source);
+	xgpu_text_append(&text,
+		"#extension GL_ARB_shader_viewport_layer_array : require\n"
+		"uniform ivec2 shadow_layers[%d];\n"
+		"flat out float xLayer;\n", XGPU_LAYERED_INSTANCES);
+	xgpu_text_append(&text, "%.*s", (int)(main_end - (version_end + 1)), version_end + 1);
+	xgpu_text_append(&text,
+		"\tgl_Layer = shadow_layers[gl_InstanceID].y;\n"
+		"\txLayer = float(shadow_layers[gl_InstanceID].x);\n"
+		"}\n");
+	free(source);
 	return text.buffer;
 }

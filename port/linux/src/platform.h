@@ -173,6 +173,11 @@ void *halo_custom_edition_tag_cache(void);
 (xbox_textures.c; also declared for the game there) */
 void halo_custom_edition_texels_channels(const void *texels, unsigned char channel_order);
 void halo_custom_edition_texels_forget(void);
+/* the shadow maps' blurs drawn a batch of shadows at a time (d3d8_gl.c;
+also declared for the game there) */
+#define HALO_SHADOW_LAYERS_MAXIMUM 8
+unsigned char halo_shadow_layers_supported(void);
+void halo_shadow_layers(short count, struct D3DSurface *const *sources, struct D3DSurface *const *destinations);
 
 /* ---------- guest memory write tracking (memory_watch.c)
 
