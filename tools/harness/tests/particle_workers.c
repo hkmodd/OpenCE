@@ -30,6 +30,8 @@ typedef unsigned short word;
 typedef unsigned long pixel32;
 typedef struct { real alpha, red, green, blue; } real_argb_color;
 
+#define csmemcpy memcpy
+#define csmemset memset
 #define SET_FLAG(flags, bit, value) ((value) ? ((flags) |= FLAG(bit)) : ((flags) &= ~FLAG(bit)))
 
 #include "config.inc"
@@ -442,8 +444,8 @@ static void reference_render_particles(void)
 	}
 	if (!rendered_particle_count)
 		return;
-	qsort(rendered_particles, rendered_particle_count, sizeof(struct rendered_particle_datum),
-		compare_rendered_particles);
+	/* (feature/particle-sort's order of equal particles) */
+	sort_rendered_particles(rendered_particles, rendered_particle_count);
 	{
 		struct rendered_particle_datum *rendered_particle = rendered_particles;
 		short *current = NULL;
