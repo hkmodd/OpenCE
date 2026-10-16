@@ -58,6 +58,13 @@ long halo_screen_commit(void);
 /* the shadow maps' pixels for each of their 128 texels each way, a power of
 two (display.shadow_resolution) */
 long halo_shadow_map_scale(void);
+/* the shadow maps' blurs drawn a batch of shadows at a time, each pass one
+draw (port/linux/src/d3d8_gl.c): nonzero where they can be; the next
+immediate draw's instances, each drawing what the draw draws from its
+source map into its destination (count 0 for none) */
+#define HALO_SHADOW_LAYERS_MAXIMUM 8
+unsigned char halo_shadow_layers_supported(void);
+void halo_shadow_layers(short count, struct D3DSurface *const *sources, struct D3DSurface *const *destinations);
 /* while TRUE, drawing shifts right to center 640-column layouts */
 void halo_screen_ui_offset(unsigned char centered);
 /* names a model lighting vertex program, whose draws can be lit for each

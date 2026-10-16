@@ -234,6 +234,8 @@ static void shadow_volume_plane_pair(
 	real_plane3d *opposite_plane);
 static void render_object_shadow_end(
 	struct object_render_data *data);
+static void render_object_shadows_flush(
+	void);
 static void object_render_state_refresh(
 	long render_state_index,
 	long object_index,
@@ -275,6 +277,10 @@ static struct render_object_globals render_object_globals = { 0 };
 boolean debug_inactive_objects = FALSE;
 
 static boolean reported_rendered_object_overflow = FALSE;
+
+/* port: the shadows begun and not yet drawn (render_object_shadows_flush) */
+static struct object_render_data shadow_batch[RASTERIZER_SHADOW_BATCH_MAXIMUM];
+static short shadow_batch_count = 0;
 
 /* ---------- public code */
 
@@ -391,6 +397,7 @@ void render_object_shadows(
 
 		data.shadow = TRUE;
 		process_rendered_objects(&data);
+		render_object_shadows_flush(); /* port */
 
 		rasterizer_environment_shadows_end();
 	}
@@ -896,6 +903,28 @@ static void render_object_shadow_end(
 	return;
 }
 
+/* port: draws the batch's shadows: their maps blurred together, then each
+drawn in the order they were begun; slot 0 selected after */
+static void render_object_shadows_flush(
+	void)
+{
+	short index;
+
+	if (shadow_batch_count)
+	{
+		rasterizer_environment_shadows_convolve(shadow_batch_count);
+		for (index = 0; index < shadow_batch_count; index++)
+		{
+			rasterizer_environment_shadow_slot(index);
+			render_object_shadow_end(&shadow_batch[index]);
+		}
+		shadow_batch_count = 0;
+	}
+	rasterizer_environment_shadow_slot(0);
+
+	return;
+}
+
 static void object_render_state_refresh(
 	long render_state_index,
 	long object_index,
@@ -1147,10 +1176,22 @@ static void render_object(
 				size_fraction = PIN(size_fraction, 0.f, 1.f);
 				darkness_fraction = PIN(darkness_fraction, 0.f, 1.f);
 
+				/* port: the shadow's silhouette drawn into the maps of the next
+				slot of the batch, and the shadow drawn with the batch
+				(render_object_shadows_flush): batches of one where the
+				renderer draws a pass of one shadow's blur at a time */
+				if (!rasterizer_environment_shadow_slot(shadow_batch_count))
+				{
+					render_object_shadows_flush();
+				}
 				if (render_object_shadow_begin(data, darkness_fraction * size_fraction))
 				{
 					render_object_list(data, NULL, data->object_index);
-					render_object_shadow_end(data);
+					shadow_batch[shadow_batch_count++] = *data;
+					if (shadow_batch_count >= (halo_shadow_layers_supported() ? RASTERIZER_SHADOW_BATCH_MAXIMUM : 1))
+					{
+						render_object_shadows_flush();
+					}
 				}
 			}
 		}
