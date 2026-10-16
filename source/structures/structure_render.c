@@ -146,6 +146,15 @@ typedef char verify_structure_render_fog_offset_vector_offset[
 typedef char verify_structure_render_globals_size[
 	sizeof(struct structure_render_globals) == 0x18 ? 1 : -1];
 
+/* port: a run of the surfaces structure_render_pass draws with one of a
+lightmap's materials */
+struct structure_render_chunk
+{
+	short lightmap_index;
+	short material_index;
+	long surface_count;
+};
+
 /* ---------- prototypes */
 
 static boolean compare_surface_indices(
@@ -190,10 +199,53 @@ static void structure_render_pass(
 		real_vector3d const *offset,
 		void const *lighting,
 		unsigned long geometry_flags));
+/* port: (structure_render_pass' chunks) */
+static long structure_render_find_chunks(
+	long *surface_indices,
+	long surface_count,
+	struct structure_render_chunk *chunks,
+	long *chunked_surface_count);
+static void structure_render_draw_chunk(
+	struct structure_material *material,
+	struct shader *shader,
+	struct bitmap_data *lightmap_bitmap,
+	long dynamic_triangles_index,
+	long first_triangle_index,
+	long chunk_count,
+	void (*draw_triangles)(
+		struct shader const *shader,
+		short shader_permutation_index,
+		long dynamic_triangle_buffer_index,
+		long first_triangle_index,
+		long triangle_count,
+		struct vertex_buffer const *vertex_buffer),
+	void (*draw_transparent_triangles)(
+		struct shader const *shader,
+		short shader_permutation_index,
+		struct bitmap_data const *lightmap,
+		long dynamic_triangle_buffer_index,
+		long first_triangle_index,
+		long triangle_count,
+		struct vertex_buffer const *vertex_buffers,
+		real_point3d const *centroid,
+		real_plane3d const *plane,
+		real_vector3d const *offset,
+		void const *lighting,
+		unsigned long geometry_flags));
 
 /* ---------- globals */
 
 static struct structure_render_globals structure_render_globals;
+
+/* port: the chunks of render.environment_surface_indices, found once a
+window (structure_render_preprocess) for the passes that draw them, each of
+which walked every surface to find them again: drawn from while the list
+has the count they were found for and the triangles they were found with
+(only structure_render_preprocess writes the list) */
+static struct structure_render_chunk environment_chunks[MAXIMUM_RENDERED_ENVIRONMENT_SURFACES];
+static long environment_chunk_count;
+static long environment_chunk_surface_count = NONE;
+static long environment_chunk_triangles_index = NONE;
 
 long debug_leaf_index = NONE;
 long debug_leaf_portal_index = NONE;
@@ -507,6 +559,71 @@ static void structure_render_pass(
 	long first_triangle_index = 0;
 	short lightmap_index;
 
+	/* port: the environment's surfaces drawn in the chunks
+	structure_render_preprocess found, the lightmaps begun and ended and the
+	materials drawn as the walk below does */
+	if (surface_indices == render.environment_surface_indices &&
+		surface_count == environment_chunk_surface_count &&
+		dynamic_triangles_index == environment_chunk_triangles_index)
+	{
+		struct structure_lightmap *lightmap = NULL;
+		struct bitmap_data *lightmap_bitmap = NULL;
+		long chunk_index;
+
+		lightmap_index = NONE;
+		for (chunk_index = 0; chunk_index < environment_chunk_count; chunk_index++)
+		{
+			struct structure_render_chunk const *chunk = &environment_chunks[chunk_index];
+			struct structure_material *material;
+
+			if (chunk->lightmap_index != lightmap_index)
+			{
+				if (lightmap_index != NONE && end_lightmap)
+				{
+					end_lightmap();
+				}
+				lightmap_index = chunk->lightmap_index;
+				lightmap = TAG_BLOCK_GET_ELEMENT(
+					&structure_bsp->lightmaps,
+					lightmap_index,
+					struct structure_lightmap);
+				if (structure_bsp->lightmap_group.index == NONE)
+				{
+					lightmap_bitmap = NULL;
+				}
+				else
+				{
+					lightmap_bitmap = bitmap_group_try_and_get_bitmap(
+						structure_bsp->lightmap_group.index,
+						lightmap->bitmap_index);
+				}
+				if (begin_lightmap)
+				{
+					begin_lightmap(lightmap_bitmap);
+				}
+			}
+			material = TAG_BLOCK_GET_ELEMENT(
+				&lightmap->materials,
+				chunk->material_index,
+				struct structure_material);
+			structure_render_draw_chunk(
+				material,
+				shader_definition_get(material->shader.index),
+				lightmap_bitmap,
+				dynamic_triangles_index,
+				first_triangle_index,
+				chunk->surface_count,
+				draw_triangles,
+				draw_transparent_triangles);
+			first_triangle_index += chunk->surface_count;
+		}
+		if (lightmap_index != NONE && end_lightmap)
+		{
+			end_lightmap();
+		}
+		return;
+	}
+
 	for (lightmap_index = 0;
 		lightmap_index < structure_bsp->lightmaps.count;
 		lightmap_index++)
@@ -587,42 +704,16 @@ static void structure_render_pass(
 
 			chunk_count = surface_index_cursor - chunk_start;
 
-			if (breakable_surface_extant(material->breakable_surface_index))
-			{
-				if (!shader_type_is_transparent(shader->base.type))
-				{
-					if (draw_triangles)
-					{
-						draw_triangles(
-							shader,
-							material->permutation_index,
-							dynamic_triangles_index,
-							first_triangle_index,
-							chunk_count,
-							&material->vertices);
-					}
-				}
-				else if (draw_transparent_triangles)
-				{
-					draw_transparent_triangles(
-						shader,
-						material->permutation_index,
-						lightmap_bitmap,
-						dynamic_triangles_index,
-						first_triangle_index,
-						chunk_count,
-						&material->vertices,
-						&material->centroid,
-						TEST_FLAG(material->flags, _structure_material_coplanar_bit)
-							? &material->plane
-							: NULL,
-						TEST_FLAG(material->flags, _structure_material_fog_plane_bit)
-							? &structure_render_globals.fog_offset_vector
-							: global_zero_vector3d,
-						&material->lighting,
-						0);
-				}
-			}
+			/* port: (structure_render_draw_chunk) */
+			structure_render_draw_chunk(
+				material,
+				shader,
+				lightmap_bitmap,
+				dynamic_triangles_index,
+				first_triangle_index,
+				chunk_count,
+				draw_triangles,
+				draw_transparent_triangles);
 
 			first_triangle_index += chunk_count;
 		}
@@ -638,6 +729,142 @@ static void structure_render_pass(
 		599,
 		surface_index_cursor >= surface_index_end,
 		"there are more surfaces than materials that reference them, stupid.");
+
+	return;
+}
+
+/* port: the runs of surfaces structure_render_pass draws with one material
+each, found as its walk finds them, and how many surfaces they hold (fewer
+than surface_count where the materials end before the surfaces do) */
+static long structure_render_find_chunks(
+	long *surface_indices,
+	long surface_count,
+	struct structure_render_chunk *chunks,
+	long *chunked_surface_count)
+{
+	struct structure_bsp *structure_bsp = global_structure_bsp_get();
+	long *surface_index_cursor = surface_indices;
+	long *surface_index_end = surface_indices + surface_count;
+	long chunk_count = 0;
+	short lightmap_index;
+
+	for (lightmap_index = 0;
+		lightmap_index < structure_bsp->lightmaps.count && surface_index_cursor < surface_index_end;
+		lightmap_index++)
+	{
+		struct structure_lightmap *lightmap = TAG_BLOCK_GET_ELEMENT(
+			&structure_bsp->lightmaps,
+			lightmap_index,
+			struct structure_lightmap);
+		struct structure_material *last_material = TAG_BLOCK_GET_ELEMENT(
+			&lightmap->materials,
+			lightmap->materials.count - 1,
+			struct structure_material);
+		short material_index;
+
+		if (*surface_index_cursor >= last_material->first_surface_index + last_material->surface_count)
+		{
+			continue;
+		}
+
+		for (material_index = 0;
+			material_index < lightmap->materials.count && surface_index_cursor < surface_index_end;
+			material_index++)
+		{
+			struct structure_material *material = TAG_BLOCK_GET_ELEMENT(
+				&lightmap->materials,
+				material_index,
+				struct structure_material);
+			long surface_index_limit = material->first_surface_index + material->surface_count;
+			long *chunk_start = surface_index_cursor;
+
+			if (*surface_index_cursor >= surface_index_limit)
+			{
+				continue;
+			}
+
+			do
+			{
+				surface_index_cursor++;
+			}
+			while (surface_index_cursor < surface_index_end && *surface_index_cursor < surface_index_limit);
+
+			chunks[chunk_count].lightmap_index = lightmap_index;
+			chunks[chunk_count].material_index = material_index;
+			chunks[chunk_count].surface_count = surface_index_cursor - chunk_start;
+			chunk_count++;
+		}
+	}
+
+	*chunked_surface_count = surface_index_cursor - surface_indices;
+	return chunk_count;
+}
+
+/* port: a chunk drawn, as structure_render_pass drew each */
+static void structure_render_draw_chunk(
+	struct structure_material *material,
+	struct shader *shader,
+	struct bitmap_data *lightmap_bitmap,
+	long dynamic_triangles_index,
+	long first_triangle_index,
+	long chunk_count,
+	void (*draw_triangles)(
+		struct shader const *shader,
+		short shader_permutation_index,
+		long dynamic_triangle_buffer_index,
+		long first_triangle_index,
+		long triangle_count,
+		struct vertex_buffer const *vertex_buffer),
+	void (*draw_transparent_triangles)(
+		struct shader const *shader,
+		short shader_permutation_index,
+		struct bitmap_data const *lightmap,
+		long dynamic_triangle_buffer_index,
+		long first_triangle_index,
+		long triangle_count,
+		struct vertex_buffer const *vertex_buffers,
+		real_point3d const *centroid,
+		real_plane3d const *plane,
+		real_vector3d const *offset,
+		void const *lighting,
+		unsigned long geometry_flags))
+{
+	if (breakable_surface_extant(material->breakable_surface_index))
+	{
+		if (!shader_type_is_transparent(shader->base.type))
+		{
+			if (draw_triangles)
+			{
+				draw_triangles(
+					shader,
+					material->permutation_index,
+					dynamic_triangles_index,
+					first_triangle_index,
+					chunk_count,
+					&material->vertices);
+			}
+		}
+		else if (draw_transparent_triangles)
+		{
+			draw_transparent_triangles(
+				shader,
+				material->permutation_index,
+				lightmap_bitmap,
+				dynamic_triangles_index,
+				first_triangle_index,
+				chunk_count,
+				&material->vertices,
+				&material->centroid,
+				TEST_FLAG(material->flags, _structure_material_coplanar_bit)
+					? &material->plane
+					: NULL,
+				TEST_FLAG(material->flags, _structure_material_fog_plane_bit)
+					? &structure_render_globals.fog_offset_vector
+					: global_zero_vector3d,
+				&material->lighting,
+				0);
+		}
+	}
 
 	return;
 }
@@ -661,6 +888,25 @@ void structure_render_preprocess(
 
 	structure_render_globals.environment_geometry_valid =
 		structure_render_globals.environment_triangles_index != NONE;
+
+	/* port: the chunks the passes draw the environment's surfaces in, kept
+	only where they hold every surface (the walk asserts otherwise) */
+	environment_chunk_surface_count = NONE;
+	if (structure_render_globals.environment_geometry_valid)
+	{
+		long chunked_surface_count;
+
+		environment_chunk_count = structure_render_find_chunks(
+			render.environment_surface_indices,
+			render.environment_surface_count,
+			environment_chunks,
+			&chunked_surface_count);
+		if (chunked_surface_count == render.environment_surface_count)
+		{
+			environment_chunk_surface_count = render.environment_surface_count;
+			environment_chunk_triangles_index = structure_render_globals.environment_triangles_index;
+		}
+	}
 
 	if (debug_leaf_index >= 0 && debug_leaf_index < structure_bsp->leaf_map.leaves.count)
 	{
