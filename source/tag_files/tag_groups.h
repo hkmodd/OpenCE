@@ -149,6 +149,8 @@ static __inline__ void *tag_block_get_element_fast(
 long tag_loaded(long group_tag, const char *name);
 
 void *tag_get(long group_tag, long tag_index);
+/* port: whether tag_get gives the tag itself, not the empty tag */
+boolean tag_get_gives_tag(long group_tag, long tag_index);
 
 /* ---------- globals */
 

@@ -134,5 +134,10 @@ void halo_immediate_vertices(unsigned long registers, const float *vertices, uns
 middle button, R and F are held, and the wheel's notches since the last call
 (port/linux/src/xinput_sdl.c) */
 int halo_linux_debug_camera_input(int *middle, int *up, int *down, float *wheel);
+/* a job run on the worker threads beside the game's thread, and the wait
+for them to return from it (port/linux/src/worker_pool.c; none on Android
+and the web): render_particles works its sprites out on them */
+void worker_pool_begin(void (*job)(void));
+void worker_pool_end(void);
 
 #endif
