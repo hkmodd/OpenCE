@@ -21,7 +21,11 @@ A tick that would end after it is due is begun ahead of its time, by as
 long as the last ticks took to run in pieces: the frames before it is due
 go on drawing the two ticks before it, and the clock takes it, ended, when
 it is due. One that is due and has not ended yet holds the clock: the
-frames draw the tick before it, whole, until it has ended.
+frames draw the tick before it, whole, until it has ended. It runs at the
+start of each frame for its share, or longer: for what is left of as long
+as the latest ticks ran, spread over the frames it may run on before one
+runs the rest whole, so that a frame with no time to spare is not left
+most of a long tick to run.
 
 Only one stack runs at a time, on the game's thread: a frame drawn while a
 tick is under way reads what the tick has left half done (its objects'
@@ -78,6 +82,10 @@ static short frames_due;
 /* how long the latest ticks took from their beginning to their end,
 smoothed (microseconds) */
 static unsigned long tick_duration;
+/* how long the tick pending has run so far, and the latest ticks ran in
+all, smoothed (in the platform's clock's counts) */
+static unsigned long long tick_pending_work;
+static unsigned long long tick_work;
 /* how long the latest share of a frame ran (in the platform's clock's
 counts), and the count of the frames ended before it (render_thread.c) */
 static unsigned long long share_used;
@@ -144,6 +152,7 @@ static void tick_slices_run(unsigned long share)
 	in_tick = TRUE;
 	platform_fiber_enter();
 	in_tick = FALSE;
+	tick_pending_work += platform_fiber_clock() - now;
 	if (fiber_tick_ended)
 	{
 		unsigned long duration;
@@ -155,6 +164,9 @@ static void tick_slices_run(unsigned long share)
 		tick_duration = duration > tick_duration ?
 			tick_duration + (duration - tick_duration) / 8 :
 			tick_duration - (tick_duration - duration) / 8;
+		tick_work = tick_pending_work > tick_work ?
+			tick_work + (tick_pending_work - tick_work) / 8 :
+			tick_work - (tick_work - tick_pending_work) / 8;
 	}
 }
 
@@ -176,7 +188,15 @@ static unsigned long tick_slices_frame_share(void)
 	unsigned long long spare;
 
 	if (tick_pending_counted)
-		return TICK_SLICE_FRAME_SHARE;
+	{
+		/* (the work it has left, as long as the latest ticks took, spread
+		over the frames it may run on before one runs it whole) */
+		unsigned long long left = tick_work > tick_pending_work ? tick_work - tick_pending_work : 0;
+		int frames = TICK_SLICE_MAXIMUM_FRAMES - frames_due;
+
+		left = left * 1000000u / clock_rate / (frames > 1 ? frames : 1);
+		return left > TICK_SLICE_FRAME_SHARE ? (unsigned long)left : TICK_SLICE_FRAME_SHARE;
+	}
 	/* (the room the frame before had with no share run in it) */
 	if (share_frame + 1 == frame)
 		room += share_used;
@@ -208,6 +228,7 @@ static void tick_slices_begin(boolean counted)
 	tick_pending_ended = FALSE;
 	tick_pending_counted = counted;
 	tick_pending_began = platform_fiber_clock();
+	tick_pending_work = 0;
 	frames_due = 0;
 	tick_slices_run_share();
 }

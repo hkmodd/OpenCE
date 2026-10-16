@@ -250,6 +250,37 @@ int main(int argc, char **argv)
 		tick_slices_finish();
 		return 0;
 	}
+	CASE("spread")
+	{
+		int tick, frame, before;
+
+		/* one that is due runs, at the start of each frame, what is left
+		of as long as the latest ticks ran (10 ms) over the frames before
+		one would run the rest whole: about 1.25 ms a frame, none left */
+		enable(TRUE);
+		for (tick = 0; tick < 64; tick++)
+		{
+			tick_points = 100;
+			CHECK(tick_slices_tick(TRUE), "a tick of 10 ms ended in its frame's share");
+			tick_slices_finish();
+		}
+		points_done = 0;
+		room_counts = 0;
+		CHECK(tick_slices_tick(TRUE), "a tick of 10 ms ended in its frame's share");
+		CHECK(points_done == 13, "the frame it fell due on ran %d steps", points_done);
+		for (frame = 1; frame < 8; frame++)
+		{
+			before = points_done;
+			CHECK(!tick_slices_continue(FALSE), "the tick ended on frame %d", frame);
+			CHECK(points_done - before >= 12 && points_done - before <= 13, "frame %d ran %d steps", frame,
+				points_done - before);
+		}
+		CHECK(points_done == 100, "the eight frames' shares ran to step %d", points_done);
+		CHECK(tick_slices_continue(FALSE) && points_done == 100 && ticks_run == 65,
+			"the frame that runs it whole had steps left to run");
+		tick_slices_release();
+		return 0;
+	}
 	CASE("lead")
 	{
 		int tick;

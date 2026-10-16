@@ -10,7 +10,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from harness import CHECK_FAILED, build, mutated, read, run
 
-CASES = ['disabled', 'short', 'spare', 'held', 'forced', 'ahead', 'room', 'room-due', 'lead', 'finish', 'collision']
+CASES = ['disabled', 'short', 'spare', 'held', 'forced', 'ahead', 'room', 'room-due', 'spread', 'lead', 'finish',
+         'collision']
 CONTROLS = [
     ('whole = TRUE;', 'whole = FALSE;', 'forced'),
     ('if (tick_pending_counted)\n\t\t\tframes_due++;', 'frames_due++;', 'ahead'),
@@ -22,7 +23,12 @@ CONTROLS = [
     ('collision_log_continue_period(0);', ';', 'collision'),
     ('share * clock_rate / 1000000u', 'share', 'spare'),
     ('(now - tick_pending_began) * 1000000u / clock_rate', '(now - tick_pending_began)', 'lead'),
-    ('if (tick_pending_counted)\n\t\treturn TICK_SLICE_FRAME_SHARE;', '', 'room-due'),
+    ('if (tick_pending_counted)\n\t{', 'if (0)\n\t{', 'room-due'),
+    ('tick_pending_work += platform_fiber_clock() - now;', ';', 'spread'),
+    ('\ttick_pending_work = 0;\n', '\n', 'spread'),
+    (' / (frames > 1 ? frames : 1)', '', 'spread'),
+    ('(tick_pending_work - tick_work) / 8', '0', 'spread'),
+    ('left > TICK_SLICE_FRAME_SHARE ? (unsigned long)left : TICK_SLICE_FRAME_SHARE', '(unsigned long)left', 'held'),
     ('room += share_used;', ';', 'room'),
     ('if (share_frame + 1 == frame)', 'if (1)', 'room'),
     ('spare -= TICK_SLICE_MARGIN;', ';', 'room'),
