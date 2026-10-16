@@ -299,6 +299,8 @@ driver everywhere; on the Xbox each was a few words of push buffer. The
 vertices are the decal's own (position, then its texture coordinates as the
 declaration's normalized shorts), given as immediate data. */
 #define DECAL_BATCH_MAXIMUM_DECALS 256
+/* (the vertices a draw hands over at once) */
+#define DECAL_BATCH_VERTEX_CHUNK 256
 static struct
 {
 	struct decal_vertex const *vertices;
@@ -1070,25 +1072,47 @@ static void rasterizer_decals_draw_batch(
 {
 	short batch_index;
 
+	/* port: each vertex's registers 0 (its position), 4 (its texture
+	coordinates) and 9 (its decal's color), handed over a few hundred at a
+	time (halo_immediate_vertices): the values SetVertexData4ub(9),
+	SetVertexData2f(4) and SetVertexData4f(0) for each gave, a call each */
+	static real vertex_data[DECAL_BATCH_VERTEX_CHUNK][3][4];
+	long vertex_data_count = 0;
+
 	if (!decal_batch_count)
 		return;
 	IDirect3DDevice8_Begin(global_d3d_device, D3DPT_QUADLIST);
 	for (batch_index = 0; batch_index < decal_batch_count; batch_index++)
 	{
 		byte const *color = decal_batch[batch_index].color;
+		real red = color[0] / 255.0f, green = color[1] / 255.0f, blue = color[2] / 255.0f, alpha = color[3] / 255.0f;
 		short vertex_index;
 
 		for (vertex_index = 0; vertex_index < decal_batch[batch_index].vertex_count; vertex_index++)
 		{
 			struct decal_vertex const *vertex = &decal_batch[batch_index].vertices[vertex_index];
+			real (*data)[4] = vertex_data[vertex_data_count];
 
-			IDirect3DDevice8_SetVertexData4ub(global_d3d_device, 9, color[0], color[1], color[2], color[3]);
-			IDirect3DDevice8_SetVertexData2f(global_d3d_device, 4,
-				(real)(short)(vertex->texcoord & 0xFFFF) / 32767.0f, (real)(short)(vertex->texcoord >> 16) / 32767.0f);
-			IDirect3DDevice8_SetVertexData4f(global_d3d_device, 0,
-				vertex->position.x, vertex->position.y, vertex->position.z, 1.0f);
+			data[0][0] = vertex->position.x;
+			data[0][1] = vertex->position.y;
+			data[0][2] = vertex->position.z;
+			data[0][3] = 1.0f;
+			data[1][0] = (real)(short)(vertex->texcoord & 0xFFFF) / 32767.0f;
+			data[1][1] = (real)(short)(vertex->texcoord >> 16) / 32767.0f;
+			data[1][2] = 0.0f;
+			data[1][3] = 1.0f;
+			data[2][0] = red;
+			data[2][1] = green;
+			data[2][2] = blue;
+			data[2][3] = alpha;
+			if (++vertex_data_count == DECAL_BATCH_VERTEX_CHUNK)
+			{
+				halo_immediate_vertices((1UL << 0) | (1UL << 4) | (1UL << 9), &vertex_data[0][0][0], vertex_data_count);
+				vertex_data_count = 0;
+			}
 		}
 	}
+	halo_immediate_vertices((1UL << 0) | (1UL << 4) | (1UL << 9), &vertex_data[0][0][0], vertex_data_count);
 	IDirect3DDevice8_End(global_d3d_device);
 	decal_batch_count = 0;
 
