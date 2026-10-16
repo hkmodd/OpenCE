@@ -274,6 +274,12 @@ context has the extension, never required (gl_functions.c). On ES 3.0 and
 	X(glFenceSync) \
 	X(glClientWaitSync) \
 	X(glDeleteSync) \
+	X(glTexStorage3D) \
+	X(glTextureView) \
+	X(glFramebufferTexture) \
+	X(glDrawArraysInstanced) \
+	X(glUniform2iv) \
+	X(glTextureBarrier) \
 	X(glDebugMessageCallback)
 #endif
 
@@ -524,6 +530,12 @@ pointers, sees the declarations without these aliases */
 #define glFenceSync halo_glFenceSync
 #define glClientWaitSync halo_glClientWaitSync
 #define glDeleteSync halo_glDeleteSync
+#define glTexStorage3D halo_glTexStorage3D
+#define glTextureView halo_glTextureView
+#define glFramebufferTexture halo_glFramebufferTexture
+#define glDrawArraysInstanced halo_glDrawArraysInstanced
+#define glUniform2iv halo_glUniform2iv
+#define glTextureBarrier halo_glTextureBarrier
 #define glDebugMessageCallback halo_glDebugMessageCallback
 
 #endif

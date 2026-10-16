@@ -81,6 +81,13 @@ float halo_model_detail_scale(int level);
 /* whether display.model_detail is "stock" (port/linux/src/d3d8_gl.c), for
 each permutation's level (port/linux/game/model_detail.c) */
 int halo_model_detail_stock(void);
+/* the shadow maps' blurs drawn a batch of shadows at a time, each pass one
+draw (port/linux/src/d3d8_gl.c): nonzero where they can be; the next
+immediate draw's instances, each drawing what the draw draws from its
+source map into its destination (count 0 for none) */
+#define HALO_SHADOW_LAYERS_MAXIMUM 8
+unsigned char halo_shadow_layers_supported(void);
+void halo_shadow_layers(short count, struct D3DSurface *const *sources, struct D3DSurface *const *destinations);
 /* while TRUE, drawing shifts right to center 640-column layouts */
 void halo_screen_ui_offset(unsigned char centered);
 /* names a model lighting vertex program, whose draws can be lit for each

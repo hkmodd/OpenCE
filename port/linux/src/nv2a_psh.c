@@ -360,6 +360,13 @@ static void sample(struct xgpu_text *text, const struct nv2a_pixel_shader_key *k
 			);
 		break;
 	default:
+		/* (an instance a layer: the instance's source layer, desktop only) */
+		if (key->layered)
+		{
+			xgpu_text_append(text, "texture(tex%d, vec3((%s).xy * texture_scale[%d].xy, xLayer))", stage, coordinates,
+				stage);
+			break;
+		}
 		xgpu_text_append(text, "texture(tex%d, (%s).xy * texture_scale[%d].xy" SAMPLE_BIAS ")", stage, coordinates, stage
 #ifdef HALO_GLES
 			, stage
@@ -677,7 +684,10 @@ char *nv2a_pixel_shader_to_glsl(const struct nv2a_pixel_shader_key *key)
 	else
 		xgpu_text_append(&text, XGPU_PIXEL_CONSTANT_UNIFORMS);
 	for (stage = 0; stage < 4; stage++)
-		xgpu_text_append(&text, "uniform %s tex%d;\n", sampler_declaration(key->sampler_type[stage]), stage);
+		xgpu_text_append(&text, "uniform %s tex%d;\n", key->layered && key->sampler_type[stage] == _xgpu_sampler_2d ?
+			"sampler2DArray" : sampler_declaration(key->sampler_type[stage]), stage);
+	if (key->layered)
+		xgpu_text_append(&text, "flat in float xLayer;\n");
 	if (key->source_blend)
 		xgpu_text_append(&text, "uniform vec4 blend_constant;\n");
 	if (key->per_pixel_lighting)
