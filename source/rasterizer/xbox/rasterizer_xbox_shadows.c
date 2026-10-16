@@ -175,7 +175,7 @@ typedef char verify_rasterizer_shadows_shader_model_animation_offset[
 /* ---------- prototypes */
 
 static void rasterizer_shadow_convolve(
-	void);
+	boolean widen);
 static void rasterizer_shadow_convolve_pass(
 	short source_target,
 	short destination_target,
@@ -194,6 +194,23 @@ static real_matrix4x3 local_shadow_matrix = { 0 };
 static struct rasterizer_model_begin_parameters const *local_parameters = NULL;
 static boolean shadow_setup = FALSE;
 static boolean shadow_used = FALSE;
+/* port: whether the shadow begun is drawn, and whether its maps are blurred
+already (rasterizer_environment_shadows_convolve); the state of each
+shadow of a batch (rasterizer_environment_shadow_slot) */
+static boolean shadow_active = FALSE;
+static boolean shadow_convolved = FALSE;
+static short shadow_slot = 0;
+static struct
+{
+	real_matrix4x3 matrix;
+	real_rgb_color color;
+	real radius;
+	boolean setup;
+	boolean used;
+	boolean restored;
+	boolean active;
+	boolean convolved;
+} shadow_slots[RASTERIZER_SHADOW_BATCH_MAXIMUM];
 
 /* ---------- public code */
 
@@ -221,6 +238,7 @@ boolean _rasterizer_environment_shadow_begin(
 		147,
 		global_d3d_device);
 
+	shadow_active = FALSE; /* port */
 	if (global_window_parameters.rasterizer_target ==
 			_rasterizer_target_render_primary &&
 		rasterizer_debug_options.draw_environment_shadows)
@@ -322,6 +340,9 @@ boolean _rasterizer_environment_shadow_begin(
 		shadow_setup = FALSE;
 		shadow_used = FALSE;
 		shadow_restored = FALSE;
+		/* port */
+		shadow_active = TRUE;
+		shadow_convolved = FALSE;
 
 		if (rasterizer_debug_options.statistics_mode ==
 			_rasterizer_statistics_mode_enabled)
@@ -580,9 +601,10 @@ void _rasterizer_environment_shadow_draw(
 	{
 		if (!shadow_setup)
 		{
-			if (rasterizer_debug_options.shadow_convolution_enabled)
+			/* port: unless its batch's blurs did it */
+			if (rasterizer_debug_options.shadow_convolution_enabled && !shadow_convolved)
 			{
-				rasterizer_shadow_convolve();
+				rasterizer_shadow_convolve(TRUE);
 			}
 
 			rasterizer_set_target_as_texture(
@@ -847,10 +869,109 @@ void _rasterizer_environment_shadows_end(
 	return;
 }
 
+/* port: render_object_shadows draws its shadows in batches of up to
+RASTERIZER_SHADOW_BATCH_MAXIMUM (render_objects.c), where the renderer can
+draw a pass of every shadow's blur at once (halo_shadow_layers): each
+shadow's silhouette into maps of its own (rasterizer_shadow_maps_select),
+then the blurs of them all, each pass one draw, then each shadow on the
+screen in turn. Each pass of a blur reads the map the pass before it drew,
+so the GPU finishes one pass before it starts the next; one shadow at a
+time, a larger map's seven passes (rasterizer_shadow_convolve_pass) left the
+GPU mostly waiting, about 50 microseconds a shadow. The pixels are the same:
+each shadow's maps are drawn by the same draws, and the shadows are drawn
+on the screen in the same order. */
+
+/* selects a slot of the batch: its maps, and the state of its shadow. Returns
+FALSE if its maps could not be made */
+boolean rasterizer_environment_shadow_slot(
+	short slot)
+{
+	if (!rasterizer_shadow_maps_select(slot))
+	{
+		return FALSE;
+	}
+	shadow_slots[shadow_slot].matrix = local_shadow_matrix;
+	shadow_slots[shadow_slot].color = local_shadow_color;
+	shadow_slots[shadow_slot].radius = local_object_bounding_radius;
+	shadow_slots[shadow_slot].setup = shadow_setup;
+	shadow_slots[shadow_slot].used = shadow_used;
+	shadow_slots[shadow_slot].restored = shadow_restored;
+	shadow_slots[shadow_slot].active = shadow_active;
+	shadow_slots[shadow_slot].convolved = shadow_convolved;
+	shadow_slot = slot;
+	local_shadow_matrix = shadow_slots[slot].matrix;
+	local_shadow_color = shadow_slots[slot].color;
+	local_object_bounding_radius = shadow_slots[slot].radius;
+	shadow_setup = shadow_slots[slot].setup;
+	shadow_used = shadow_slots[slot].used;
+	shadow_restored = shadow_slots[slot].restored;
+	shadow_active = shadow_slots[slot].active;
+	shadow_convolved = shadow_slots[slot].convolved;
+
+	return TRUE;
+}
+
+/* blurs the maps of the shadows begun in the batch's first count slots, if
+there are two or more: each pass of the blur once, drawn by the first's
+draw for each of them; one alone is blurred as it is drawn */
+void rasterizer_environment_shadows_convolve(
+	short count)
+{
+	D3DSurface *maps[2][RASTERIZER_SHADOW_BATCH_MAXIMUM];
+	short slot;
+	short first = NONE;
+	short active = 0;
+	long scale = halo_shadow_map_scale();
+	long distance;
+
+	if (rasterizer_debug_options.draw_environment_shadows &&
+		rasterizer_debug_options.shadow_convolution_enabled)
+	{
+		for (slot = 0; slot < count; slot++)
+		{
+			rasterizer_environment_shadow_slot(slot);
+			if (shadow_active)
+			{
+				if (first == NONE)
+				{
+					first = slot;
+				}
+				rasterizer_shadow_maps_get(&maps[0][active], &maps[1][active]);
+				active++;
+			}
+		}
+		if (active > 1)
+		{
+			for (slot = 0; slot < count; slot++)
+			{
+				rasterizer_environment_shadow_slot(slot);
+				if (shadow_active)
+				{
+					shadow_convolved = TRUE;
+				}
+			}
+			rasterizer_environment_shadow_slot(first);
+			halo_shadow_layers(active, maps[0], maps[1]);
+			rasterizer_shadow_convolve(FALSE);
+			for (distance = 1; distance < scale; distance *= 2)
+			{
+				halo_shadow_layers(active, maps[1], maps[0]);
+				rasterizer_shadow_convolve_pass(3, 2, (real)distance / (real)(128 * scale));
+				halo_shadow_layers(active, maps[0], maps[1]);
+				rasterizer_shadow_convolve_pass(2, 3, (real)distance / (real)(128 * scale));
+			}
+			halo_shadow_layers(0, NULL, NULL);
+		}
+	}
+
+	return;
+}
+
 /* ---------- private code */
 
+/* port: widen, the further passes of a larger map too */
 static void rasterizer_shadow_convolve(
-	void)
+	boolean widen)
 {
 	short stage;
 	real vertex_constants[8][4];
@@ -1015,7 +1136,7 @@ static void rasterizer_shadow_convolve(
 
 		/* port: the passes that widen the blur of a larger map, back and
 		forth between the maps, ending in the secondary */
-		for (distance = 1; distance < scale; distance *= 2)
+		for (distance = 1; widen && distance < scale; distance *= 2)
 		{
 			rasterizer_shadow_convolve_pass(3, 2, (real)distance / (real)(128 * scale));
 			rasterizer_shadow_convolve_pass(2, 3, (real)distance / (real)(128 * scale));

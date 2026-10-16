@@ -596,6 +596,12 @@ void rasterizer_environment_shadow_draw(
 	struct vertex_buffer const *vertex_buffer);
 void rasterizer_environment_shadows_end(
 	void);
+/* port: shadows drawn in batches (rasterizer_xbox_shadows.c) */
+#define RASTERIZER_SHADOW_BATCH_MAXIMUM HALO_SHADOW_LAYERS_MAXIMUM
+boolean rasterizer_environment_shadow_slot(
+	short slot);
+void rasterizer_environment_shadows_convolve(
+	short count);
 void rasterizer_environment_diffuse_textures_end(
 	void);
 void rasterizer_environment_diffuse_texture_draw(

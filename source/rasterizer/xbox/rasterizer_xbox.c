@@ -3747,3 +3747,76 @@ static void rasterizer_filthy_bitmap_defaults_initialize(
 	rasterizer_globals.default_cm_hardware_format = default_cm_hardware_format;
 	return;
 }
+
+/* port: selects the shadow maps of a slot of a batch of shadows
+(rasterizer_xbox_shadows.c), the shadow targets' from then on: slot 0's are
+the maps made above, the others' are made when first selected and kept.
+Returns FALSE if a slot's maps could not be made. */
+boolean rasterizer_shadow_maps_select(
+	short slot)
+{
+	static short selected = 0;
+	static D3DTexture *textures[RASTERIZER_SHADOW_BATCH_MAXIMUM][2];
+	static D3DSurface *surfaces[RASTERIZER_SHADOW_BATCH_MAXIMUM][2];
+	short index;
+
+	match_assert("c:\\halo\\SOURCE\\rasterizer\\xbox\\rasterizer_xbox.c", 0,
+		slot >= 0 && slot < RASTERIZER_SHADOW_BATCH_MAXIMUM);
+
+	if (slot == selected)
+	{
+		return TRUE;
+	}
+	if (slot && !textures[slot][0])
+	{
+		for (index = 0; index < 2; index++)
+		{
+			if (IDirect3DDevice8_CreateTexture(
+					global_d3d_device,
+					RASTERIZER_TARGET_SHADOW_PRIMARY_SIZE,
+					RASTERIZER_TARGET_SHADOW_PRIMARY_SIZE,
+					1,
+					D3DUSAGE_RENDERTARGET,
+					D3DFMT_R5G6B5,
+					D3DPOOL_DEFAULT,
+					&textures[slot][index]) < 0 ||
+				!textures[slot][index] ||
+				IDirect3DTexture8_GetSurfaceLevel(textures[slot][index], 0, &surfaces[slot][index]) < 0 ||
+				!surfaces[slot][index])
+			{
+				for (index = 0; index < 2; index++)
+				{
+					if (surfaces[slot][index])
+						IDirect3DSurface8_Release(surfaces[slot][index]);
+					if (textures[slot][index])
+						IDirect3DTexture8_Release(textures[slot][index]);
+					surfaces[slot][index] = NULL;
+					textures[slot][index] = NULL;
+				}
+				return FALSE;
+			}
+		}
+	}
+	textures[selected][0] = global_d3d_texture_shadow_primary;
+	surfaces[selected][0] = global_d3d_surface_shadow_primary;
+	textures[selected][1] = global_d3d_texture_shadow_secondary;
+	surfaces[selected][1] = global_d3d_surface_shadow_secondary;
+	global_d3d_texture_shadow_primary = textures[slot][0];
+	global_d3d_surface_shadow_primary = surfaces[slot][0];
+	global_d3d_texture_shadow_secondary = textures[slot][1];
+	global_d3d_surface_shadow_secondary = surfaces[slot][1];
+	selected = slot;
+
+	return TRUE;
+}
+
+/* port: the shadow maps selected */
+void rasterizer_shadow_maps_get(
+	D3DSurface **primary,
+	D3DSurface **secondary)
+{
+	*primary = global_d3d_surface_shadow_primary;
+	*secondary = global_d3d_surface_shadow_secondary;
+
+	return;
+}

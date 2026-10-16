@@ -121,6 +121,12 @@ void rasterizer_set_vertex_shader_permutation(
 	short permutation_index);
 void rasterizer_water_set_visibility_for_window(
 	boolean visibility);
+/* port: the shadow maps of a slot of a batch of shadows */
+boolean rasterizer_shadow_maps_select(
+	short slot);
+void rasterizer_shadow_maps_get(
+	D3DSurface **primary,
+	D3DSurface **secondary);
 
 /* ---------- prototypes/RASTERIZER_XBOX_SHADOWS.C */
 
