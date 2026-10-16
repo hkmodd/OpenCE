@@ -48,7 +48,8 @@ CONTROLS = [
 ]
 STRUCTURES = ['build_sprite_prepared']
 PARTICLE_STRUCTURES = ['rendered_particle_datum', 'prepared_particle']
-FUNCTIONS = ['compare_rendered_particles', 'render_particles', 'render_particle_prepare',
+FUNCTIONS = ['compare_rendered_particles', 'rendered_particle_sort_digit', 'sort_rendered_particles',
+             'render_particles', 'render_particle_prepare',
              'render_particles_prepare_chunk', 'render_particles_prepare_job', 'render_particles_get_prepared']
 
 
