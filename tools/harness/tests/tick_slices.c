@@ -29,6 +29,9 @@ static int tick_points, points_done, ticks_run;
 static int finish_at_point = -1;
 static int periods_ended, periods_continued;
 static int (*idle_work)(void);
+/* the frames ended, and how long the latest end of a frame had to spare */
+static unsigned long frames_counted;
+static unsigned long long room_counts = CLOCK_RATE;
 
 static int config_boolean(const char *name)
 {
@@ -38,6 +41,11 @@ static int config_boolean(const char *name)
 static unsigned long config_changes(void) { return setting_changes; }
 static int render_thread_running(void) { return 1; }
 static void render_thread_set_idle_work(int (*work)(void)) { idle_work = work; }
+static unsigned long long render_thread_frame_room(unsigned long *frame)
+{
+	*frame = frames_counted;
+	return room_counts;
+}
 static unsigned long long platform_fiber_clock(void) { return now; }
 static unsigned long long platform_fiber_clock_rate(void) { return CLOCK_RATE; }
 static void collision_log_end_period(void) { periods_ended++; }
@@ -198,6 +206,48 @@ int main(int argc, char **argv)
 		CHECK(tick_slices_tick(TRUE) && !tick_slices_continue(FALSE), "the next tick ran whole on its first frame after");
 		tick_slices_finish();
 		CHECK(ticks_run == 2 && points_done == 100, "the next tick was not finished");
+		return 0;
+	}
+	CASE("room")
+	{
+		/* one begun ahead of its time runs at the start of a frame only
+		for what the frame before had to spare, less 200 us */
+		enable(TRUE);
+		tick_points = 100;
+		room_counts = 0;
+		tick_slices_tick_ahead();
+		CHECK(tick_slices_in_flight() && points_done == 0, "a frame with no time to spare ran %d steps", points_done);
+		frames_counted = 1;
+		room_counts = 350 * (CLOCK_RATE / 1000000u);
+		CHECK(!tick_slices_continue(FALSE) && points_done == 2, "350 us to spare ran to step %d", points_done);
+		/* (with the share it ran itself) */
+		frames_counted = 2;
+		room_counts = 100 * (CLOCK_RATE / 1000000u);
+		CHECK(!tick_slices_continue(FALSE) && points_done == 3, "100 us to spare after a share of 200 ran to step %d",
+			points_done);
+		frames_counted = 3;
+		room_counts = 0;
+		CHECK(!tick_slices_continue(FALSE) && points_done == 3, "no time to spare ran to step %d", points_done);
+		/* (a share two frames before is not this frame's) */
+		frames_counted = 4;
+		room_counts = 200 * (CLOCK_RATE / 1000000u);
+		CHECK(!tick_slices_continue(FALSE) && points_done == 3, "200 us to spare after no share ran to step %d",
+			points_done);
+		spare_time();
+		CHECK(tick_slices_ended() && ticks_run == 1 && points_done == 100, "the spare time did not end the tick");
+		tick_slices_release();
+		return 0;
+	}
+	CASE("room-due")
+	{
+		/* one that is due runs its whole share, time to spare or not */
+		enable(TRUE);
+		tick_points = 100;
+		room_counts = 0;
+		CHECK(tick_slices_tick(TRUE) && points_done == 3, "the tick due ran %d steps", points_done);
+		frames_counted = 1;
+		CHECK(!tick_slices_continue(FALSE) && points_done == 6, "the tick due ran to step %d", points_done);
+		tick_slices_finish();
 		return 0;
 	}
 	CASE("lead")
