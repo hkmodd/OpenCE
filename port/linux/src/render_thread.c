@@ -31,6 +31,8 @@ IsBusy, BlockUntilNotBusy and locks wait for the reader to pass it.
 #include <stdlib.h>
 #include <string.h>
 
+unsigned long long platform_fiber_clock(void); /* posix_fiber.c, win32_fiber.c */
+
 /* a power of two; a frame's commands are far smaller */
 #define RING_SIZE (32UL * 1024 * 1024)
 #define RING_ALIGNMENT 16UL
@@ -326,8 +328,20 @@ void render_thread_set_idle_work(int (*work)(void))
 	idle_work = work;
 }
 
+/* render_thread_frame_room */
+static unsigned long long frame_room;
+
+unsigned long long render_thread_frame_room(unsigned long *frame)
+{
+	*frame = frames_ended;
+	return frame_room;
+}
+
 void render_thread_frame_end(unsigned long frames)
 {
+	unsigned long long began = platform_fiber_clock();
+
+	frame_room = 0;
 	if (frames < 1)
 		frames = 1;
 	if (frames > RENDER_THREAD_MAXIMUM_FRAMES)
@@ -347,6 +361,7 @@ void render_thread_frame_end(unsigned long frames)
 			render_thread_submit();
 		}
 		render_thread_wait_for(position);
+		frame_room = platform_fiber_clock() - began;
 	}
 	frame_ends[frames_ended % RENDER_THREAD_MAXIMUM_FRAMES] = recorded;
 	frames_ended++;

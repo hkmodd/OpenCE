@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from harness import CHECK_FAILED, build, mutated, read, run  # noqa: E402
 
 CASES = ["runs-in-order-across-turns", "waits-for-room", "call-returns-once-run", "resource-busy-until-read",
-         "one-frame-queued", "two-frames-queued", "frame-handed-over"]
+         "one-frame-queued", "two-frames-queued", "frame-handed-over", "frame-room"]
 
 # a fault in render_thread.c and the case that must catch it (the ring's
 # room with the reader held, not as fast as it happens to be)
@@ -31,6 +31,8 @@ NEGATIVE_CONTROLS = {
                                     "position = recorded;"), "one-frame-queued"),
     "frame-not-handed-over": (("frames = RENDER_THREAD_MAXIMUM_FRAMES;\n\trender_thread_submit();",
                                "frames = RENDER_THREAD_MAXIMUM_FRAMES;"), "frame-handed-over"),
+    "frame-room-not-measured": (("frame_room = platform_fiber_clock() - began;", ";"), "frame-room"),
+    "frame-room-not-counted": (("*frame = frames_ended;", "*frame = 0;"), "frame-room"),
 }
 
 
