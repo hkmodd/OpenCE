@@ -63,6 +63,7 @@ void *tag_empty_data(
 
 /* port: (cache_files.c) */
 boolean tag_index_is_group(long tag_index, long group_tag);
+long tag_loaded_at(long group_tag, char const *name, long tag_index);
 
 long verify_tag_reference(
 	const struct tag_reference *reference)
@@ -75,7 +76,8 @@ long verify_tag_reference(
 	(port/linux/game/custom_edition_cache.c) */
 	if (custom_edition_cache_tags_loaded())
 		return tag_index_is_group(reference->index, reference->group_tag) ? reference->index : NONE;
-	index = tag_loaded(reference->group_tag, reference->name);
+	/* port: (tag_loaded_at, which tries the reference's index first) */
+	index = tag_loaded_at(reference->group_tag, reference->name, reference->index);
 	
 	match_vassert(
 		"c:\\halo\\SOURCE\\tag_files\\tag_groups.c", 3061, reference->index==index,
