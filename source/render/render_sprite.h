@@ -48,6 +48,8 @@ enum build_sprite_rotational_flags
 /* ---------- structures */
 
 struct bitmap_data;
+struct bitmap_group_sprite; /* port: (build_sprite_prepared) */
+struct render_frustum;
 
 struct build_sprite_group
 {
@@ -79,6 +81,21 @@ struct build_sprite_data
 typedef char build_sprite_data_size_assert[
 	sizeof(struct build_sprite_data) == 0xA4 ? 1 : -1];
 
+/* port: a sprite worked out by build_sprite_prepare, for build_sprite_commit
+to put in its bitmap's group */
+struct build_sprite_prepared
+{
+	/* NULL: no sprite to draw (its sequence or index out of range) */
+	struct bitmap_group_sprite const *sprite;
+	struct bitmap_data *bitmap;
+	short sequence_index;
+	short sprite_index;
+	pixel32 color;
+	real coverage;
+	real_point3d origin;
+	real_point3d points[NUMBER_OF_VERTICES_PER_QUADRILATERAL];
+};
+
 /* ---------- prototypes/RENDER_SPRITE.C */
 
 void build_sprites_begin(
@@ -99,6 +116,28 @@ void build_sprite(
 	real_argb_color const *color,
 	real fade,
 	unsigned long flags);
+/* port: (build_sprite's halves) */
+void build_sprite_prepare(
+	struct build_sprite_data const *data,
+	struct render_frustum const *frustum,
+	short mode,
+	short sequence_index,
+	short sprite_index,
+	real_point3d const *untransformed_origin,
+	real_vector3d const *untransformed_direction,
+	real rotation,
+	real scale,
+	real_argb_color const *color,
+	real fade,
+	unsigned long flags,
+	struct build_sprite_prepared *prepared);
+void build_sprite_commit(
+	struct build_sprite_data *data,
+	struct build_sprite_prepared const *prepared);
+boolean build_sprite_reads_tags_only(
+	long bitmap_group_index,
+	short sequence_index,
+	short sprite_index);
 void build_sprites_end(
 	struct build_sprite_data *data);
 void build_sprite_prepare_for_window(

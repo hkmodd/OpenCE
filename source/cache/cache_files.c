@@ -1548,6 +1548,29 @@ boolean tag_index_is_group(
 			tag_instance->parent_group_tags[1] == group_tag);
 }
 
+/* port: whether tag_get gives the tag itself, not the empty tag (which
+it logs, and zeroes again each time): render_particles works sprites out
+on worker threads only from tags that are there */
+boolean tag_get_gives_tag(
+	long group_tag,
+	long tag_index)
+{
+	short absolute_index = (short)tag_index;
+	struct cache_file_tag_instance const *tag_instance;
+
+	if (!cache_file_globals.tags_loaded || !global_tag_instances ||
+		absolute_index < 0 || absolute_index >= global_tag_count)
+	{
+		return FALSE;
+	}
+	tag_instance = &global_tag_instances[absolute_index];
+	if ((tag_index & 0xFFFF0000) && tag_instance->tag_index != tag_index)
+		return FALSE;
+	return tag_instance->base_address &&
+		(tag_instance->group_tag == group_tag || tag_instance->parent_group_tags[0] == group_tag ||
+			tag_instance->parent_group_tags[1] == group_tag);
+}
+
 char *tag_get_name(
 	long tag_index)
 {

@@ -67,5 +67,10 @@ menus (source/render/render.c): the window's bounds on the screen */
 void halo_screen_anti_alias(short x0, short y0, short x1, short y1);
 /* the mouse in the menus (source/interface/ui_widget.c) */
 #include "halo_ui_pointer.h"
+/* a job run on the worker threads beside the game's thread, and the wait
+for them to return from it (port/linux/src/worker_pool.c; none on Android
+and the web): render_particles works its sprites out on them */
+void worker_pool_begin(void (*job)(void));
+void worker_pool_end(void);
 
 #endif
