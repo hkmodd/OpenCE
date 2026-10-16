@@ -42,6 +42,20 @@ enum
 	/* the native builds' (halo_port_capacity.h: the Xbox's 512 on Android
 	and the Xbox builds) */
 	MAXIMUM_RENDERED_PARTICLE_GROUPS = HALO_PORT_MAXIMUM_RENDERED_PARTICLE_GROUPS,
+	/* port: the rendered particles a thread works out at a time */
+	PREPARED_PARTICLE_CHUNK_SIZE = 16,
+};
+
+/* port: what render_particle_prepare made of a rendered particle */
+enum
+{
+	/* for the game's thread to work out as it reaches it */
+	_prepared_particle_serial,
+	/* its object gone: to be deleted */
+	_prepared_particle_deleted,
+	/* smaller than its definition's lod cutoff */
+	_prepared_particle_hidden,
+	_prepared_particle_built,
 };
 
 /* ---------- macros */
@@ -60,7 +74,30 @@ struct rendered_particle_datum
 typedef char rendered_particle_size_assert[
 	sizeof(struct rendered_particle_datum) == 8 ? 1 : -1];
 
+/* port: a rendered particle worked out (render_particle_prepare) */
+struct prepared_particle
+{
+	struct build_sprite_prepared sprite;
+	real radius;
+	short state;
+};
+
 /* ---------- prototypes */
+
+/* port: (render_particles' sprites worked out ahead) */
+static void render_particle_prepare(
+	struct rendered_particle_datum const *rendered_particle,
+	struct particle_definition const *definition,
+	struct build_sprite_data const *sprite_data,
+	struct render_frustum const *frustum,
+	boolean reached,
+	struct prepared_particle *prepared);
+static void render_particles_prepare_chunk(
+	long chunk_index);
+static void render_particles_prepare_job(
+	void);
+static struct prepared_particle const *render_particles_get_prepared(
+	short index);
 
 /* ---------- globals */
 
@@ -70,6 +107,25 @@ static struct profile_section render_particles_section =
 	NONE,
 	TRUE,
 };
+
+/* port: the sprites of the particles render_particles draws, worked out
+ahead a chunk at a time by the worker threads (display.interpolation_threads)
+and by the game's thread as it reaches them, then put in their groups in
+order on the game's thread; a chunk's generation is prepared_generation
+once it is worked out */
+static struct prepared_particle prepared_particles[MAXIMUM_RENDERED_PARTICLES];
+static unsigned long prepared_chunk_generations[
+	MAXIMUM_RENDERED_PARTICLES / PREPARED_PARTICLE_CHUNK_SIZE];
+static struct rendered_particle_datum const *prepared_rendered_particles;
+static struct render_frustum prepared_frustum;
+static unsigned long prepared_generation;
+static long prepared_particle_total;
+static long prepared_chunk_count;
+static long prepared_next_chunk;
+static short prepared_deleted_particles[MAXIMUM_RENDERED_PARTICLES];
+
+typedef char prepared_chunk_size_assert[
+	MAXIMUM_RENDERED_PARTICLES % PREPARED_PARTICLE_CHUNK_SIZE == 0 ? 1 : -1];
 
 /* ---------- public code */
 
@@ -213,8 +269,6 @@ void render_particles(
 	short group_particle_counts[MAXIMUM_RENDERED_PARTICLE_GROUPS];
 	short rendered_particle_count;
 	struct build_sprite_data sprite_data;
-	real_point3d position;
-	real_vector3d direction;
 
 	rendered_particle_count = 0;
 	profile_enter(render_particles_section);
@@ -322,7 +376,26 @@ void render_particles(
 			{
 				struct rendered_particle_datum *rendered_particle =
 					rendered_particles;
+				short rendered_particle_index = 0;
+				short deleted_particle_count = 0;
 				short group_index;
+
+				/* port: the groups' sprites worked out ahead, on the workers
+				and as each is reached (render_particles_prepare_job), once
+				the workers are back from the last job that read these */
+				prepared_particle_total = 0;
+				for (group_index = 0; group_index < group_count; group_index++)
+					prepared_particle_total += group_particle_counts[group_index];
+				worker_pool_end();
+				prepared_generation++;
+				prepared_rendered_particles = rendered_particles;
+				prepared_frustum = render.frustum;
+				prepared_chunk_count =
+					(prepared_particle_total + PREPARED_PARTICLE_CHUNK_SIZE - 1) /
+					PREPARED_PARTICLE_CHUNK_SIZE;
+				prepared_next_chunk = 0;
+				if (prepared_chunk_count > 1)
+					worker_pool_begin(render_particles_prepare_job);
 
 				for (group_index = 0; group_index < group_count; group_index++)
 				{
@@ -344,131 +417,52 @@ void render_particles(
 
 					while (particle_count-- > 0)
 					{
+						struct prepared_particle const *prepared =
+							render_particles_get_prepared(rendered_particle_index);
+						struct prepared_particle serial_prepared;
 						struct particle_datum *particle =
 							particle_get(rendered_particle->particle_index);
-						real radius =
-							particle_get_radius(rendered_particle->particle_index);
 
-						if (particle->object_index != NONE)
+						/* port: one a worker may not work out (the first-person
+						weapon's) is worked out here, as the original did */
+						if (prepared->state == _prepared_particle_serial)
 						{
-							real_matrix4x3 const *node_matrix;
+							render_particle_prepare(
+								rendered_particle,
+								definition,
+								&sprite_data,
+								&render.frustum,
+								TRUE,
+								&serial_prepared);
+							prepared = &serial_prepared;
+						}
 
-							if (TEST_FLAG(
-								particle->flags,
-								_particle_datum_attached_to_local_player_bit))
-							{
-								node_matrix =
-									first_person_weapon_get_node_matrix(
-										particle->local_player_index,
-										particle->node_index);
-							}
-							else if (object_try_and_get(particle->object_index))
-							{
-								node_matrix = object_get_node_matrix(
-									particle->object_index,
-									particle->node_index);
-							}
-							else
-							{
-								particle_delete(rendered_particle->particle_index);
-								rendered_particle++;
-								continue;
-							}
-
-							matrix4x3_transform_point(
-								node_matrix,
-								&particle->position,
-								&position);
-							matrix4x3_transform_normal(
-								node_matrix,
-								&particle->direction,
-								&direction);
+						if (prepared->state == _prepared_particle_deleted)
+						{
+							/* port: deleted once none is being worked out */
+							prepared_deleted_particles[deleted_particle_count++] =
+								rendered_particle->particle_index;
 						}
 						else
 						{
-							position = particle->position;
-							direction = particle->direction;
-							/* January explicitly reasserts the detached sentinel here. */
-							particle->object_index = NONE;
-						}
-
-						{
-							real diameter =
-								render_frustum_sphere_diameter_in_pixels(
-									&render.frustum,
-									&position,
-									radius);
-
-							if (diameter > definition->lod_cutoff)
+							if (particle->object_index == NONE)
 							{
-								real fade;
-								real scale;
-								real remaining_life;
-								unsigned long flags;
-								word particle_flags;
+								/* January explicitly reasserts the detached sentinel here. */
+								particle->object_index = NONE;
+							}
 
-								fade = 1.0f;
+							if (prepared->state == _prepared_particle_built)
+							{
 								built_particle_count++;
-								scale =
-									(radius + radius) *
-									definition->runtime_oo_width;
-								remaining_life =
-									particle->lifespan - particle->age;
-								total_radius += radius;
-
-								if (diameter < definition->minimum_pixels)
-								{
-									scale =
-										(definition->minimum_pixels / diameter) * scale;
-								}
-
-								if (definition->fade_in_time > 0.0f &&
-									particle->age < definition->fade_in_time)
-								{
-									fade = particle->age / definition->fade_in_time;
-								}
-
-								if (definition->fade_out_time > 0.0f &&
-									remaining_life < definition->fade_out_time)
-								{
-									fade *=
-										remaining_life / definition->fade_out_time;
-								}
-
-								flags = 0;
-								particle_flags = particle->flags;
-								SET_FLAG(
-									flags,
-									_build_sprite_u_mirror_bit,
-									TEST_FLAG(
-										particle_flags,
-										_particle_datum_u_mirror_bit));
-								SET_FLAG(
-									flags,
-									_build_sprite_v_mirror_bit,
-									TEST_FLAG(
-										particle_flags,
-										_particle_datum_v_mirror_bit));
-
-								build_sprite(
-									&sprite_data,
-									definition->sprite_orientation,
-									particle->sequence_index,
-									particle->frame_index,
-									&position,
-									&direction,
-									particle->rotation,
-									scale,
-									&particle->color,
-									fade,
-									flags);
-
+								total_radius += prepared->radius;
+								build_sprite_commit(&sprite_data, &prepared->sprite);
 								particle->last_rendered_frame_index =
 									render.frame_index;
 							}
 						}
 
 						rendered_particle++;
+						rendered_particle_index++;
 					}
 
 					((struct shader_effect_definition *)sprite_data.shader)->
@@ -476,6 +470,12 @@ void render_particles(
 						total_radius / built_particle_count : 0.0f;
 					build_sprites_end(&sprite_data);
 				}
+
+				/* port: every chunk was waited for above, so no worker reads
+				a particle now: those whose objects are gone are deleted, in
+				the order the original deleted them */
+				for (group_index = 0; group_index < deleted_particle_count; group_index++)
+					particle_delete(prepared_deleted_particles[group_index]);
 			}
 		}
 	}
@@ -485,3 +485,256 @@ void render_particles(
 }
 
 /* ---------- private code */
+
+/* port: works out a rendered particle's sprite as render_particles did
+before building it, changing nothing. Worked out ahead (reached FALSE), on
+any thread, one on the first-person weapon or on a node its object has
+not is left for the game's thread to work out as it reaches it (TRUE) */
+static void render_particle_prepare(
+	struct rendered_particle_datum const *rendered_particle,
+	struct particle_definition const *definition,
+	struct build_sprite_data const *sprite_data,
+	struct render_frustum const *frustum,
+	boolean reached,
+	struct prepared_particle *prepared)
+{
+	struct particle_datum const *particle =
+		particle_get(rendered_particle->particle_index);
+	real_point3d position;
+	real_vector3d direction;
+
+	prepared->state = _prepared_particle_serial;
+	if (!reached &&
+		(rendered_particle->attached_to_first_person_weapon ||
+			!tag_get_gives_tag(PARTICLE_TAG, particle->definition_index)))
+	{
+		return;
+	}
+
+	prepared->radius = particle_get_radius(rendered_particle->particle_index);
+	if (particle->object_index != NONE)
+	{
+		real_matrix4x3 const *node_matrix;
+
+		if (TEST_FLAG(
+			particle->flags,
+			_particle_datum_attached_to_local_player_bit))
+		{
+			if (!reached)
+				return;
+			node_matrix =
+				first_person_weapon_get_node_matrix(
+					particle->local_player_index,
+					particle->node_index);
+		}
+		else if (object_try_and_get(particle->object_index))
+		{
+			/* a node the object has no matrix for logs an error */
+			if (!reached)
+			{
+				struct object_datum const *object =
+					object_get(particle->object_index);
+
+				if (particle->node_index < 0 ||
+					particle->node_index >=
+						object->object.node_matrices.size / (short)sizeof(real_matrix4x3))
+				{
+					return;
+				}
+			}
+			node_matrix = object_get_node_matrix(
+				particle->object_index,
+				particle->node_index);
+		}
+		else
+		{
+			prepared->state = _prepared_particle_deleted;
+			return;
+		}
+
+		matrix4x3_transform_point(
+			node_matrix,
+			&particle->position,
+			&position);
+		matrix4x3_transform_normal(
+			node_matrix,
+			&particle->direction,
+			&direction);
+	}
+	else
+	{
+		position = particle->position;
+		direction = particle->direction;
+	}
+
+	prepared->state = _prepared_particle_hidden;
+	{
+		real radius = prepared->radius;
+		real diameter =
+			render_frustum_sphere_diameter_in_pixels(
+				frustum,
+				&position,
+				radius);
+
+		if (diameter > definition->lod_cutoff)
+		{
+			real fade;
+			real scale;
+			real remaining_life;
+			unsigned long flags;
+			word particle_flags;
+
+			fade = 1.0f;
+			scale =
+				(radius + radius) *
+				definition->runtime_oo_width;
+			remaining_life =
+				particle->lifespan - particle->age;
+
+			if (diameter < definition->minimum_pixels)
+			{
+				scale =
+					(definition->minimum_pixels / diameter) * scale;
+			}
+
+			if (definition->fade_in_time > 0.0f &&
+				particle->age < definition->fade_in_time)
+			{
+				fade = particle->age / definition->fade_in_time;
+			}
+
+			if (definition->fade_out_time > 0.0f &&
+				remaining_life < definition->fade_out_time)
+			{
+				fade *=
+					remaining_life / definition->fade_out_time;
+			}
+
+			flags = 0;
+			particle_flags = particle->flags;
+			SET_FLAG(
+				flags,
+				_build_sprite_u_mirror_bit,
+				TEST_FLAG(
+					particle_flags,
+					_particle_datum_u_mirror_bit));
+			SET_FLAG(
+				flags,
+				_build_sprite_v_mirror_bit,
+				TEST_FLAG(
+					particle_flags,
+					_particle_datum_v_mirror_bit));
+
+			if (!reached &&
+				!build_sprite_reads_tags_only(
+					sprite_data->bitmap_group_index,
+					particle->sequence_index,
+					particle->frame_index))
+			{
+				prepared->state = _prepared_particle_serial;
+				return;
+			}
+			build_sprite_prepare(
+				sprite_data,
+				frustum,
+				definition->sprite_orientation,
+				particle->sequence_index,
+				particle->frame_index,
+				&position,
+				&direction,
+				particle->rotation,
+				scale,
+				&particle->color,
+				fade,
+				flags,
+				&prepared->sprite);
+			prepared->state = _prepared_particle_built;
+		}
+	}
+	return;
+}
+
+/* port: a chunk of the rendered particles worked out, on any thread, with
+the frustum render_particles was called with */
+static void render_particles_prepare_chunk(
+	long chunk_index)
+{
+	long index = chunk_index * PREPARED_PARTICLE_CHUNK_SIZE;
+	long end = index + PREPARED_PARTICLE_CHUNK_SIZE;
+
+	if (end > prepared_particle_total)
+		end = prepared_particle_total;
+	for (; index < end; index++)
+	{
+		struct rendered_particle_datum const *rendered_particle =
+			&prepared_rendered_particles[index];
+		struct particle_definition const *definition;
+		struct build_sprite_data sprite_data;
+
+		/* (its definition not a tag: the game's thread logs it) */
+		if (!tag_get_gives_tag(PARTICLE_TAG, rendered_particle->definition_index))
+		{
+			prepared_particles[index].state = _prepared_particle_serial;
+			continue;
+		}
+		definition = particle_definition_get(rendered_particle->definition_index);
+		/* what build_sprite_prepare reads of a group not in screen space */
+		sprite_data.bitmap_group_index = definition->bitmap.index;
+		sprite_data.shader = &definition->shader;
+		sprite_data.flags = 0;
+		render_particle_prepare(
+			rendered_particle,
+			definition,
+			&sprite_data,
+			&prepared_frustum,
+			FALSE,
+			&prepared_particles[index]);
+	}
+	__atomic_store_n(
+		&prepared_chunk_generations[chunk_index],
+		prepared_generation,
+		__ATOMIC_RELEASE);
+	return;
+}
+
+/* port: (the workers) the chunks no thread has taken yet worked out */
+static void render_particles_prepare_job(
+	void)
+{
+	long chunk_index;
+
+	while ((chunk_index = __atomic_fetch_add(&prepared_next_chunk, 1, __ATOMIC_RELAXED)) <
+		prepared_chunk_count)
+	{
+		render_particles_prepare_chunk(chunk_index);
+	}
+	return;
+}
+
+/* port: a rendered particle's sprite, its chunk worked out by this thread if
+no worker has taken it, or waited for if one has */
+static struct prepared_particle const *render_particles_get_prepared(
+	short index)
+{
+	long chunk_index = index / PREPARED_PARTICLE_CHUNK_SIZE;
+
+	while (__atomic_load_n(&prepared_chunk_generations[chunk_index], __ATOMIC_ACQUIRE) !=
+		prepared_generation)
+	{
+		if (__atomic_load_n(&prepared_next_chunk, __ATOMIC_RELAXED) <= chunk_index)
+		{
+			long claimed_index =
+				__atomic_fetch_add(&prepared_next_chunk, 1, __ATOMIC_RELAXED);
+
+			if (claimed_index < prepared_chunk_count)
+				render_particles_prepare_chunk(claimed_index);
+		}
+		else
+		{
+#if defined(__i386__) || defined(__x86_64__)
+			__builtin_ia32_pause();
+#endif
+		}
+	}
+	return &prepared_particles[index];
+}

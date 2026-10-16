@@ -115,5 +115,10 @@ them one register at a time would give (port/linux/src/d3d8_gl.c) */
 void halo_immediate_vertices(unsigned long registers, const float *vertices, unsigned long count);
 /* the mouse in the menus (source/interface/ui_widget.c) */
 #include "halo_ui_pointer.h"
+/* a job run on the worker threads beside the game's thread, and the wait
+for them to return from it (port/linux/src/worker_pool.c; none on Android
+and the web): render_particles works its sprites out on them */
+void worker_pool_begin(void (*job)(void));
+void worker_pool_end(void);
 
 #endif
