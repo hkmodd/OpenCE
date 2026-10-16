@@ -32,6 +32,14 @@ static void platform_video_make_current(int current)
 	(void)current;
 }
 
+static unsigned long long platform_fiber_clock(void)
+{
+	struct timespec now;
+
+	clock_gettime(CLOCK_MONOTONIC, &now);
+	return (unsigned long long)now.tv_sec * 1000000000u + (unsigned long long)now.tv_nsec;
+}
+
 /* the times the reader wakes a waiting writer */
 static unsigned long writer_wakes;
 
@@ -297,6 +305,27 @@ int main(int argc, char **argv)
 		CHECK(!gate_passed_now(1), "the second frame waited for itself to run");
 		pthread_join(openers[0], NULL);
 		pthread_join(openers[1], NULL);
+		render_thread_drain();
+	}
+	else if (!strcmp(name, "frame-room"))
+	{
+		/* how long the end of a frame waited for the frame before to run */
+		struct gate_opening first = { 0, 50 };
+		pthread_t opener;
+		unsigned long frame;
+		unsigned long long room;
+
+		record_gate(0);
+		render_thread_frame_end(1);
+		room = render_thread_frame_room(&frame);
+		CHECK(room == 0 && frame == 1, "the first frame's end had %llu to spare, frame %lu", room, frame);
+		record_gate(1);
+		pthread_create(&opener, NULL, open_gate_after, &first);
+		render_thread_frame_end(1);
+		room = render_thread_frame_room(&frame);
+		CHECK(room >= 40000000u && frame == 2, "a wait of 50 ms had %llu ns to spare, frame %lu", room, frame);
+		__atomic_store_n(&gates_open[1], 1, __ATOMIC_RELEASE);
+		pthread_join(opener, NULL);
 		render_thread_drain();
 	}
 	else if (!strcmp(name, "frame-handed-over"))

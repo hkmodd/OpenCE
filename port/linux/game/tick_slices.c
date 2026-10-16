@@ -10,6 +10,13 @@ on a second stack (posix_fiber.c, win32_fiber.c), from which it hands back
 at its yield points once its share of the frame is used, and goes on in the
 spare time and at the start of the frames after it.
 
+A tick begun ahead of its time holds nothing up yet: at the start of a
+frame it runs only for as long as the frame before it had to spare (its
+wait, and the tick's own share of it), less a margin, so that a frame with
+no time to spare is not made late by a tick that need not run in it yet.
+Whatever the start of a frame does not run, the spare time at its end does:
+the tick takes no longer.
+
 A tick that would end after it is due is begun ahead of its time, by as
 long as the last ticks took to run in pieces: the frames before it is due
 go on drawing the two ticks before it, and the clock takes it, ended, when
@@ -32,6 +39,7 @@ int config_boolean(const char *name); /* port/linux/src/port_config.c */
 unsigned long config_changes(void);
 int render_thread_running(void); /* port/linux/src/render_thread.c */
 void render_thread_set_idle_work(int (*work)(void));
+unsigned long long render_thread_frame_room(unsigned long *frame);
 int platform_fiber_create(void (*entry)(void)); /* port/linux/src/posix_fiber.c */
 void platform_fiber_enter(void);
 void platform_fiber_leave(void);
@@ -48,6 +56,9 @@ enum
 	/* how long it runs at a time in the spare time, between checks of
 	whether the frame waited for has been drawn */
 	TICK_SLICE_SPARE_SHARE = 100,
+	/* what a tick begun ahead of its time leaves of the time the frame
+	before had to spare, for a frame that takes longer than the one before */
+	TICK_SLICE_MARGIN = 200,
 	/* the frames a tick that is due may run on before one runs it whole
 	(one begun ahead of its time holds nothing up until it falls due) */
 	TICK_SLICE_MAXIMUM_FRAMES = 8
@@ -67,6 +78,10 @@ static short frames_due;
 /* how long the latest ticks took from their beginning to their end,
 smoothed (microseconds) */
 static unsigned long tick_duration;
+/* how long the latest share of a frame ran (in the platform's clock's
+counts), and the count of the frames ended before it (render_thread.c) */
+static unsigned long long share_used;
+static unsigned long share_frame;
 /* the fiber's: its tick has ended */
 static boolean fiber_tick_ended;
 static boolean in_tick;
@@ -153,6 +168,39 @@ static int tick_slices_spare_time(void)
 	return !tick_pending_ended;
 }
 
+/* this frame's share of the tick pending (microseconds; 0 for none) */
+static unsigned long tick_slices_frame_share(void)
+{
+	unsigned long frame;
+	unsigned long long room = render_thread_frame_room(&frame);
+	unsigned long long spare;
+
+	if (tick_pending_counted)
+		return TICK_SLICE_FRAME_SHARE;
+	/* (the room the frame before had with no share run in it) */
+	if (share_frame + 1 == frame)
+		room += share_used;
+	spare = room * 1000000u / clock_rate;
+	if (spare <= TICK_SLICE_MARGIN)
+		return 0;
+	spare -= TICK_SLICE_MARGIN;
+	return spare < TICK_SLICE_FRAME_SHARE ? (unsigned long)spare : TICK_SLICE_FRAME_SHARE;
+}
+
+/* runs the tick pending for its share of this frame */
+static void tick_slices_run_share(void)
+{
+	unsigned long share = tick_slices_frame_share();
+	unsigned long long began;
+
+	if (!share)
+		return;
+	began = platform_fiber_clock();
+	tick_slices_run(share);
+	share_used = platform_fiber_clock() - began;
+	render_thread_frame_room(&share_frame);
+}
+
 static void tick_slices_begin(boolean counted)
 {
 	render_thread_set_idle_work(tick_slices_spare_time);
@@ -161,7 +209,7 @@ static void tick_slices_begin(boolean counted)
 	tick_pending_counted = counted;
 	tick_pending_began = platform_fiber_clock();
 	frames_due = 0;
-	tick_slices_run(TICK_SLICE_FRAME_SHARE);
+	tick_slices_run_share();
 }
 
 /* ---------- public code */
@@ -222,7 +270,10 @@ boolean tick_slices_continue(boolean whole)
 			frames_due++;
 		if (frames_due >= TICK_SLICE_MAXIMUM_FRAMES)
 			whole = TRUE;
-		tick_slices_run(whole ? 0 : TICK_SLICE_FRAME_SHARE);
+		if (whole)
+			tick_slices_run(0);
+		else
+			tick_slices_run_share();
 	}
 	return tick_pending_ended;
 }
