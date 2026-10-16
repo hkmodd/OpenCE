@@ -109,6 +109,10 @@ void server_console_output(const char *text);
 int halo_server_debug_echo(void);
 /* ... the level its rotation plays next, NULL if none (game_engine.c) */
 char const *server_director_first_level(void);
+/* an immediate draw's vertices at once, each the four floats of each
+register in registers (a mask with register 0), lowest first, as writing
+them one register at a time would give (port/linux/src/d3d8_gl.c) */
+void halo_immediate_vertices(unsigned long registers, const float *vertices, unsigned long count);
 /* the mouse in the menus (source/interface/ui_widget.c) */
 #include "halo_ui_pointer.h"
 

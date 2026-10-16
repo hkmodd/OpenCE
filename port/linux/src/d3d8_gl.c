@@ -8067,6 +8067,91 @@ void WINAPI D3DDevice_SetVertexDataColor(INT reg, D3DCOLOR color)
 	set_attribute(reg, value[0], value[1], value[2], value[3]);
 }
 
+/* count vertices at once, as SetVertexData4f of each register in registers
+(a mask with register 0, written last) for each vertex would give them:
+each vertex is the registers' four floats, the lowest register first. They
+are copied into an immediate draw as they are when they hold the registers
+it has written, and the registers keep the last vertex's values. */
+void halo_immediate_vertices(unsigned long registers, const float *vertices, unsigned long count)
+{
+	unsigned long reg, vertex, size = 0, written, capacity;
+	const float *last;
+	float *to, *grown;
+
+	registers &= (1UL << XGPU_VERTEX_ATTRIBUTE_COUNT) - 1;
+	if (!count || !(registers & 1))
+		return;
+	for (reg = 0; reg < XGPU_VERTEX_ATTRIBUTE_COUNT; reg++)
+		size += (registers >> reg) & 1;
+	if (game->immediate_active)
+	{
+		for (reg = 0; reg < XGPU_VERTEX_ATTRIBUTE_COUNT; reg++)
+		{
+			if ((registers & (1UL << reg)) && !(game->immediate_written & (1UL << reg)))
+				immediate_add_register((int)reg);
+		}
+		capacity = game->immediate_capacity ? game->immediate_capacity : 256;
+		while (capacity < game->immediate_count + count)
+			capacity *= 2;
+		if (capacity != game->immediate_capacity)
+		{
+			/* (room for vertices of every register; out of memory, the
+			vertices are dropped) */
+			grown = realloc(game->immediate_vertices, capacity * XGPU_VERTEX_ATTRIBUTE_COUNT * 4 * sizeof(float));
+			if (grown)
+			{
+				game->immediate_vertices = grown;
+				game->immediate_capacity = capacity;
+			}
+		}
+		if (game->immediate_count + count <= game->immediate_capacity)
+		{
+			to = game->immediate_vertices + game->immediate_count * game->immediate_registers * 4;
+			written = game->immediate_written;
+			if (written == registers)
+			{
+				memcpy(to, vertices, count * size * 4 * sizeof(float));
+			}
+			else
+			{
+				/* (with the registers written before and not given, as
+				they are) */
+				for (vertex = 0; vertex < count; vertex++)
+				{
+					const float *from = vertices + vertex * size * 4;
+
+					for (reg = 0; reg < XGPU_VERTEX_ATTRIBUTE_COUNT; reg++)
+					{
+						if (!(written & (1UL << reg)))
+							continue;
+						if (registers & (1UL << reg))
+						{
+							memcpy(to, from, 4 * sizeof(float));
+							from += 4;
+						}
+						else
+						{
+							memcpy(to, game->attributes[reg], 4 * sizeof(float));
+						}
+						to += 4;
+					}
+				}
+			}
+			game->immediate_count += count;
+		}
+	}
+	last = vertices + (count - 1) * size * 4;
+	for (reg = 0; reg < XGPU_VERTEX_ATTRIBUTE_COUNT; reg++)
+	{
+		if (registers & (1UL << reg))
+		{
+			memcpy(game->attributes[reg], last, 4 * sizeof(float));
+			last += 4;
+		}
+	}
+	device_changed |= DEVICE_CHANGED_ATTRIBUTES;
+}
+
 /* ---------- clearing */
 
 /* the state a clear changed, no longer what the shadows say: the masks it
