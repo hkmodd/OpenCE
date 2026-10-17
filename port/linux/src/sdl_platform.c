@@ -1429,6 +1429,7 @@ void platform_video_drawable_size(int *width, int *height)
 twice the display's refresh rate), or 0 for no limit. A desktop GPU never
 left idle can hang (Intel's Raptor Lake graphics, whose reset then takes
 the desktop with it); the limit gives it a rest every frame. */
+static int even_frames;
 static Uint64 frame_interval_ns(void)
 {
 	static int vsync;
@@ -1441,6 +1442,7 @@ static Uint64 frame_interval_ns(void)
 		read_at = config_changes();
 		vsync = config_boolean("display.vsync");
 		maximum = config_integer("display.max_fps");
+		even_frames = config_boolean("display.even_frames");
 	}
 	if (vsync || maximum < 0)
 		return 0;
@@ -1610,6 +1612,21 @@ void platform_video_swap(void)
 	int focused;
 	int vsync;
 	Uint64 swap_start;
+
+	/* display.even_frames: a finished frame waits for its time, then is
+	shown; otherwise it is shown at once and the next frame waits (below) */
+	interval = frame_interval_ns();
+	if (interval && even_frames)
+	{
+		now = SDL_GetTicksNS();
+		if (next_frame > now)
+		{
+			SDL_DelayPrecise(next_frame - now);
+			now = next_frame;
+		}
+		/* (a frame more than an interval late starts the count again) */
+		next_frame = now - next_frame > interval ? now + interval : next_frame + interval;
+	}
 #endif
 #ifdef HALO_WINDOWS
 	/* SDL can restore its fullscreen styles on a mode or focus change.
@@ -1648,6 +1665,9 @@ void platform_video_swap(void)
 #endif
 	interval = frame_interval_ns();
 #if !defined(HALO_ANDROID) && !defined(HALO_WEB)
+	/* (display.even_frames waited before the swap) */
+	if (interval && even_frames)
+		return;
 	if (!interval && vsync && !focused)
 		interval = refresh_period_ns();
 #endif
