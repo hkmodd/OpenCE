@@ -1000,6 +1000,7 @@ void platform_video_drawable_size(int *width, int *height)
 twice the display's refresh rate), or 0 for no limit. A GPU never left idle
 can hang (Intel's Raptor Lake graphics, whose reset then takes the desktop
 with it); the limit gives it a rest every frame. */
+static int even_frames;
 static Uint64 frame_interval_ns(void)
 {
 	static int vsync;
@@ -1012,6 +1013,7 @@ static Uint64 frame_interval_ns(void)
 		read_at = config_changes();
 		vsync = config_boolean("display.vsync");
 		maximum = config_integer("display.max_fps");
+		even_frames = config_boolean("display.even_frames");
 	}
 	if (vsync || maximum < 0)
 		return 0;
@@ -1024,6 +1026,21 @@ static Uint64 frame_interval_ns(void)
 		rate = 2.0f * (mode && mode->refresh_rate > 0.0f ? mode->refresh_rate : 60.0f);
 	}
 	return (Uint64)(1e9f / rate);
+}
+
+/* waits for the limit's time for the next frame, and returns the time for
+the one after it */
+static Uint64 frame_wait(Uint64 next_frame, Uint64 interval)
+{
+	Uint64 now = SDL_GetTicksNS();
+
+	if (next_frame > now)
+	{
+		SDL_DelayPrecise(next_frame - now);
+		now = next_frame;
+	}
+	/* (a frame more than an interval late starts the count again) */
+	return now - next_frame > interval ? now + interval : next_frame + interval;
 }
 
 #endif
@@ -1040,25 +1057,21 @@ void platform_video_swap(void)
 {
 #ifndef HALO_ANDROID
 	static Uint64 next_frame;
-	Uint64 interval, now;
+	Uint64 interval;
 
+	/* display.even_frames: a finished frame waits for its time, then is
+	shown; otherwise it is shown at once and the next frame waits */
+	interval = frame_interval_ns();
+	if (interval && even_frames)
+		next_frame = frame_wait(next_frame, interval);
 #endif
 	SDL_GL_SwapWindow(platform_window);
 #ifdef HALO_WEB
 	web_frame_shown();
 #endif
 #ifndef HALO_ANDROID
-	interval = frame_interval_ns();
-	if (!interval)
-		return;
-	now = SDL_GetTicksNS();
-	if (next_frame > now)
-	{
-		SDL_DelayPrecise(next_frame - now);
-		now = next_frame;
-	}
-	/* (a frame more than an interval late starts the count again) */
-	next_frame = now - next_frame > interval ? now + interval : next_frame + interval;
+	if (interval && !even_frames)
+		next_frame = frame_wait(next_frame, interval);
 #endif
 }
 
