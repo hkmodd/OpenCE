@@ -5394,11 +5394,32 @@ static struct
 	float corners[8][3];
 } scissor_volume;
 
+static void scissor_volume_command(void *payload)
+{
+	const float *corners = (const float *)payload;
+
+	scissor_volume.set = corners[0] != 0.0f;
+	memcpy(scissor_volume.corners, corners + 1, sizeof(scissor_volume.corners));
+}
+
+/* (with the render thread, in order with the draws it is set for) */
 void halo_scissor_volume(const float *corners)
 {
-	scissor_volume.set = corners != NULL;
+	float *payload;
+
+	if (!queued())
+	{
+		scissor_volume.set = corners != NULL;
+		if (corners)
+			memcpy(scissor_volume.corners, corners, sizeof(scissor_volume.corners));
+		return;
+	}
+	payload = (float *)render_thread_record(scissor_volume_command, sizeof(float) + sizeof(scissor_volume.corners));
+	payload[0] = corners ? 1.0f : 0.0f;
 	if (corners)
-		memcpy(scissor_volume.corners, corners, sizeof(scissor_volume.corners));
+		memcpy(payload + 1, corners, sizeof(scissor_volume.corners));
+	else
+		memset(payload + 1, 0, sizeof(scissor_volume.corners));
 }
 
 /* cuts the scissor to the volume's rectangle on the screen, each corner
@@ -5424,11 +5445,11 @@ static void scissor_volume_cut(GLint *scissor)
 	int corner;
 
 	if ((device.shader_constant_mode & D3DSCM_NORESERVEDCONSTANTS) ||
-		address_mode(D3D__TextureState[0][D3DTSS_ADDRESSU]) != GL_CLAMP_TO_BORDER ||
-		address_mode(D3D__TextureState[0][D3DTSS_ADDRESSV]) != GL_CLAMP_TO_BORDER ||
-		D3D__TextureState[0][D3DTSS_BORDERCOLOR] != 0 ||
-		D3D__TextureState[1][D3DTSS_ADDRESSU] != D3DTADDRESS_CLAMP ||
-		D3D__TextureState[1][D3DTSS_ADDRESSV] != D3DTADDRESS_CLAMP)
+		address_mode(texture_state[0][D3DTSS_ADDRESSU]) != GL_CLAMP_TO_BORDER ||
+		address_mode(texture_state[0][D3DTSS_ADDRESSV]) != GL_CLAMP_TO_BORDER ||
+		texture_state[0][D3DTSS_BORDERCOLOR] != 0 ||
+		texture_state[1][D3DTSS_ADDRESSU] != D3DTADDRESS_CLAMP ||
+		texture_state[1][D3DTSS_ADDRESSV] != D3DTADDRESS_CLAMP)
 	{
 		return;
 	}
