@@ -115,6 +115,10 @@
 		<frame png="languages/it/main_menu/menu_quit__0.png" width="256" height="64"/>
 		<frame png="languages/it/main_menu/menu_quit__1.png" width="256" height="64"/>
 	</bitmap>
+	<bitmap name="main_menu/menu_mods" language="it">
+		<frame png="languages/it/main_menu/menu_mods__0.png" width="256" height="64"/>
+		<frame png="languages/it/main_menu/menu_mods__1.png" width="256" height="64"/>
+	</bitmap>
 	<bitmap name="main_menu/campaign_select/item_back" language="it">
 		<frame png="languages/it/main_menu/campaign_select/item_back__0.png" width="256" height="64"/>
 		<frame png="languages/it/main_menu/campaign_select/item_back__1.png" width="256" height="64"/>
@@ -130,6 +134,9 @@
 	<bitmap name="main_menu/campaign_select/item_new_campaign" language="it">
 		<frame png="languages/it/main_menu/campaign_select/item_new_campaign__0.png" width="256" height="64"/>
 		<frame png="languages/it/main_menu/campaign_select/item_new_campaign__1.png" width="256" height="64"/>
+	</bitmap>
+	<bitmap name="main_menu/mods/header_mods" language="it">
+		<frame png="languages/it/main_menu/mods/header_mods__0.png" width="512" height="64"/>
 	</bitmap>
 	<bitmap name="main_menu/multiplayer_type_select/coop/header_player_2" language="it">
 		<frame png="languages/it/main_menu/multiplayer_type_select/coop/header_player_2__0.png" width="512" height="64"/>
@@ -184,9 +191,11 @@
 	<line text="Anyone can see and join your game: it is listed\nin everyone's Server Browser." language="it" translation="Chiunque può vedere la partita e unirsi: appare\nnell'elenco server di tutti."/>
 	<line text="BORDERLESS" language="it" translation="SENZA BORDI"/>
 	<line text="BUTTON LAYOUT:" language="it" translation="DISPOSIZIONE PULSANTI:"/>
+	<line text="BUTTON STYLE:" language="it" translation="STILE PULSANTI:"/>
 	<line text="BY SCORE" language="it" translation="PER PUNTEGGIO"/>
 	<line text="CATEGORY" language="it" translation="CATEGORIA"/>
 	<line text="CHECK FOR UPDATES:" language="it" translation="CERCA AGGIORNAMENTI:"/>
+	<line text="CLASSIC" language="it" translation="CLASSICO"/>
 	<line text="CLOSED" language="it" translation="CHIUSA"/>
 	<line text="CO-OP CAMPAIGN" language="it" translation="CAMPAGNA CO-OP"/>
 	<line text="CO-OP OPTIONS" language="it" translation="OPZIONI COOPERATIVA"/>
@@ -196,10 +205,12 @@
 	<line text="Choose a window or the full\nscreen, the frame rate and more.\n\nProfile:" language="it" translation="Scegli finestra o schermo intero,\nfrequenza fotogrammi e altro.\n\nProfilo:"/>
 	<line text="Choose the keys and mouse\nbuttons for each action.\n\nProfile:" language="it" translation="Scegli i tasti e i pulsanti\ndel mouse per ogni azione.\n\nProfilo:"/>
 	<line text="Choose what to show, with left and right." language="it" translation="Scegli cosa mostrare con sinistra e destra."/>
+	<line text="Classic: plain Xbox buttons. Gems: shaded Xbox\nbuttons. Dark Gems: the menu's button artwork." language="it" translation="Classico: pulsanti Xbox piatti. Gemme: pulsanti\nXbox sfumati. Gemme scure: la grafica dei menu."/>
 	<line text="Connecting to %s..." language="it" translation="Connessione a %s..."/>
 	<line text="Copy an invite link and PASTE LINK, or accept a Discord invite" language="it" translation="Copia un link d'invito e INCOLLA LINK, o accetta un invito Discord"/>
 	<line text="Could not join the game." language="it" translation="Impossibile unirsi alla partita."/>
 	<line text="Could not reach %s" language="it" translation="Impossibile raggiungere %s"/>
+	<line text="DARK GEMS" language="it" translation="GEMME SCURE"/>
 	<line text="DIRECT LINK" language="it" translation="LINK DIRETTO"/>
 	<line text="DISPLAY MODE:" language="it" translation="MODALITÀ SCHERMO:"/>
 	<line text="DOWNLOAD MAPS:" language="it" translation="SCARICA MAPPE:"/>
@@ -253,6 +264,7 @@
 	<line text="GAME LOBBY" language="it" translation="LOBBY PARTITA"/>
 	<line text="GAME NAME:" language="it" translation="NOME PARTITA:"/>
 	<line text="GAME TYPE:" language="it" translation="TIPO PARTITA:"/>
+	<line text="GEMS" language="it" translation="GEMME"/>
 	<line text="GLOW INTENSITY:" language="it" translation="INTENSITÀ BAGLIORE:"/>
 	<line text="GRAPHICS:" language="it" translation="GRAFICA:"/>
 	<line text="HELP SEND MAPS:" language="it" translation="AIUTA A INVIARE:"/>
@@ -266,6 +278,7 @@
 	<line text="How fast the view turns side to side for the\nmouse's movement." language="it" translation="Velocità con cui la visuale gira di lato al\nmovimento del mouse."/>
 	<line text="How fast the view turns up and down; Same\nturns it as fast as side to side." language="it" translation="Velocità con cui la visuale gira in alto e in basso;\nUguale la gira come di lato."/>
 	<line text="How large the players' names are drawn." language="it" translation="La dimensione dei nomi dei giocatori."/>
+	<line text="How sounds are converted to the output's rate:\nsinc is clean; linear is brighter, with aliasing." language="it" translation="Conversione dei suoni alla frequenza d'uscita:\nsinc è pulito; lineare è più vivo, con aliasing."/>
 	<line text="IN-GAME HELP:" language="it" translation="AIUTO IN GIOCO:"/>
 	<line text="INDICATOR OPTIONS:" language="it" translation="OPZIONI INDICATORE:"/>
 	<line text="INPUT DEVICE:" language="it" translation="DISPOSITIVO DI INGRESSO:"/>
@@ -295,6 +308,7 @@
 	<line text="LEGACY SOUTHPAW" language="it" translation="CLASSICA MANCINA"/>
 	<line text="LEGS:" language="it" translation="GAMBE:"/>
 	<line text="LIGHT SHOW" language="it" translation="SPETTACOLO DI LUCI"/>
+	<line text="LINEAR" language="it" translation="LINEARE"/>
 	<line text="LISTING:" language="it" translation="VISIBILITÀ:"/>
 	<line text="LIVE" language="it" translation="IN CORSO"/>
 	<line text="LOADOUT:" language="it" translation="DOTAZIONE:"/>
@@ -319,8 +333,11 @@
 	<line text="MAP WEAPONS:" language="it" translation="ARMI DELLA MAPPA:"/>
 	<line text="MAXIMUM PLAYERS:" language="it" translation="GIOCATORI MAX:"/>
 	<line text="MELEE" language="it" translation="CORPO A CORPO"/>
+	<line text="MODS" language="it" translation="MOD"/>
 	<line text="MOVE BACKWARD" language="it" translation="INDIETREGGIA"/>
+	<line text="MOVE DOWN" language="it" translation="SPOSTA GIÙ"/>
 	<line text="MOVE FORWARD" language="it" translation="AVANZA"/>
+	<line text="MOVE UP" language="it" translation="SPOSTA SU"/>
 	<line text="MULTIPLIER:" language="it" translation="MOLTIPLICATORE:"/>
 	<line text="Mouse Left" language="it" translation="PULSANTE SX"/>
 	<line text="Mouse Middle" language="it" translation="CLIC RUOTA"/>
@@ -390,6 +407,7 @@
 	<line text="Press a key, a mouse button or turn the wheel...\nEscape cancels, Delete clears it." language="it" translation="Premi un tasto, un pulsante del mouse o gira la\nrotella... Esc annulla, Canc lo cancella."/>
 	<line text="Pushing the right stick up looks down." language="it" translation="Spingendo in su la levetta destra si guarda in basso."/>
 	<line text="RANDOM" language="it" translation="CASUALE"/>
+	<line text="RESAMPLER:" language="it" translation="RICAMPIONAMENTO:"/>
 	<line text="RESOLUTION SCALING:" language="it" translation="SCALA RISOLUZIONE:"/>
 	<line text="REVERB:" language="it" translation="RIVERBERO:"/>
 	<line text="ROCKET LAUNCHER" language="it" translation="LANCIARAZZI"/>
@@ -414,6 +432,7 @@
 	<line text="SINGLEPLAYER" language="it" translation="GIOCATORE SINGOLO"/>
 	<line text="SMOOTH MOTION:" language="it" translation="MOVIMENTO FLUIDO:"/>
 	<line text="SNIPER RIFLE" language="it" translation="FUCILE DI PRECISIONE"/>
+	<line text="SOUND PROCESSING:" language="it" translation="ELABORAZIONE AUDIO:"/>
 	<line text="SOUND:" language="it" translation="AUDIO:"/>
 	<line text="SOUTHPAW" language="it" translation="MANCINA"/>
 	<line text="SPECTATING %.12s   (A: NEXT)\n%s" language="it" translation="OSSERVI %.12s   (A: SUCCESSIVO)\n%s"/>
@@ -464,6 +483,7 @@
 	<line text="The name the game shows in the lists of games.\nEnter changes it." language="it" translation="Il nome della partita negli elenchi delle partite.\nInvio lo cambia."/>
 	<line text="The new player's profile." language="it" translation="Il profilo del nuovo giocatore."/>
 	<line text="The other players' voices." language="it" translation="Le voci degli altri giocatori."/>
+	<line text="The reverb, and how sounds are converted to the\noutput's rate." language="it" translation="Il riverbero e la conversione dei suoni alla\nfrequenza d'uscita."/>
 	<line text="The server browser is off (network.public_lobby)" language="it" translation="L'elenco server è disattivato (network.public_lobby)"/>
 	<line text="The size objects' shadows are drawn at: 128 as on\nthe Xbox; larger for smoother, as soft, edges." language="it" translation="La risoluzione delle ombre degli oggetti: 128 come\nsu Xbox; di più per bordi più lisci, ugualmente morbidi."/>
 	<line text="The volume of every other sound: effects and\nspeech." language="it" translation="Il volume di ogni altro suono: effetti e\ndialoghi."/>

@@ -93,14 +93,15 @@ HEADERS = [
 ]
 ITEMS = [
     f"{MM}/menu_load_campaign", f"{MM}/menu_multiplayer", f"{MM}/menu_profile", f"{MM}/menu_settings",
-    f"{MM}/menu_quit", f"{MM}/campaign_select/item_back", f"{MM}/campaign_select/item_continue",
+    f"{MM}/menu_quit", f"{MM}/menu_mods", f"{MM}/campaign_select/item_back", f"{MM}/campaign_select/item_continue",
     f"{MM}/campaign_select/item_load_game", f"{MM}/campaign_select/item_new_campaign",
 ]
 
 # each language: the loc.map string that tells it (its list, the string's
 # index, its text), and its words for our bitmaps, as its edition's pictures
 # have them (--extract). The Italian edition's header_direct_ip says
-# MULTIGIOCATORE, as its own does.
+# MULTIGIOCATORE, as its own does; menu_mods, the port's item, is in no
+# edition's pictures.
 LANGUAGES = {
     "it": {
         "detect": ("ui\\shell\\main_menu\\multiplayer_type_select\\multiplayer_options", 0, "PARTECIPA A PARTITA"),
@@ -141,6 +142,7 @@ LANGUAGES = {
             f"{MM}/menu_profile": "PROFILI",
             f"{MM}/menu_settings": "IMPOSTAZIONI",
             f"{MM}/menu_quit": "ESCI",
+            f"{MM}/menu_mods": "MOD",
             f"{MM}/campaign_select/item_back": "INDIETRO",
             f"{MM}/campaign_select/item_continue": "CONTINUA",
             f"{MM}/campaign_select/item_load_game": "CARICA PARTITA",
