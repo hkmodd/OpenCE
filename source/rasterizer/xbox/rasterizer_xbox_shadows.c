@@ -70,6 +70,7 @@ symbols in this file:
 #include "cseries.h"
 #include "cseries/errors.h"
 #include "math/real_math.h"
+#include "models/model_definitions.h" /* port: the shadow cache */
 #include "game/game_globals.h"
 #include "bitmaps/bitmap_color_conversion.h"
 #include "interface/hud_draw.h"
@@ -172,6 +173,63 @@ typedef char verify_rasterizer_shadows_shader_model_detail_scale_offset[
 typedef char verify_rasterizer_shadows_shader_model_animation_offset[
 	offsetof(struct shader_model_definition, animation) == 0xFC ? 1 : -1];
 
+/* port: the shadow cache (rasterizer_environment_shadow_cast): a record's
+longs at most, the maps kept, the objects whose last record is known */
+#define SHADOW_RECORD_MAXIMUM 8192
+#define SHADOW_CACHE_ENTRIES 32
+#define SHADOW_CACHE_OBJECTS 1024
+#define SHADOW_RECORD_LONGS(size) (((size) + sizeof(long) - 1) / sizeof(long))
+
+enum
+{
+	_shadow_record_model = 1,
+	_shadow_record_draw,
+};
+
+/* port: what a shadow's silhouette is drawn from: the begin's values, then
+each model's nodes and each draw */
+struct shadow_record_header
+{
+	long scale;
+	long debug;
+	long convolution;
+	real screenproj[20];
+};
+
+struct shadow_record_model
+{
+	long type;
+	long node_matrix_count;
+	/* the node matrices follow */
+};
+
+struct shadow_record_draw
+{
+	long type;
+	long two_sided;
+	long alpha_tested;
+	long base_map_index;
+	long bitmap_index;
+	struct triangle_buffer const *triangle_buffer_address;
+	struct vertex_buffer const *vertex_buffer_address;
+	struct triangle_buffer triangle_buffer;
+	struct vertex_buffer vertex_buffer;
+	real_vector4d vertex_constants[3];
+};
+
+struct shadow_cache_entry
+{
+	D3DTexture *texture;
+	D3DSurface *surface;
+	unsigned long hash;
+	/* the record's longs once its map is kept, else 0 */
+	long size;
+	long recorded_size;
+	/* the pass that last drew or kept it */
+	unsigned long pass;
+	long record[SHADOW_RECORD_MAXIMUM];
+};
+
 /* ---------- prototypes */
 
 static void rasterizer_shadow_convolve(
@@ -180,6 +238,30 @@ static void rasterizer_shadow_convolve_pass(
 	short source_target,
 	short destination_target,
 	real offset);
+static void shadow_begin_device(
+	real const *vsh_constants__screenproj);
+static void shadow_model_draw_device(
+	boolean two_sided,
+	boolean alpha_tested,
+	long base_map_index,
+	short bitmap_index,
+	struct triangle_buffer const *triangle_buffer,
+	struct vertex_buffer const *vertex_buffer,
+	real_vector4d const *vertex_constants);
+static void shadow_record_begin(
+	real const *vsh_constants__screenproj);
+static boolean shadow_record_model(
+	struct render_skinning const *skinning);
+static boolean shadow_record_draw(
+	boolean two_sided,
+	boolean alpha_tested,
+	long base_map_index,
+	short bitmap_index,
+	struct triangle_buffer const *triangle_buffer,
+	struct vertex_buffer const *vertex_buffer,
+	real_vector4d const *vertex_constants);
+static void shadow_record_replay(
+	void);
 
 /* ---------- globals */
 
@@ -210,7 +292,26 @@ static struct
 	boolean restored;
 	boolean active;
 	boolean convolved;
+	short cache_entry;
+	short store_entry;
 } shadow_slots[RASTERIZER_SHADOW_BATCH_MAXIMUM];
+/* port: the shadow cache (rasterizer_environment_shadow_cast): whether the
+shadow begun is recorded, its record, the kept map it is drawn from or the
+one its map is kept in */
+static boolean shadow_recording = FALSE;
+static long shadow_record_size = 0;
+static long shadow_record[SHADOW_RECORD_MAXIMUM];
+static short shadow_cache_entry = NONE;
+static short shadow_store_entry = NONE;
+static unsigned long shadow_cache_pass = 0;
+static long shadow_cache_scale = 0;
+static struct shadow_cache_entry shadow_cache[SHADOW_CACHE_ENTRIES];
+static struct
+{
+	long object_index;
+	unsigned long hash;
+	unsigned long pass;
+} shadow_cache_objects[SHADOW_CACHE_OBJECTS];
 
 /* ---------- public code */
 
@@ -218,6 +319,7 @@ void _rasterizer_environment_shadows_begin(
 	void)
 {
 	rasterizer_profile_begin(_rasterizer_profile_environment_shadows);
+	shadow_cache_pass++; /* port */
 
 	return;
 }
@@ -238,7 +340,10 @@ boolean _rasterizer_environment_shadow_begin(
 		147,
 		global_d3d_device);
 
-	shadow_active = FALSE; /* port */
+	/* port */
+	shadow_active = FALSE;
+	shadow_cache_entry = NONE;
+	shadow_store_entry = NONE;
 	if (global_window_parameters.rasterizer_target ==
 			_rasterizer_target_render_primary &&
 		rasterizer_debug_options.draw_environment_shadows)
@@ -268,26 +373,6 @@ boolean _rasterizer_environment_shadow_begin(
 			158,
 			object_bounding_radius>0.0f);
 
-		IDirect3DDevice8_SetRenderState(global_d3d_device, D3DRS_CULLMODE, D3DCULL_CCW);
-		IDirect3DDevice8_SetRenderState(
-			global_d3d_device,
-			D3DRS_COLORWRITEENABLE,
-			D3DCOLORWRITEENABLE_RED |
-			D3DCOLORWRITEENABLE_GREEN |
-			D3DCOLORWRITEENABLE_BLUE);
-		IDirect3DDevice8_SetRenderState(global_d3d_device, D3DRS_ALPHABLENDENABLE, FALSE);
-		IDirect3DDevice8_SetRenderState(global_d3d_device, D3DRS_ALPHATESTENABLE, TRUE);
-		IDirect3DDevice8_SetRenderState(global_d3d_device, D3DRS_ALPHAREF, 0x7F);
-		IDirect3DDevice8_SetRenderState(global_d3d_device, D3DRS_ZENABLE, FALSE);
-		IDirect3DDevice8_SetRenderState(global_d3d_device, D3DRS_ZBIAS, 0);
-
-		csmemset(&pixel_shader, 0, sizeof(pixel_shader));
-		pixel_shader.texture_modes = 1;
-		pixel_shader.combiner_count = 1;
-		pixel_shader.final_combiner_inputs_abcd = 0x00000020;
-		pixel_shader.final_combiner_inputs_efg = 0x00001800;
-		rasterizer_set_pixel_shader(&pixel_shader);
-
 		inverse_radius = 1.0f / object_bounding_radius;
 
 		vsh_constants__screenproj[0] = inverse_radius * shadow_matrix->forward.i;
@@ -314,19 +399,17 @@ boolean _rasterizer_environment_shadow_begin(
 		vsh_constants__screenproj[17] = 0.0f;
 		vsh_constants__screenproj[18] = 0.0f;
 		vsh_constants__screenproj[19] = 0.0f;
-		IDirect3DDevice8_SetVertexShaderConstant(
-			global_d3d_device,
-			-68,
-			vsh_constants__screenproj,
-			5);
 
-		rasterizer_set_target(
-			2,
-			0,
-			rasterizer_debug_options.shadow_debug_enabled ? 0x88888888 : 0,
-			TRUE,
-			FALSE);
-		rasterizer_set_stencil_mode(0);
+		/* port: recorded, to be drawn or found in the shadow cache
+		(rasterizer_environment_shadow_cast) */
+		if (halo_shadow_cache_supported())
+		{
+			shadow_record_begin(vsh_constants__screenproj);
+		}
+		else
+		{
+			shadow_begin_device(vsh_constants__screenproj);
+		}
 
 		local_shadow_matrix = *shadow_matrix;
 		local_shadow_color = *shadow_color;
@@ -371,7 +454,11 @@ void _rasterizer_environment_shadow_model_begin(
 			245,
 			parameters);
 
-		rasterizer_set_model_skinning(&parameters->skinning);
+		/* port: recorded (rasterizer_environment_shadow_cast) */
+		if (!shadow_recording || !shadow_record_model(&parameters->skinning))
+		{
+			rasterizer_set_model_skinning(&parameters->skinning);
+		}
 
 		local_parameters = parameters;
 		shadow_used = TRUE;
@@ -435,59 +522,6 @@ void _rasterizer_environment_shadow_model_draw(
 				288,
 				local_parameters);
 
-			if (TEST_FLAG(model->flags, _shader_model_two_sided_bit))
-			{
-				IDirect3DDevice8_SetRenderState(global_d3d_device, D3DRS_CULLMODE, D3DCULL_NONE);
-			}
-			else
-			{
-				IDirect3DDevice8_SetRenderState(global_d3d_device, D3DRS_CULLMODE, D3DCULL_CCW);
-			}
-			rasterizer_set_vertex_shader_permutation(
-				_shadow_model_vertex_shader_index,
-				vertex_buffer->type,
-				0);
-
-			if (TEST_FLAG(model->flags, _shader_model_not_alpha_tested_bit))
-			{
-				IDirect3DDevice8_SetRenderState(global_d3d_device, D3DRS_PSTEXTUREMODES, 0);
-			}
-			else
-			{
-				IDirect3DDevice8_SetRenderState(global_d3d_device, D3DRS_PSTEXTUREMODES, 1);
-				rasterizer_set_texture(
-					0,
-					0,
-					1,
-					model->base_map.index,
-					bitmap_index);
-				IDirect3DDevice8_SetTextureStageState(
-					global_d3d_device,
-					0,
-					D3DTSS_ADDRESSU,
-					D3DTADDRESS_WRAP);
-				IDirect3DDevice8_SetTextureStageState(
-					global_d3d_device,
-					0,
-					D3DTSS_ADDRESSV,
-					D3DTADDRESS_WRAP);
-				IDirect3DDevice8_SetTextureStageState(
-					global_d3d_device,
-					0,
-					D3DTSS_MAGFILTER,
-					D3DTEXF_LINEAR);
-				IDirect3DDevice8_SetTextureStageState(
-					global_d3d_device,
-					0,
-					D3DTSS_MINFILTER,
-					D3DTEXF_LINEAR);
-				IDirect3DDevice8_SetTextureStageState(
-					global_d3d_device,
-					0,
-					D3DTSS_MIPFILTER,
-					D3DTEXF_LINEAR);
-			}
-
 			{
 				real_vector4d vertex_constants[3] =
 				{
@@ -512,18 +546,28 @@ void _rasterizer_environment_shadow_model_draw(
 					global_frame_parameters.game_time_sec,
 					&vertex_constants[1],
 					&vertex_constants[2]);
-				IDirect3DDevice8_SetVertexShaderConstant(
-					global_d3d_device,
-					-84,
-					vertex_constants,
-					NUMBEROF(vertex_constants));
-			}
 
-			rasterizer_draw_static_triangles_static_vertices(
-				triangle_buffer,
-				0,
-				triangle_buffer->count,
-				vertex_buffer);
+				/* port: recorded (rasterizer_environment_shadow_cast) */
+				if (!shadow_recording ||
+					!shadow_record_draw(
+						TEST_FLAG(model->flags, _shader_model_two_sided_bit),
+						!TEST_FLAG(model->flags, _shader_model_not_alpha_tested_bit),
+						model->base_map.index,
+						bitmap_index,
+						triangle_buffer,
+						vertex_buffer,
+						vertex_constants))
+				{
+					shadow_model_draw_device(
+						TEST_FLAG(model->flags, _shader_model_two_sided_bit),
+						!TEST_FLAG(model->flags, _shader_model_not_alpha_tested_bit),
+						model->base_map.index,
+						bitmap_index,
+						triangle_buffer,
+						vertex_buffer,
+						vertex_constants);
+				}
+			}
 
 			if (rasterizer_debug_options.statistics_mode ==
 				_rasterizer_statistics_mode_enabled)
@@ -571,6 +615,21 @@ void _rasterizer_environment_shadow_end(
 				TRUE);
 			shadow_restored = TRUE;
 		}
+
+		/* port: its map kept, once blurred (rasterizer_environment_shadow_cast) */
+		if (shadow_store_entry != NONE &&
+			(!rasterizer_debug_options.shadow_convolution_enabled || shadow_convolved || shadow_setup))
+		{
+			D3DSurface *primary;
+			D3DSurface *secondary;
+
+			rasterizer_shadow_maps_get(&primary, &secondary);
+			halo_shadow_map_copy(
+				rasterizer_debug_options.shadow_convolution_enabled ? secondary : primary,
+				shadow_cache[shadow_store_entry].surface);
+			shadow_cache[shadow_store_entry].size = shadow_cache[shadow_store_entry].recorded_size;
+		}
+		shadow_store_entry = NONE;
 	}
 
 	return;
@@ -611,6 +670,14 @@ void _rasterizer_environment_shadow_draw(
 				0,
 				(rasterizer_debug_options.shadow_convolution_enabled != FALSE) + 2,
 				FALSE);
+			/* port: a kept shadow's kept map (rasterizer_environment_shadow_cast) */
+			if (shadow_cache_entry != NONE)
+			{
+				IDirect3DDevice8_SetTexture(
+					global_d3d_device,
+					0,
+					(D3DBaseTexture *)shadow_cache[shadow_cache_entry].texture);
+			}
 			IDirect3DDevice8_SetTextureStageState(
 				global_d3d_device,
 				0,
@@ -898,6 +965,8 @@ boolean rasterizer_environment_shadow_slot(
 	shadow_slots[shadow_slot].restored = shadow_restored;
 	shadow_slots[shadow_slot].active = shadow_active;
 	shadow_slots[shadow_slot].convolved = shadow_convolved;
+	shadow_slots[shadow_slot].cache_entry = shadow_cache_entry;
+	shadow_slots[shadow_slot].store_entry = shadow_store_entry;
 	shadow_slot = slot;
 	local_shadow_matrix = shadow_slots[slot].matrix;
 	local_shadow_color = shadow_slots[slot].color;
@@ -907,6 +976,8 @@ boolean rasterizer_environment_shadow_slot(
 	shadow_restored = shadow_slots[slot].restored;
 	shadow_active = shadow_slots[slot].active;
 	shadow_convolved = shadow_slots[slot].convolved;
+	shadow_cache_entry = shadow_slots[slot].cache_entry;
+	shadow_store_entry = shadow_slots[slot].store_entry;
 
 	return TRUE;
 }
@@ -967,7 +1038,379 @@ void rasterizer_environment_shadows_convolve(
 	return;
 }
 
+/* port: the shadow cache. Most shadows are drawn as they were the pass
+before: their objects stand still, and their silhouettes are drawn by the
+same draws from the same nodes. Each shadow's silhouette is recorded as it
+is begun, not drawn (rasterizer_environment_shadow_begin and the model hooks
+above): the values its draws are made from, the triangle and vertex buffers
+by address and contents, the nodes' matrices, the texture's constants, and
+the maps' size. Once its object's list has been drawn, a shadow whose record
+is a kept map's, byte for byte, is drawn from that map, which the same draws
+drew and blurred (halo_shadow_map_copy); its own maps are neither drawn nor
+blurred. Any other is drawn as it was recorded, and its map is kept if its
+object's record was the same the pass before. The kept maps are forgotten
+with the map's data (rasterizer_environment_shadow_cache_flush) and when the
+shadow maps' size changes. The pixels are the same: a kept map is the map
+the same draws draw. */
+void rasterizer_environment_shadow_cast(
+	long object_index)
+{
+	struct shadow_record_header const *header = (struct shadow_record_header const *)shadow_record;
+	unsigned long hash = 2166136261UL;
+	long index;
+	short entry;
+	short store = NONE;
+
+	if (!shadow_recording)
+	{
+		return;
+	}
+	if (header->scale != shadow_cache_scale)
+	{
+		rasterizer_environment_shadow_cache_flush();
+		shadow_cache_scale = header->scale;
+	}
+	for (index = 0; index < shadow_record_size; index++)
+	{
+		hash = (hash ^ (unsigned long)shadow_record[index]) * 16777619UL;
+	}
+	for (entry = 0; entry < SHADOW_CACHE_ENTRIES; entry++)
+	{
+		if (shadow_cache[entry].size == shadow_record_size && shadow_cache[entry].hash == hash &&
+			!memcmp(shadow_cache[entry].record, shadow_record, shadow_record_size * sizeof(long)))
+		{
+			break;
+		}
+	}
+	if (entry < SHADOW_CACHE_ENTRIES)
+	{
+		/* drawn from the kept map: no maps of its own to blur */
+		shadow_recording = FALSE;
+		shadow_active = FALSE;
+		shadow_convolved = TRUE;
+		shadow_cache_entry = entry;
+		shadow_cache[entry].pass = shadow_cache_pass;
+	}
+	else
+	{
+		shadow_record_replay();
+		index = object_index & (SHADOW_CACHE_OBJECTS - 1);
+		if (shadow_cache_objects[index].object_index == object_index &&
+			shadow_cache_objects[index].hash == hash &&
+			shadow_cache_objects[index].pass + 1 == shadow_cache_pass)
+		{
+			/* kept in the map no shadow of this pass is drawn from, the
+			oldest */
+			for (entry = 0; entry < SHADOW_CACHE_ENTRIES; entry++)
+			{
+				if (shadow_cache[entry].pass != shadow_cache_pass &&
+					(store == NONE || shadow_cache[entry].pass < shadow_cache[store].pass))
+				{
+					store = entry;
+				}
+			}
+			if (store != NONE && !shadow_cache[store].texture &&
+				!rasterizer_shadow_map_create(&shadow_cache[store].texture, &shadow_cache[store].surface))
+			{
+				store = NONE;
+			}
+			if (store != NONE)
+			{
+				shadow_cache[store].size = 0;
+				shadow_cache[store].hash = hash;
+				shadow_cache[store].recorded_size = shadow_record_size;
+				shadow_cache[store].pass = shadow_cache_pass;
+				csmemcpy(shadow_cache[store].record, shadow_record, shadow_record_size * sizeof(long));
+				shadow_store_entry = store;
+			}
+		}
+		shadow_cache_objects[index].object_index = object_index;
+		shadow_cache_objects[index].hash = hash;
+		shadow_cache_objects[index].pass = shadow_cache_pass;
+	}
+
+	return;
+}
+
+/* forgets the kept maps (rasterizer_dispose_from_old_map: the buffers and
+bitmaps their records name are the old map's) */
+void rasterizer_environment_shadow_cache_flush(
+	void)
+{
+	short entry;
+
+	for (entry = 0; entry < SHADOW_CACHE_ENTRIES; entry++)
+	{
+		shadow_cache[entry].size = 0;
+		shadow_cache[entry].pass = 0;
+	}
+	csmemset(shadow_cache_objects, 0, sizeof(shadow_cache_objects));
+
+	return;
+}
+
 /* ---------- private code */
+
+/* port: the device calls of rasterizer_environment_shadow_begin, which a
+recorded shadow makes as it is drawn (shadow_record_replay) */
+static void shadow_begin_device(
+	real const *vsh_constants__screenproj)
+{
+	IDirect3DDevice8_SetRenderState(global_d3d_device, D3DRS_CULLMODE, D3DCULL_CCW);
+	IDirect3DDevice8_SetRenderState(
+		global_d3d_device,
+		D3DRS_COLORWRITEENABLE,
+		D3DCOLORWRITEENABLE_RED |
+		D3DCOLORWRITEENABLE_GREEN |
+		D3DCOLORWRITEENABLE_BLUE);
+	IDirect3DDevice8_SetRenderState(global_d3d_device, D3DRS_ALPHABLENDENABLE, FALSE);
+	IDirect3DDevice8_SetRenderState(global_d3d_device, D3DRS_ALPHATESTENABLE, TRUE);
+	IDirect3DDevice8_SetRenderState(global_d3d_device, D3DRS_ALPHAREF, 0x7F);
+	IDirect3DDevice8_SetRenderState(global_d3d_device, D3DRS_ZENABLE, FALSE);
+	IDirect3DDevice8_SetRenderState(global_d3d_device, D3DRS_ZBIAS, 0);
+
+	csmemset(&pixel_shader, 0, sizeof(pixel_shader));
+	pixel_shader.texture_modes = 1;
+	pixel_shader.combiner_count = 1;
+	pixel_shader.final_combiner_inputs_abcd = 0x00000020;
+	pixel_shader.final_combiner_inputs_efg = 0x00001800;
+	rasterizer_set_pixel_shader(&pixel_shader);
+
+	IDirect3DDevice8_SetVertexShaderConstant(
+		global_d3d_device,
+		-68,
+		vsh_constants__screenproj,
+		5);
+
+	rasterizer_set_target(
+		2,
+		0,
+		rasterizer_debug_options.shadow_debug_enabled ? 0x88888888 : 0,
+		TRUE,
+		FALSE);
+	rasterizer_set_stencil_mode(0);
+
+	return;
+}
+
+/* port: the device calls of rasterizer_environment_shadow_model_draw, which
+a recorded shadow makes as it is drawn (shadow_record_replay) */
+static void shadow_model_draw_device(
+	boolean two_sided,
+	boolean alpha_tested,
+	long base_map_index,
+	short bitmap_index,
+	struct triangle_buffer const *triangle_buffer,
+	struct vertex_buffer const *vertex_buffer,
+	real_vector4d const *vertex_constants)
+{
+	if (two_sided)
+	{
+		IDirect3DDevice8_SetRenderState(global_d3d_device, D3DRS_CULLMODE, D3DCULL_NONE);
+	}
+	else
+	{
+		IDirect3DDevice8_SetRenderState(global_d3d_device, D3DRS_CULLMODE, D3DCULL_CCW);
+	}
+	rasterizer_set_vertex_shader_permutation(
+		_shadow_model_vertex_shader_index,
+		vertex_buffer->type,
+		0);
+
+	if (!alpha_tested)
+	{
+		IDirect3DDevice8_SetRenderState(global_d3d_device, D3DRS_PSTEXTUREMODES, 0);
+	}
+	else
+	{
+		IDirect3DDevice8_SetRenderState(global_d3d_device, D3DRS_PSTEXTUREMODES, 1);
+		rasterizer_set_texture(
+			0,
+			0,
+			1,
+			base_map_index,
+			bitmap_index);
+		IDirect3DDevice8_SetTextureStageState(
+			global_d3d_device,
+			0,
+			D3DTSS_ADDRESSU,
+			D3DTADDRESS_WRAP);
+		IDirect3DDevice8_SetTextureStageState(
+			global_d3d_device,
+			0,
+			D3DTSS_ADDRESSV,
+			D3DTADDRESS_WRAP);
+		IDirect3DDevice8_SetTextureStageState(
+			global_d3d_device,
+			0,
+			D3DTSS_MAGFILTER,
+			D3DTEXF_LINEAR);
+		IDirect3DDevice8_SetTextureStageState(
+			global_d3d_device,
+			0,
+			D3DTSS_MINFILTER,
+			D3DTEXF_LINEAR);
+		IDirect3DDevice8_SetTextureStageState(
+			global_d3d_device,
+			0,
+			D3DTSS_MIPFILTER,
+			D3DTEXF_LINEAR);
+	}
+
+	IDirect3DDevice8_SetVertexShaderConstant(
+		global_d3d_device,
+		-84,
+		vertex_constants,
+		3);
+
+	rasterizer_draw_static_triangles_static_vertices(
+		triangle_buffer,
+		0,
+		triangle_buffer->count,
+		vertex_buffer);
+
+	return;
+}
+
+/* port: the shadow cache's record (rasterizer_environment_shadow_cast) */
+
+/* begins the record of a shadow's silhouette */
+static void shadow_record_begin(
+	real const *vsh_constants__screenproj)
+{
+	struct shadow_record_header *header = (struct shadow_record_header *)shadow_record;
+
+	csmemset(shadow_record, 0, SHADOW_RECORD_LONGS(sizeof(*header)) * sizeof(long));
+	header->scale = halo_shadow_map_scale();
+	header->debug = rasterizer_debug_options.shadow_debug_enabled != FALSE;
+	header->convolution = rasterizer_debug_options.shadow_convolution_enabled != FALSE;
+	csmemcpy(header->screenproj, vsh_constants__screenproj, sizeof(header->screenproj));
+	shadow_record_size = SHADOW_RECORD_LONGS(sizeof(*header));
+	shadow_recording = TRUE;
+
+	return;
+}
+
+/* the next size bytes of the record, cleared; NULL if they do not fit, and
+the shadow drawn as it was recorded, to be drawn on directly */
+static void *shadow_record_reserve(
+	long size)
+{
+	long count = SHADOW_RECORD_LONGS(size);
+	long *item;
+
+	if (shadow_record_size + count > SHADOW_RECORD_MAXIMUM)
+	{
+		shadow_record_replay();
+		return NULL;
+	}
+	item = &shadow_record[shadow_record_size];
+	csmemset(item, 0, count * sizeof(long));
+	shadow_record_size += count;
+
+	return item;
+}
+
+/* records a model's nodes; FALSE if they are not recorded, to be given to the
+device directly */
+static boolean shadow_record_model(
+	struct render_skinning const *skinning)
+{
+	struct shadow_record_model *model;
+	long count = skinning->node_matrices ? skinning->node_matrix_count : 0;
+
+	if (count <= 0 || count > MAXIMUM_NODES_PER_MODEL)
+	{
+		shadow_record_replay();
+		return FALSE;
+	}
+	model = shadow_record_reserve(sizeof(*model) + count * sizeof(real_matrix4x3));
+	if (!model)
+	{
+		return FALSE;
+	}
+	model->type = _shadow_record_model;
+	model->node_matrix_count = count;
+	csmemcpy(model + 1, skinning->node_matrices, count * sizeof(real_matrix4x3));
+
+	return TRUE;
+}
+
+/* records a draw; FALSE if it is not recorded, to be drawn directly */
+static boolean shadow_record_draw(
+	boolean two_sided,
+	boolean alpha_tested,
+	long base_map_index,
+	short bitmap_index,
+	struct triangle_buffer const *triangle_buffer,
+	struct vertex_buffer const *vertex_buffer,
+	real_vector4d const *vertex_constants)
+{
+	struct shadow_record_draw *draw = shadow_record_reserve(sizeof(*draw));
+
+	if (!draw)
+	{
+		return FALSE;
+	}
+	draw->type = _shadow_record_draw;
+	draw->two_sided = two_sided != FALSE;
+	draw->alpha_tested = alpha_tested != FALSE;
+	/* (the texture is drawn with only where it is alpha tested) */
+	if (alpha_tested)
+	{
+		draw->base_map_index = base_map_index;
+		draw->bitmap_index = bitmap_index;
+	}
+	draw->triangle_buffer_address = triangle_buffer;
+	draw->vertex_buffer_address = vertex_buffer;
+	csmemcpy(&draw->triangle_buffer, triangle_buffer, sizeof(draw->triangle_buffer));
+	csmemcpy(&draw->vertex_buffer, vertex_buffer, sizeof(draw->vertex_buffer));
+	csmemcpy(draw->vertex_constants, vertex_constants, sizeof(draw->vertex_constants));
+
+	return TRUE;
+}
+
+/* draws the shadow's silhouette as it was recorded, by the device calls it
+would have made, and ends the record. The buffers are drawn from where they
+were found, which are the same buffers in the same frame */
+static void shadow_record_replay(
+	void)
+{
+	struct shadow_record_header const *header = (struct shadow_record_header const *)shadow_record;
+	long offset = SHADOW_RECORD_LONGS(sizeof(*header));
+
+	shadow_recording = FALSE;
+	shadow_begin_device(header->screenproj);
+	while (offset < shadow_record_size)
+	{
+		if (shadow_record[offset] == _shadow_record_model)
+		{
+			struct shadow_record_model const *model = (struct shadow_record_model const *)&shadow_record[offset];
+			struct render_skinning skinning;
+
+			skinning.node_matrices = (real_matrix4x3 const *)(model + 1);
+			skinning.node_matrix_count = (short)model->node_matrix_count;
+			rasterizer_set_model_skinning(&skinning);
+			offset += SHADOW_RECORD_LONGS(sizeof(*model) + model->node_matrix_count * sizeof(real_matrix4x3));
+		}
+		else
+		{
+			struct shadow_record_draw const *draw = (struct shadow_record_draw const *)&shadow_record[offset];
+
+			shadow_model_draw_device(
+				(boolean)draw->two_sided,
+				(boolean)draw->alpha_tested,
+				draw->base_map_index,
+				(short)draw->bitmap_index,
+				draw->triangle_buffer_address,
+				draw->vertex_buffer_address,
+				draw->vertex_constants);
+			offset += SHADOW_RECORD_LONGS(sizeof(*draw));
+		}
+	}
+
+	return;
+}
 
 /* port: widen, the further passes of a larger map too */
 static void rasterizer_shadow_convolve(

@@ -3810,6 +3810,39 @@ boolean rasterizer_shadow_maps_select(
 	return TRUE;
 }
 
+/* port: a map made as the shadow maps are, for the shadow cache
+(rasterizer_xbox_shadows.c); FALSE if it could not be made */
+boolean rasterizer_shadow_map_create(
+	D3DTexture **texture,
+	D3DSurface **surface)
+{
+	*texture = NULL;
+	*surface = NULL;
+	if (IDirect3DDevice8_CreateTexture(
+			global_d3d_device,
+			RASTERIZER_TARGET_SHADOW_PRIMARY_SIZE,
+			RASTERIZER_TARGET_SHADOW_PRIMARY_SIZE,
+			1,
+			D3DUSAGE_RENDERTARGET,
+			D3DFMT_R5G6B5,
+			D3DPOOL_DEFAULT,
+			texture) < 0 ||
+		!*texture ||
+		IDirect3DTexture8_GetSurfaceLevel(*texture, 0, surface) < 0 ||
+		!*surface)
+	{
+		if (*texture)
+		{
+			IDirect3DTexture8_Release(*texture);
+		}
+		*texture = NULL;
+		*surface = NULL;
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
 /* port: the shadow maps selected */
 void rasterizer_shadow_maps_get(
 	D3DSurface **primary,
