@@ -40,6 +40,18 @@ static GLenum address_mode(DWORD mode)
 	return mode == D3DTADDRESS_BORDER ? (border_clamp ? GL_CLAMP_TO_BORDER : GL_CLAMP_TO_EDGE) :
 		mode == D3DTADDRESS_CLAMP ? GL_CLAMP_TO_EDGE : GL_REPEAT;
 }
+/* (without the render thread: the renderer reads the game's states) */
+static DWORD (*texture_state)[D3DTSS_MAX] = D3D__TextureState;
+static BOOL queued(void)
+{
+	return FALSE;
+}
+static void *render_thread_record(void (*command)(void *), unsigned long size)
+{
+	(void)command;
+	(void)size;
+	return NULL;
+}
 
 /* the game: the shadow's matrix, the globals' fade and the debug option */
 typedef union { real n[2]; struct { real x, y; }; } real_point2d;

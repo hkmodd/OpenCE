@@ -20,7 +20,7 @@ NEGATIVE_CONTROLS = {
     "slab-below": (("radius * -0.525f", "radius * -0.4f"), "exact"),
     "narrow-prism": (("radius * 1.05f", "radius * 0.95f"), "exact"),
     "ignores-the-fade": (("!shadow_projection_fade_saturated()", "FALSE"), "fade"),
-    "ignores-the-border": (("D3D__TextureState[0][D3DTSS_BORDERCOLOR] != 0 ||", ""), "states"),
+    "ignores-the-border": (("texture_state[0][D3DTSS_BORDERCOLOR] != 0 ||", ""), "states"),
     "cuts-in-front-only": (("if (!(w > 1e-3f))\n\t\t\treturn;", "if (!(w > 1e-3f))\n\t\t\tcontinue;"), "inside"),
 }
 
