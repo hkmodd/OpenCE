@@ -146,6 +146,10 @@ static const struct config_setting config_settings[] =
 		"one instanced draw each, instead of one draw an object: the driver's\n"
 		"cost is per draw. Opaque parts only; parts at exactly the same depth\n"
 		"may be drawn in another order." },
+	{ "display.even_frames", _config_boolean, "false", "HALO_EVEN_FRAMES", _environment_value, _platform_desktop,
+		"With display.max_fps's limit, hold each finished frame until its time,\n"
+		"then show it: frames are shown evenly apart (smoother with G-Sync or\n"
+		"FreeSync) but up to a frame later. false shows each frame at once." },
 	{ "display.anti_aliasing", _config_string, "\"off\"", "HALO_ANTI_ALIASING", _environment_value, _platform_all,
 		"Smoothing of jagged edges, which the Xbox did not have: \"off\"; \"fxaa\"\n"
 		"or \"smaa\" smooth the 3D view once it is drawn (the HUD and menus stay\n"
