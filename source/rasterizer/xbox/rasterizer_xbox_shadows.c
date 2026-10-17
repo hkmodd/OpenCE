@@ -174,9 +174,11 @@ typedef char verify_rasterizer_shadows_shader_model_animation_offset[
 	offsetof(struct shader_model_definition, animation) == 0xFC ? 1 : -1];
 
 /* port: the shadow cache (rasterizer_environment_shadow_cast): a record's
-longs at most, the maps kept, the objects whose last record is known */
+longs at most, the maps kept, the objects whose last record is known. A
+crowded scene casts over 60 shadows a pass, most of them standing; each map
+is made when it is first kept (4 MB each at display.shadow_resolution 1024) */
 #define SHADOW_RECORD_MAXIMUM 8192
-#define SHADOW_CACHE_ENTRIES 32
+#define SHADOW_CACHE_ENTRIES 128
 #define SHADOW_CACHE_OBJECTS 1024
 #define SHADOW_RECORD_LONGS(size) (((size) + sizeof(long) - 1) / sizeof(long))
 
