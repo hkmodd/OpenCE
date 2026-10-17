@@ -90,6 +90,7 @@ symbols in this file:
 #include "rasterizer/xbox/rasterizer_xbox.h"
 #include "rasterizer/xbox/rasterizer_xbox_pixel_shader.h"
 #include "rasterizer/xbox/rasterizer_xbox_draw_primitives.h"
+#include "shadow_projection.h" /* port: port/linux/game/shadow_projection.c */
 
 /* ---------- constants */
 
@@ -908,11 +909,14 @@ void _rasterizer_environment_shadow_draw(
 		}
 
 		rasterizer_set_stencil_mode(RASTERIZER_STENCIL_MODE_REJECT);
+		/* port: only the pixels the projection can change */
+		shadow_projection_scissor_begin(&local_shadow_matrix, local_object_bounding_radius);
 		rasterizer_draw_dynamic_triangles_static_vertices(
 			dynamic_triangle_buffer_index,
 			first_triangle_index,
 			triangle_count,
 			vertex_buffer);
+		shadow_projection_scissor_end(); /* port */
 
 		if (rasterizer_debug_options.statistics_mode ==
 			_rasterizer_statistics_mode_enabled)
