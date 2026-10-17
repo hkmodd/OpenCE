@@ -5141,6 +5141,100 @@ static GLenum blend_equation(DWORD operation)
 	}
 }
 
+/* a draw's volume (halo_scissor_volume): the world-space corners of a box
+outside which the draw leaves every pixel as it was */
+static struct
+{
+	BOOL set;
+	float corners[8][3];
+} scissor_volume;
+
+void halo_scissor_volume(const float *corners)
+{
+	scissor_volume.set = corners != NULL;
+	if (corners)
+		memcpy(scissor_volume.corners, corners, sizeof(scissor_volume.corners));
+}
+
+/* cuts the scissor to the volume's rectangle on the screen, each corner
+placed as the vertex programs place a position (through c[-96]..c[-93], then
+c[-38] and c[-37] and the epilogue), three pixels wider for the difference in
+rounding; uncut when a corner is not in front of the eye. The draws it is set
+for (port/linux/game/shadow_projection.c) leave the pixels outside their
+volume as they were through the border of their first stage's texture and
+the clamped edge of their second's, so it cuts only while those stages are
+addressed so: an empty cut leaves one pixel, as a scissor of no size would
+turn the test off */
+static void scissor_volume_cut(GLint *scissor)
+{
+	const float (*clip)[4] = (const float (*)[4])device.constants[XGPU_VERTEX_CONSTANT_BIAS - 96];
+	const float *screen_scale = device.constants[XGPU_VERTEX_CONSTANT_BIAS - 38];
+	const float *screen_offset = device.constants[XGPU_VERTEX_CONSTANT_BIAS - 37];
+	float scale_x = device.viewport_scale[0] != 0.0f ? device.viewport_scale[0] : 1.0f;
+	float scale_y = device.viewport_scale[1] != 0.0f ? device.viewport_scale[1] : 1.0f;
+	float left = (float)scissor[0], top = (float)scissor[1];
+	float right = left + (float)scissor[2], bottom = top + (float)scissor[3];
+	float x0 = right, y0 = bottom, x1 = left, y1 = top;
+	GLint cut[4];
+	int corner;
+
+	if ((device.shader_constant_mode & D3DSCM_NORESERVEDCONSTANTS) ||
+		address_mode(D3D__TextureState[0][D3DTSS_ADDRESSU]) != GL_CLAMP_TO_BORDER ||
+		address_mode(D3D__TextureState[0][D3DTSS_ADDRESSV]) != GL_CLAMP_TO_BORDER ||
+		D3D__TextureState[0][D3DTSS_BORDERCOLOR] != 0 ||
+		D3D__TextureState[1][D3DTSS_ADDRESSU] != D3DTADDRESS_CLAMP ||
+		D3D__TextureState[1][D3DTSS_ADDRESSV] != D3DTADDRESS_CLAMP)
+	{
+		return;
+	}
+	for (corner = 0; corner < 8; corner++)
+	{
+		const float *p = scissor_volume.corners[corner];
+		float x = clip[0][0] * p[0] + clip[0][1] * p[1] + clip[0][2] * p[2] + clip[0][3];
+		float y = clip[1][0] * p[0] + clip[1][1] * p[1] + clip[1][2] * p[2] + clip[1][3];
+		float w = clip[3][0] * p[0] + clip[3][1] * p[1] + clip[3][2] * p[2] + clip[3][3];
+
+		/* (w is linear, so every point of the box is in front with its corners) */
+		if (!(w > 1e-3f))
+			return;
+		x = (x / w * screen_scale[0] + screen_offset[0] + 0.5f + (float)UI_OFFSET - device.viewport_offset[0]) / scale_x;
+		y = (y / w * screen_scale[1] + screen_offset[1] + 0.5f - device.viewport_offset[1]) / scale_y;
+		/* the viewport's pixels, rows from the top (glClipControl, or the
+		epilogue on ES) */
+		x = (float)gl_state.viewport[0] + (x + 1.0f) * 0.5f * (float)gl_state.viewport[2];
+		y = (float)gl_state.viewport[1] + (1.0f - y) * 0.5f * (float)gl_state.viewport[3];
+		if (!(x == x && y == y))
+			return;
+		if (x0 > x) x0 = x;
+		if (x1 < x) x1 = x;
+		if (y0 > y) y0 = y;
+		if (y1 < y) y1 = y;
+	}
+	/* (in the scissor first, so that the conversions hold the values: each
+	rounds toward zero, which three pixels more than covers) */
+	x0 = x0 < left ? left : x0 > right ? right : x0;
+	y0 = y0 < top ? top : y0 > bottom ? bottom : y0;
+	x1 = x1 < left ? left : x1 > right ? right : x1;
+	y1 = y1 < top ? top : y1 > bottom ? bottom : y1;
+	cut[0] = (GLint)x0 - 3;
+	cut[1] = (GLint)y0 - 3;
+	cut[2] = (GLint)x1 + 3;
+	cut[3] = (GLint)y1 + 3;
+	if (cut[0] < scissor[0]) cut[0] = scissor[0];
+	if (cut[1] < scissor[1]) cut[1] = scissor[1];
+	if (cut[2] > scissor[0] + scissor[2]) cut[2] = scissor[0] + scissor[2];
+	if (cut[3] > scissor[1] + scissor[3]) cut[3] = scissor[1] + scissor[3];
+	if (cut[2] <= cut[0] || cut[3] <= cut[1])
+	{
+		cut[2] = cut[0] + 1;
+		cut[3] = cut[1] + 1;
+	}
+	scissor[0] = cut[0];
+	scissor[1] = cut[1];
+	scissor[2] = cut[2] - cut[0];
+	scissor[3] = cut[3] - cut[1];
+}
+
 static void apply_raster_state(BOOL has_depth)
 {
 	DWORD *rs = render_state;
@@ -5165,6 +5259,8 @@ static void apply_raster_state(BOOL has_depth)
 	what keeps a split-screen window's geometry from bleeding across the divider */
 	/* (glScissor takes the corner and the size, as glViewport does) */
 	memcpy(scissor, viewport, sizeof(scissor));
+	if (scissor_volume.set)
+		scissor_volume_cut(scissor);
 	if (memcmp(gl_state.scissor, scissor, sizeof(scissor)))
 	{
 		memcpy(gl_state.scissor, scissor, sizeof(scissor));
