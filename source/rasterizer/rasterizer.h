@@ -602,6 +602,11 @@ boolean rasterizer_environment_shadow_slot(
 	short slot);
 void rasterizer_environment_shadows_convolve(
 	short count);
+/* port: the shadow cache (rasterizer_xbox_shadows.c) */
+void rasterizer_environment_shadow_cast(
+	long object_index);
+void rasterizer_environment_shadow_cache_flush(
+	void);
 void rasterizer_environment_diffuse_textures_end(
 	void);
 void rasterizer_environment_diffuse_texture_draw(

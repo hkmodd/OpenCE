@@ -59,6 +59,7 @@ void rasterizer_dispose_from_old_map(
 {
 	rasterizer_screen_effects_dispose_from_old_map();
 	rasterizer_text_cache_flush();
+	rasterizer_environment_shadow_cache_flush(); /* port */
 	global_rasterizer_data = NULL;
 
 	return;

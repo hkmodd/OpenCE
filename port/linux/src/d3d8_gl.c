@@ -1655,12 +1655,16 @@ static void shadow_layers_forget(void)
 /* a new shadow map's texture made a view of a free layer of the array, which
 is made the first time, and again when the maps' size changed and the maps
 of the size before are gone; a map that gets no layer keeps its texture */
+static BOOL shadow_layer_refused;
+
 static void shadow_layer_take(struct render_target_entry *entry)
 {
 	GLenum draw_buffer = GL_COLOR_ATTACHMENT0;
 	int layer;
 
-	if (!shadow_layers.supported)
+	/* (the shadow cache's maps, which are copied into, not drawn into:
+	shadow_map_copy_command) */
+	if (!shadow_layers.supported || shadow_layer_refused)
 		return;
 	if (shadow_layers.array && !shadow_layers.taken &&
 		(shadow_layers.width != entry->target.gl_width || shadow_layers.height != entry->target.gl_height))
@@ -7175,6 +7179,68 @@ void halo_shadow_layers(short count, struct D3DSurface *const *sources, struct D
 		memcpy(render_thread_record(shadow_layers_command, sizeof(request)), &request, sizeof(request));
 	else
 		shadow_layers_requested = request;
+#endif
+}
+
+/* ---------- shadow cache */
+
+/* The shadow cache (rasterizer_xbox_shadows.c) keeps a blurred shadow map
+that the same draws would draw again: a copy of it, in a map the game made
+as it makes the shadow maps, which gets no layer of the array (it is never
+drawn into) */
+#ifndef HALO_GLES
+struct shadow_map_copy
+{
+	D3DSurface source;
+	D3DSurface destination;
+};
+
+static void shadow_map_copy_command(void *payload)
+{
+	struct shadow_map_copy *copy = payload;
+	struct render_target_entry *source = render_target_get(&copy->source);
+	struct render_target_entry *destination;
+
+	shadow_layer_refused = TRUE;
+	destination = render_target_get(&copy->destination);
+	shadow_layer_refused = FALSE;
+	if (!source || !destination || source == destination || source->target.depth || destination->target.depth ||
+		source->target.samples || source->target.gl_width != destination->target.gl_width ||
+		source->target.gl_height != destination->target.gl_height)
+	{
+		return;
+	}
+	glCopyImageSubData(source->target.texture, GL_TEXTURE_2D, 0, 0, 0, 0,
+		destination->target.texture, GL_TEXTURE_2D, 0, 0, 0, 0,
+		(GLsizei)source->target.gl_width, (GLsizei)source->target.gl_height, 1);
+	destination->last_rendered = device.frame + 1;
+	destination->target.written = ++render_target_write_serial;
+}
+#endif
+
+unsigned char halo_shadow_cache_supported(void)
+{
+#ifdef HALO_GLES
+	return 0;
+#else
+	return 1;
+#endif
+}
+
+void halo_shadow_map_copy(struct D3DSurface *source, struct D3DSurface *destination)
+{
+#ifndef HALO_GLES
+	struct shadow_map_copy copy;
+
+	copy.source = *source;
+	copy.destination = *destination;
+	if (queued())
+		memcpy(render_thread_record(shadow_map_copy_command, sizeof(copy)), &copy, sizeof(copy));
+	else
+		shadow_map_copy_command(&copy);
+#else
+	(void)source;
+	(void)destination;
 #endif
 }
 
