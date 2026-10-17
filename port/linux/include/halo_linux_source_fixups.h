@@ -85,6 +85,11 @@ source map into its destination (count 0 for none) */
 #define HALO_SHADOW_LAYERS_MAXIMUM 8
 unsigned char halo_shadow_layers_supported(void);
 void halo_shadow_layers(short count, struct D3DSurface *const *sources, struct D3DSurface *const *destinations);
+/* the shadow cache (rasterizer_xbox_shadows.c): nonzero where a shadow map
+can be copied; a copy of a shadow map, as it is when the copy is made,
+into another the game made the same way */
+unsigned char halo_shadow_cache_supported(void);
+void halo_shadow_map_copy(struct D3DSurface *source, struct D3DSurface *destination);
 /* while TRUE, drawing shifts right to center 640-column layouts */
 void halo_screen_ui_offset(unsigned char centered);
 /* names a model lighting vertex program, whose draws can be lit for each

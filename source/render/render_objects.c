@@ -1193,6 +1193,7 @@ static void render_object(
 				if (render_object_shadow_begin(data, darkness_fraction * size_fraction))
 				{
 					render_object_list(data, NULL, data->object_index);
+					rasterizer_environment_shadow_cast(data->object_index); /* port */
 					shadow_batch[shadow_batch_count++] = *data;
 					if (shadow_batch_count >= (halo_shadow_layers_supported() ? RASTERIZER_SHADOW_BATCH_MAXIMUM : 1))
 					{
