@@ -127,6 +127,10 @@ boolean rasterizer_shadow_maps_select(
 void rasterizer_shadow_maps_get(
 	D3DSurface **primary,
 	D3DSurface **secondary);
+/* port: a map made as the shadow maps are (the shadow cache) */
+boolean rasterizer_shadow_map_create(
+	D3DTexture **texture,
+	D3DSurface **surface);
 
 /* ---------- prototypes/RASTERIZER_XBOX_SHADOWS.C */
 
