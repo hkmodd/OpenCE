@@ -46,9 +46,11 @@ LINES = {
         "Chiunque può vedere la partita e unirsi: appare\\nnell'elenco server di tutti.",
     "BORDERLESS": "SENZA BORDI",
     "BUTTON LAYOUT:": "DISPOSIZIONE PULSANTI:",
+    "BUTTON STYLE:": "STILE PULSANTI:",
     "BY SCORE": "PER PUNTEGGIO",
     "CATEGORY": "CATEGORIA",
     "CHECK FOR UPDATES:": "CERCA AGGIORNAMENTI:",
+    "CLASSIC": "CLASSICO",
     "CLOSED": "CHIUSA",
     "CO-OP CAMPAIGN": "CAMPAGNA CO-OP",
     "CO-OP OPTIONS:": "OPZIONI CO-OP:",
@@ -59,11 +61,14 @@ LINES = {
     "Choose the keys and mouse\\nbuttons for each action.\\n\\nProfile:":
         "Scegli i tasti e i pulsanti\\ndel mouse per ogni azione.\\n\\nProfilo:",
     "Choose what to show, with left and right.": "Scegli cosa mostrare con sinistra e destra.",
+    "Classic: plain Xbox buttons. Gems: shaded Xbox\\nbuttons. Dark Gems: the menu's button artwork.":
+        "Classico: pulsanti Xbox piatti. Gemme: pulsanti\\nXbox sfumati. Gemme scure: la grafica dei menu.",
     "Connecting to %s...": "Connessione a %s...",
     "Copy an invite link and PASTE LINK, or accept a Discord invite":
         "Copia un link d'invito e INCOLLA LINK, o accetta un invito Discord",
     "Could not join the game.": "Impossibile unirsi alla partita.",
     "Could not reach %s": "Impossibile raggiungere %s",
+    "DARK GEMS": "GEMME SCURE",
     "DIRECT LINK": "LINK DIRETTO",
     "DISPLAY MODE:": "MODALITÀ SCHERMO:",
     "DOWNLOAD MAPS:": "SCARICA MAPPE:",
@@ -151,6 +156,7 @@ LINES = {
         "Schermo intero occupa lo schermo; senza bordi lo\\ncopre con una finestra. F11 passa alla finestra.",
     "GAME NAME:": "NOME PARTITA:",
     "GAME TYPE:": "TIPO PARTITA:",
+    "GEMS": "GEMME",
     "GLOW INTENSITY:": "INTENSITÀ BAGLIORE:",
     "GRAPHICS:": "GRAFICA:",
     "HELP SEND MAPS:": "AIUTA A INVIARE:",
@@ -169,6 +175,8 @@ LINES = {
     "How fast the view turns up and down; Same\\nturns it as fast as side to side.":
         "Velocità con cui la visuale gira in alto e in basso;\\nUguale la gira come di lato.",
     "How large the players' names are drawn.": "La dimensione dei nomi dei giocatori.",
+    "How sounds are converted to the output's rate:\\nsinc is clean; linear is brighter, with aliasing.":
+        "Conversione dei suoni alla frequenza d'uscita:\\nsinc è pulito; lineare è più vivo, con aliasing.",
     "IN-GAME HELP:": "AIUTO IN GIOCO:",
     "INDICATOR OPTIONS:": "OPZIONI INDICATORE:",
     "INPUT DEVICE:": "DISPOSITIVO DI INGRESSO:",
@@ -205,6 +213,7 @@ LINES = {
     "LEGACY SOUTHPAW": "CLASSICA MANCINA",
     "LEGS:": "GAMBE:",
     "LIGHT SHOW": "SPETTACOLO DI LUCI",
+    "LINEAR": "LINEARE",
     "LISTING:": "VISIBILITÀ:",
     "LIVE": "IN CORSO",
     "LOADOUT:": "DOTAZIONE:",
@@ -226,6 +235,8 @@ LINES = {
     "MAP SHARING:": "CONDIVISIONE MAPPE:",
     "MAP WEAPONS:": "ARMI DELLA MAPPA:",
     "MAXIMUM PLAYERS:": "GIOCATORI MAX:",
+    "MOVE DOWN": "SPOSTA GIÙ",
+    "MOVE UP": "SPOSTA SU",
     "MULTIPLIER:": "MOLTIPLICATORE:",
     "Moving the mouse forward looks down.": "Spostando il mouse in avanti si guarda in basso.",
     "NATIVE": "NATIVA",
@@ -313,6 +324,7 @@ LINES = {
         "Premi un tasto, un pulsante del mouse o gira la\\nrotella... Esc annulla, Canc lo cancella.",
     "Pushing the right stick up looks down.": "Spingendo in su la levetta destra si guarda in basso.",
     "RANDOM": "CASUALE",
+    "RESAMPLER:": "RICAMPIONAMENTO:",
     "RESOLUTION SCALING:": "SCALA RISOLUZIONE:",
     "REVERB:": "RIVERBERO:",
     "ROCKET LAUNCHER": "LANCIARAZZI",
@@ -332,6 +344,7 @@ LINES = {
     "SINGLEPLAYER": "GIOCATORE SINGOLO",
     "SMOOTH MOTION:": "MOVIMENTO FLUIDO:",
     "SNIPER RIFLE": "FUCILE DI PRECISIONE",
+    "SOUND PROCESSING:": "ELABORAZIONE AUDIO:",
     "SOUND:": "AUDIO:",
     "SOUTHPAW": "MANCINA",
     "SPECTATING %.12s   (A: NEXT)\\n%s": "OSSERVI %.12s   (A: SUCCESSIVO)\\n%s",
@@ -393,6 +406,8 @@ LINES = {
         "Il nome della partita negli elenchi delle partite.\\nInvio lo cambia.",
     "The new player's profile.": "Il profilo del nuovo giocatore.",
     "The other players' voices.": "Le voci degli altri giocatori.",
+    "The reverb, and how sounds are converted to the\\noutput's rate.":
+        "Il riverbero e la conversione dei suoni alla\\nfrequenza d'uscita.",
     "The server browser is off (network.public_lobby)": "L'elenco server è disattivato (network.public_lobby)",
     "The size objects' shadows are drawn at: 128 as on\\nthe Xbox; larger for smoother, as soft, edges.":
         "La risoluzione delle ombre degli oggetti: 128 come\\nsu Xbox; di più per bordi più lisci, ugualmente morbidi.",
@@ -480,6 +495,7 @@ LINES = {
     "GAME LOBBY": "LOBBY PARTITA",
     "CO-OP OPTIONS": "OPZIONI COOPERATIVA",
     "VOICE AND VOTING": "VOCE E VOTAZIONI",
+    "MODS": "MOD",
     "Left Shift": "MAIUSC SX",
     "Right Shift": "MAIUSC DX",
     "Left Ctrl": "CTRL SX",
@@ -501,7 +517,7 @@ LINES = {
 SAME = {
     "12 KBPS", "16 KBPS", "24 KBPS", "32 KBPS", "48 KBPS", "64 KBPS", "8 KBPS", "1 MB/S", "128 KB/S", "2 MB/S",
     "256 KB/S", "4 MB/S", "512 KB/S", "64 KB/S", "8 MB/S", "ANTI-ALIASING:", "AUTO", "CO-OP", "FOV:", "FXAA", "MSAA 2X",
-    "MSAA 4X", "MSAA 8X", "PASSWORD", "PASSWORD:", "SMAA", "SSAA 2X", "V-SYNC:", ", password",
+    "MSAA 4X", "MSAA 8X", "PASSWORD", "PASSWORD:", "SINC", "SMAA", "SSAA 2X", "V-SYNC:", ", password",
 }
 
 # the PC version's strings the Italian edition's loc.map says wider than
