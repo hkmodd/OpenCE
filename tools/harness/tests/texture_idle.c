@@ -11,6 +11,7 @@ struct texture_entry
 	struct { unsigned long width, height; } description;
 	unsigned long address, generation, last_used_frame;
 	GLuint hud_upscale;
+	struct hud_hires_upscale_job *hud_upscale_job;
 };
 #include "config.inc"
 static struct texture_entry *texture_buckets[TEXTURE_BUCKET_COUNT];
@@ -25,6 +26,8 @@ static int hud_hires_bitmap_affected(unsigned long address, long width, long hei
 {
 	return 0;
 }
+/* no upscale is ever under way here */
+static void hud_hires_upscale_abandon(struct hud_hires_upscale_job *job) { }
 #include "under_test.inc"
 
 /* the texture drawn every frame, and the one drawn until a time */
