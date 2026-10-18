@@ -558,19 +558,13 @@ static void upscale_outline(unsigned char *pixels, const unsigned char *bgra,
 	}
 }
 
-unsigned int hud_hires_upscale_texture(const unsigned char *bgra, unsigned long width,
-	unsigned long height, long kind, unsigned long *levels)
+/* the GL texture of a sheet's upscaled texels, with its mip levels */
+static unsigned int upscaled_texture(const unsigned char *pixels, unsigned long width,
+	unsigned long height, unsigned long *levels)
 {
-	unsigned char *pixels;
 	unsigned long largest;
 	GLuint texture;
 
-	if (!xgpu_gl_ready())
-		return 0;
-	pixels = kind == 4 ? upscale_pixels(bgra, width, height, 512) : hud_hires_upscale_pixels(bgra, width, height);
-	if (!pixels)
-		return 0;
-	upscale_outline(pixels, bgra, width, height, kind);
 	*levels = 1;
 	for (largest = (width > height ? width : height) * 4; largest > 1; largest >>= 1)
 		(*levels)++;
@@ -583,9 +577,140 @@ unsigned int hud_hires_upscale_texture(const unsigned char *bgra, unsigned long 
 		0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
 	glGenerateMipmap(GL_TEXTURE_2D);
 	xgpu_gl_state_invalidate();
+	return texture;
+}
+
+unsigned int hud_hires_upscale_texture(const unsigned char *bgra, unsigned long width,
+	unsigned long height, long kind, unsigned long *levels)
+{
+	unsigned char *pixels;
+	unsigned int texture;
+
+	if (!xgpu_gl_ready())
+		return 0;
+	pixels = kind == 4 ? upscale_pixels(bgra, width, height, 512) : hud_hires_upscale_pixels(bgra, width, height);
+	if (!pixels)
+		return 0;
+	upscale_outline(pixels, bgra, width, height, kind);
+	texture = upscaled_texture(pixels, width, height, levels);
 	free(pixels);
 	return texture;
 }
+
+#ifndef HALO_GLES
+
+struct hud_hires_upscale_job
+{
+	unsigned char *bgra, *pixels;
+	unsigned long width, height;
+	long kind;
+	/* (under upscale_job_lock) whether its thread has ended, and whether its
+	owner has let it go, the thread then freeing it */
+	int ended, abandoned;
+};
+
+static pthread_mutex_t upscale_job_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static void upscale_job_free(struct hud_hires_upscale_job *job)
+{
+	free(job->bgra);
+	free(job->pixels);
+	free(job);
+}
+
+static void *upscale_job_thread(void *parameter)
+{
+	struct hud_hires_upscale_job *job = parameter;
+	int abandoned;
+
+	job->pixels = job->kind == 4 ? upscale_pixels(job->bgra, job->width, job->height, 512) :
+		hud_hires_upscale_pixels(job->bgra, job->width, job->height);
+	if (job->pixels)
+		upscale_outline(job->pixels, job->bgra, job->width, job->height, job->kind);
+	pthread_mutex_lock(&upscale_job_lock);
+	job->ended = 1;
+	abandoned = job->abandoned;
+	pthread_mutex_unlock(&upscale_job_lock);
+	if (abandoned)
+		upscale_job_free(job);
+	return NULL;
+}
+
+struct hud_hires_upscale_job *hud_hires_upscale_begin(unsigned char *bgra, unsigned long width,
+	unsigned long height, long kind)
+{
+	struct hud_hires_upscale_job *job = calloc(1, sizeof(*job));
+	pthread_t thread;
+
+	if (!job)
+		return NULL;
+	job->bgra = bgra;
+	job->width = width;
+	job->height = height;
+	job->kind = kind;
+	if (pthread_create(&thread, NULL, upscale_job_thread, job) != 0)
+	{
+		free(job);
+		return NULL;
+	}
+	pthread_detach(thread);
+	return job;
+}
+
+int hud_hires_upscale_poll(struct hud_hires_upscale_job *job, unsigned int *texture, unsigned long *levels)
+{
+	int ended;
+
+	pthread_mutex_lock(&upscale_job_lock);
+	ended = job->ended;
+	pthread_mutex_unlock(&upscale_job_lock);
+	if (!ended)
+		return 0;
+	*texture = job->pixels ? upscaled_texture(job->pixels, job->width, job->height, levels) : 0;
+	upscale_job_free(job);
+	return 1;
+}
+
+void hud_hires_upscale_abandon(struct hud_hires_upscale_job *job)
+{
+	int ended;
+
+	pthread_mutex_lock(&upscale_job_lock);
+	ended = job->ended;
+	job->abandoned = 1;
+	pthread_mutex_unlock(&upscale_job_lock);
+	if (ended)
+		upscale_job_free(job);
+}
+
+#else
+
+/* (the guest's and the page's threads are the game's own: upscaled where
+they are first drawn) */
+struct hud_hires_upscale_job *hud_hires_upscale_begin(unsigned char *bgra, unsigned long width,
+	unsigned long height, long kind)
+{
+	(void)bgra;
+	(void)width;
+	(void)height;
+	(void)kind;
+	return NULL;
+}
+
+int hud_hires_upscale_poll(struct hud_hires_upscale_job *job, unsigned int *texture, unsigned long *levels)
+{
+	(void)job;
+	(void)levels;
+	*texture = 0;
+	return 1;
+}
+
+void hud_hires_upscale_abandon(struct hud_hires_upscale_job *job)
+{
+	(void)job;
+}
+
+#endif
 
 static unsigned long big_endian_long(const unsigned char *bytes)
 {
