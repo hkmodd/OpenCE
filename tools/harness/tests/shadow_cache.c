@@ -21,6 +21,7 @@ static D3DSurface *copied_from, *copied_to;
 #define error(...) ((void)0)
 #define rasterizer_set_target(...) ((void)0)
 static void shadow_record_replay(void) { shadow_recording = FALSE; replays++; }
+static void shadow_silhouette_flush(void) {}
 static boolean rasterizer_shadow_map_create(D3DTexture **texture, D3DSurface **surface)
 {
 	if (refuse_maps)
