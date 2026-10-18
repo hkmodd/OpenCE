@@ -21,12 +21,14 @@ of STEP microseconds of a clock of the test's (CLOCK_RATE counts a second), each
 point; the render thread's spare time is the idle work the code hands it. */
 #define STEP 100
 #define CLOCK_RATE 10000000u
+/* (cseries.h) */
+enum { TICKS_PER_SECOND = 30 };
 
 static boolean slicing_enabled;
 static unsigned long setting_changes;
 static unsigned long long now;
 static int tick_points, points_done, ticks_run;
-static int finish_at_point = -1;
+static int finish_at_point = -1, complete_at_point = -1;
 static int periods_ended, periods_continued;
 static int (*idle_work)(void);
 /* the frames ended, and how long the latest end of a frame had to spare */
@@ -65,6 +67,8 @@ static void game_tick(void)
 		points_done++;
 		if (point == finish_at_point)
 			tick_slices_finish();
+		if (point == complete_at_point)
+			tick_slices_complete();
 		tick_slices_yield();
 	}
 	ticks_run++;
@@ -87,6 +91,28 @@ static int spare_time(void)
 	while (idle_work())
 		calls++;
 	return calls + 1;
+}
+
+/* the start of the next frame, frame_us microseconds after the start of the
+one before (the tick's own steps less) */
+static boolean next_frame(unsigned long frame_us, boolean whole)
+{
+	now += frame_us * (CLOCK_RATE / 1000000u);
+	return tick_slices_continue(whole);
+}
+
+/* ticks of 10 ms run whole, the latest ticks' length */
+static void warm(void)
+{
+	int tick;
+
+	for (tick = 0; tick < 64; tick++)
+	{
+		tick_points = 100;
+		CHECK(tick_slices_tick(TRUE), "a tick of 10 ms ended in its frame's share");
+		tick_slices_finish();
+	}
+	points_done = 0;
 }
 
 /* a tick of points steps begun due, left under way and run in the spare time */
@@ -167,12 +193,13 @@ int main(int argc, char **argv)
 	{
 		int frame;
 
+		/* frames of 20 ms: the eighth after it is four ticks' time after */
 		enable(TRUE);
 		tick_points = 100;
 		CHECK(tick_slices_tick(TRUE), "a long tick ended in its frame's share");
 		for (frame = 1; frame < 8; frame++)
-			CHECK(!tick_slices_continue(FALSE), "the tick ended on frame %d", frame);
-		CHECK(tick_slices_continue(FALSE) && ticks_run == 1 && points_done == 100,
+			CHECK(!next_frame(20000, FALSE), "the tick ended on frame %d", frame);
+		CHECK(next_frame(20000, FALSE) && ticks_run == 1 && points_done == 100,
 			"the eighth frame after it did not run it whole");
 		tick_slices_release();
 		tick_points = 100;
@@ -187,7 +214,8 @@ int main(int argc, char **argv)
 		int frame;
 
 		/* one begun ahead of its time holds nothing up: it runs on in
-		pieces, and is run whole on the eighth frame after it falls due */
+		pieces, and is run whole on the eighth frame after it falls due
+		(of 20 ms: four ticks' time after) */
 		enable(TRUE);
 		tick_points = 100;
 		tick_slices_tick_ahead();
@@ -195,15 +223,18 @@ int main(int argc, char **argv)
 		for (frame = 1; frame < 12; frame++)
 			CHECK(!tick_slices_continue(FALSE), "the tick not yet due ended on frame %d", frame);
 		CHECK(points_done == 36, "the frames' shares ran to step %d", points_done);
+		/* (frames before it fell due count no time held) */
+		now += 1000000 * (CLOCK_RATE / 1000000u);
 		tick_slices_count();
 		for (frame = 1; frame < 8; frame++)
-			CHECK(!tick_slices_continue(FALSE), "the tick ended on frame %d after it fell due", frame);
-		CHECK(tick_slices_continue(FALSE) && ticks_run == 1 && points_done == 100,
+			CHECK(!next_frame(20000, FALSE), "the tick ended on frame %d after it fell due", frame);
+		CHECK(next_frame(20000, FALSE) && ticks_run == 1 && points_done == 100,
 			"the eighth frame after it fell due did not run it whole");
 		tick_slices_release();
-		/* (the next counts its own frames) */
+		/* (the next counts its own frames: its first after, however late,
+		does not run it whole) */
 		points_done = 0;
-		CHECK(tick_slices_tick(TRUE) && !tick_slices_continue(FALSE), "the next tick ran whole on its first frame after");
+		CHECK(tick_slices_tick(TRUE) && !next_frame(140000, FALSE), "the next tick ran whole on its first frame after");
 		tick_slices_finish();
 		CHECK(ticks_run == 2 && points_done == 100, "the next tick was not finished");
 		return 0;
@@ -252,32 +283,111 @@ int main(int argc, char **argv)
 	}
 	CASE("spread")
 	{
-		int tick, frame, before;
+		int frame, before;
 
-		/* one that is due runs, at the start of each frame, what is left
-		of as long as the latest ticks ran (10 ms) over the frames before
-		one would run the rest whole: about 1.25 ms a frame, none left */
+		/* one that is due runs, at the start of each frame (of 20 ms: a
+		tick's time is less than two), what is left of as long as the
+		latest ticks ran (10 ms) over the eight frames before one could run
+		the rest whole: about 1.25 ms a frame, none left */
 		enable(TRUE);
-		for (tick = 0; tick < 64; tick++)
-		{
-			tick_points = 100;
-			CHECK(tick_slices_tick(TRUE), "a tick of 10 ms ended in its frame's share");
-			tick_slices_finish();
-		}
-		points_done = 0;
+		warm();
 		room_counts = 0;
 		CHECK(tick_slices_tick(TRUE), "a tick of 10 ms ended in its frame's share");
 		CHECK(points_done == 13, "the frame it fell due on ran %d steps", points_done);
 		for (frame = 1; frame < 8; frame++)
 		{
 			before = points_done;
-			CHECK(!tick_slices_continue(FALSE), "the tick ended on frame %d", frame);
+			CHECK(!next_frame(20000, FALSE), "the tick ended on frame %d", frame);
 			CHECK(points_done - before >= 12 && points_done - before <= 13, "frame %d ran %d steps", frame,
 				points_done - before);
 		}
 		CHECK(points_done == 100, "the eight frames' shares ran to step %d", points_done);
-		CHECK(tick_slices_continue(FALSE) && points_done == 100 && ticks_run == 65,
+		CHECK(next_frame(20000, FALSE) && points_done == 100 && ticks_run == 65,
 			"the frame that runs it whole had steps left to run");
+		tick_slices_release();
+		return 0;
+	}
+	CASE("fast")
+	{
+		int frame, before;
+
+		/* with frames of 1 ms and their shares, a tick's time is more than
+		eight: the latest ticks' 10 ms, less the first frame's share, is
+		spread over the frames left of it, not over eight */
+		enable(TRUE);
+		warm();
+		room_counts = 0;
+		CHECK(tick_slices_tick(TRUE) && points_done == 13, "the frame it fell due on ran %d steps", points_done);
+		for (frame = 1; frame < 8; frame++)
+		{
+			before = points_done;
+			CHECK(!next_frame(1000, FALSE), "the tick ended on frame %d", frame);
+			CHECK(points_done - before >= 4 && points_done - before <= 8, "frame %d ran %d steps", frame,
+				points_done - before);
+		}
+		tick_slices_finish();
+		return 0;
+	}
+	CASE("hold")
+	{
+		int frame;
+
+		/* with frames of 9.5 ms, the clock is held four ticks' time: the
+		frame that runs it whole is the fourteenth after, not the eighth */
+		enable(TRUE);
+		now = 1000000 * (CLOCK_RATE / 1000000u);
+		tick_points = 10000;
+		CHECK(tick_slices_tick(TRUE), "a long tick ended in its frame's share");
+		for (frame = 1; frame < 14; frame++)
+			CHECK(!next_frame(9500, FALSE), "the tick ended on frame %d, after %d steps", frame, points_done);
+		CHECK(next_frame(9500, FALSE) && ticks_run == 1 && points_done == 10000,
+			"the fourteenth frame after it did not run it whole");
+		tick_slices_release();
+		return 0;
+	}
+	CASE("hold-ahead")
+	{
+		int frame;
+
+		/* and one begun ahead of its time, from when it falls due */
+		enable(TRUE);
+		tick_points = 10000;
+		tick_slices_tick_ahead();
+		now += 1000000 * (CLOCK_RATE / 1000000u);
+		tick_slices_count();
+		for (frame = 1; frame < 14; frame++)
+			CHECK(!next_frame(9500, FALSE), "the tick begun ahead ended on frame %d after it fell due", frame);
+		CHECK(next_frame(9500, FALSE) && ticks_run == 1 && points_done == 10000,
+			"the fourteenth frame after it fell due did not run it whole");
+		tick_slices_release();
+		return 0;
+	}
+	CASE("outlier")
+	{
+		int frame, before, most = 0;
+
+		/* one of 30 ms after ticks of 10 ms, with frames of 2.5 ms and no
+		time to spare: once it has run longer than they did, its shares
+		grow with what it has run, and no frame runs much of it */
+		enable(TRUE);
+		warm();
+		room_counts = 0;
+		tick_points = 300;
+		CHECK(tick_slices_tick(TRUE), "a tick of 30 ms ended in its frame's share");
+		for (frame = 1;; frame++)
+		{
+			boolean ended;
+
+			before = points_done;
+			ended = next_frame(2500, FALSE);
+			if (points_done - before > most)
+				most = points_done - before;
+			if (ended)
+				break;
+			CHECK(frame < 60, "the tick had not ended on frame %d, after %d steps", frame, points_done);
+		}
+		CHECK(ticks_run == 65 && points_done == 300, "the tick did not end");
+		CHECK(most <= 40, "a frame ran %d steps of it", most);
 		tick_slices_release();
 		return 0;
 	}
@@ -317,6 +427,34 @@ int main(int argc, char **argv)
 		finish_at_point = -1;
 		sliced_tick(20);
 		CHECK(ticks_run == 2, "the second stack did not run the next tick");
+		return 0;
+	}
+	CASE("complete")
+	{
+		/* (a command typed while a tick is under way: hs.c) */
+		enable(TRUE);
+		tick_slices_complete();
+		CHECK(!tick_slices_in_flight() && ticks_run == 0, "completing with no tick under way ran one");
+		tick_points = 20;
+		CHECK(tick_slices_tick(TRUE), "a long tick ended in its frame's share");
+		tick_slices_complete();
+		CHECK(tick_slices_ended() && tick_slices_counted() && ticks_run == 1 && points_done == 20,
+			"the tick under way was not run to its end and left for the clock");
+		tick_slices_complete();
+		CHECK(ticks_run == 1, "completing an ended tick ran another");
+		CHECK(tick_slices_continue(FALSE), "the ended tick not ended for the clock");
+		tick_slices_release();
+		tick_slices_tick_ahead();
+		tick_slices_complete();
+		CHECK(tick_slices_ended() && !tick_slices_counted() && ticks_run == 2, "the tick begun ahead counted");
+		tick_slices_release();
+		complete_at_point = 1;
+		points_done = 0;
+		CHECK(tick_slices_tick(TRUE), "a long tick ended in its frame's share");
+		CHECK(!tick_slices_ended() && points_done < 20, "the tick ran itself to its end");
+		complete_at_point = -1;
+		tick_slices_finish();
+		CHECK(ticks_run == 3 && points_done == 20, "the tick was not finished");
 		return 0;
 	}
 	CASE("collision")

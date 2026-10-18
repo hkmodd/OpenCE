@@ -312,6 +312,7 @@ symbols in this file:
 #include "structures/structure_bsp_definitions.h"
 #include "units/units.h"
 #include "coop_enemies.h" /* port: port/linux/game/coop_enemies.c */
+#include "tick_slices.h" /* port: port/linux/game/tick_slices.c */
 
 #include <stddef.h>
 
@@ -2271,6 +2272,9 @@ void encounter_create(
 			{
 				encounter_place_actor(encounter_index, squad_index, initial_variant, FALSE, 0);
 				initial_variant = 0;
+				/* port: a tick may hand back to the frames between actors
+				placed, many when a script places a squad (display.tick_slices) */
+				tick_slices_yield();
 			}
 			/* port: network co-op's extra enemies, for its players
 			(coop_enemies.c) */
@@ -2279,7 +2283,10 @@ void encounter_create(
 				short extra_count = actor_type == _actor_monitor ? 0 : coop_enemies_extra_count(encounter_index, count);
 
 				for (i = 0; i < extra_count; ++i)
+				{
 					encounter_place_actor(encounter_index, squad_index, 0, FALSE, (short)(i + 1));
+					tick_slices_yield();
+				}
 			}
 		}
 
