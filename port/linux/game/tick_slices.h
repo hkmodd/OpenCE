@@ -23,6 +23,8 @@ boolean tick_slices_continue(boolean whole);
 void tick_slices_count(void);
 /* the clock has taken it, ended */
 void tick_slices_release(void);
+/* runs a tick begun to its end, for the clock to take when it is due */
+void tick_slices_complete(void);
 /* runs a tick begun to its end and forgets it (the game's state is about to
 go) */
 void tick_slices_finish(void);
