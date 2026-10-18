@@ -177,7 +177,9 @@ void halo_custom_edition_texels_forget(void);
 also declared for the game there) */
 #define HALO_SHADOW_LAYERS_MAXIMUM 8
 unsigned char halo_shadow_layers_supported(void);
-void halo_shadow_layers(short count, struct D3DSurface *const *sources, struct D3DSurface *const *destinations);
+void halo_shadow_layers(short count, struct D3DSurface *const *sources, struct D3DSurface *const *destinations,
+	float reach);
+void halo_draw_bounds(short count, const float (*nodes)[7]);
 
 /* ---------- guest memory write tracking (memory_watch.c)
 
