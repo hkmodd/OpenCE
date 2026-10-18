@@ -107,5 +107,15 @@ int hud_hires_override_point_threshold(long asset);
 long hud_hires_upscale_at(unsigned long address, long width, long height);
 unsigned int hud_hires_upscale_texture(const unsigned char *bgra, unsigned long width,
 	unsigned long height, long kind, unsigned long *levels);
+/* The same upscale on a thread of its own, so the frame that first draws a
+ * sheet does not wait for it: begin takes the texels (malloc'd) and returns
+ * NULL, keeping nothing, if it cannot start one; poll, on the GL thread,
+ * returns nonzero once it has ended, with the texture (0 if it failed), and
+ * frees the job; abandon frees it, at once or once it ends. */
+struct hud_hires_upscale_job;
+struct hud_hires_upscale_job *hud_hires_upscale_begin(unsigned char *bgra, unsigned long width,
+	unsigned long height, long kind);
+int hud_hires_upscale_poll(struct hud_hires_upscale_job *job, unsigned int *texture, unsigned long *levels);
+void hud_hires_upscale_abandon(struct hud_hires_upscale_job *job);
 
 #endif
