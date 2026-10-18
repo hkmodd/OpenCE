@@ -118,7 +118,10 @@ void halo_immediate_vertices(unsigned long registers, const float *vertices, uns
 #include "halo_ui_pointer.h"
 /* a job run on the worker threads beside the game's thread, and the wait
 for them to return from it (port/linux/src/worker_pool.c; none on Android
-and the web): render_particles works its sprites out on them */
+and the web): render_particles works its sprites out on them, and
+structure_visibility shares a long portal traversal with them (the count
+started: worker_pool_start(0) starts none) */
+int worker_pool_start(int count);
 void worker_pool_begin(void (*job)(void));
 void worker_pool_end(void);
 
