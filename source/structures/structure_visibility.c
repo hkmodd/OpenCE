@@ -138,6 +138,10 @@ enum
 	bsps are at most 66 deep */
 	MAXIMUM_STRUCTURE_BSP_TRAVERSAL_DEPTH = 1024,
 	COMPRESSED_STRUCTURE_VERTEX_SIZE = 0x20,
+	/* port: the hulls one portal traversal remembers (each direction of
+	the first 512 portals, the most a bsp has) and their vertices */
+	MAXIMUM_PORTAL_HULL_CACHE_ENTRIES = 1024,
+	MAXIMUM_PORTAL_HULL_CACHE_VERTICES = 8192,
 	_shader_type_environment = 3,
 };
 
@@ -162,6 +166,24 @@ struct portal_hull
 	short vertex_count;
 	word pad;
 	real_point2d vertices[MAXIMUM_PORTAL_HULL_VERTICES];
+};
+
+/* port: a portal's hull in one direction, as the traversal numbered
+traversal projected it */
+struct portal_hull_cache_entry
+{
+	unsigned long traversal;
+	short result;
+	short vertex_count;
+	long first_vertex_index;
+};
+
+struct portal_hull_cache
+{
+	unsigned long traversal;
+	long vertex_count;
+	struct portal_hull_cache_entry entries[MAXIMUM_PORTAL_HULL_CACHE_ENTRIES];
+	real_point2d vertices[MAXIMUM_PORTAL_HULL_CACHE_VERTICES];
 };
 
 struct structure_visibility_cluster
@@ -273,6 +295,10 @@ static short portal_hull_from_portal(
 	short portal_index,
 	boolean direction,
 	struct portal_hull *result);
+static short portal_hull_from_portal_cached(
+	short portal_index,
+	boolean direction,
+	struct portal_hull *result);
 static void structure_visibility_render_debug_portal_hull(
 	struct portal_hull const *hull,
 	real_argb_color const *color,
@@ -342,6 +368,8 @@ static boolean warned_about_rendered_clusters;
 static boolean warned_about_structure_bsp_depth;
 static boolean warned_about_environment_surfaces;
 static struct structure_visibility_globals structure_visibility_globals;
+/* port: the hulls projected in the current portal traversal */
+static struct portal_hull_cache portal_hull_cache;
 static struct profile_section render_structure_visibility_portal_traversal =
 	{ "render_structure_visibility_portal_traversal", NONE, TRUE };
 /* port: shared with the culling walk so both paths use the same profile sections */
@@ -812,6 +840,52 @@ static void grow_clipping_rectangle_by_portal_hull(
 	}
 
 	return;
+}
+
+/* port: the traversal reaches a portal once on each path through the
+portals before it and projected the portal again each time, with the same
+camera and frustum, so it now takes a hull projected before in the same
+traversal from portal_hull_cache: the same result and vertices, copied */
+static short portal_hull_from_portal_cached(
+	short portal_index,
+	boolean direction,
+	struct portal_hull *result)
+{
+	long entry_index = 2 * (long)portal_index + (direction ? 1 : 0);
+	struct portal_hull_cache_entry *entry;
+	short hull_result;
+
+	if (entry_index < 0 || entry_index >= MAXIMUM_PORTAL_HULL_CACHE_ENTRIES)
+	{
+		return portal_hull_from_portal(portal_index, direction, result);
+	}
+
+	entry = &portal_hull_cache.entries[entry_index];
+	if (entry->traversal == portal_hull_cache.traversal)
+	{
+		result->vertex_count = entry->vertex_count;
+		csmemcpy(
+			result->vertices,
+			&portal_hull_cache.vertices[entry->first_vertex_index],
+			entry->vertex_count * sizeof(real_point2d));
+		return entry->result;
+	}
+
+	hull_result = portal_hull_from_portal(portal_index, direction, result);
+	if (result->vertex_count <= MAXIMUM_PORTAL_HULL_CACHE_VERTICES - portal_hull_cache.vertex_count)
+	{
+		entry->traversal = portal_hull_cache.traversal;
+		entry->result = hull_result;
+		entry->vertex_count = result->vertex_count;
+		entry->first_vertex_index = portal_hull_cache.vertex_count;
+		csmemcpy(
+			&portal_hull_cache.vertices[entry->first_vertex_index],
+			result->vertices,
+			result->vertex_count * sizeof(real_point2d));
+		portal_hull_cache.vertex_count += result->vertex_count;
+	}
+
+	return hull_result;
 }
 
 static void structure_visibility_render_debug_portal_hull(
@@ -1776,7 +1850,8 @@ static void structure_visibility_traverse_cluster(
 			BIT_VECTOR_TEST_FLAG(cluster_pvs, neighbor_cluster_index))
 		{
 			struct portal_hull portal_hull;
-			short portal_result = portal_hull_from_portal(
+			/* port: remembered (portal_hull_from_portal_cached) */
+			short portal_result = portal_hull_from_portal_cached(
 				portal_index,
 				direction,
 				&portal_hull);
@@ -1851,6 +1926,16 @@ static void structure_visibility_find_clusters(
 		screen_hull.vertices[3].x = projection_bounds.x0;
 		screen_hull.vertices[3].y = projection_bounds.y1;
 		structure_visibility_globals.visited_cluster_flags = visited_cluster_flags;
+		/* port: the hulls of an earlier traversal are of another camera */
+		if (++portal_hull_cache.traversal == 0)
+		{
+			csmemset(
+				portal_hull_cache.entries,
+				0,
+				sizeof(portal_hull_cache.entries));
+			portal_hull_cache.traversal = 1;
+		}
+		portal_hull_cache.vertex_count = 0;
 		csmemset(
 			visited_cluster_flags,
 			0,
