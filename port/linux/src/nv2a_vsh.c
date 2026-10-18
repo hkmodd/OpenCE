@@ -676,7 +676,8 @@ char *nv2a_vertex_shader_to_layered_glsl(const DWORD *instructions, unsigned lon
 		return NULL;
 	}
 	/* (the extension after the #version line, and before anything else;
-	the layer at the end of main) */
+	the layer and the instance's scissor at the end of main: d3d8_gl.c,
+	shadow_instances_draw) */
 	xgpu_text_append(&text, "%.*s", (int)(version_end + 1 - source), source);
 	xgpu_text_append(&text,
 		"#extension GL_ARB_shader_viewport_layer_array : require\n"
@@ -685,6 +686,7 @@ char *nv2a_vertex_shader_to_layered_glsl(const DWORD *instructions, unsigned lon
 	xgpu_text_append(&text, "%.*s", (int)(main_end - (version_end + 1)), version_end + 1);
 	xgpu_text_append(&text,
 		"\tgl_Layer = shadow_layers[gl_InstanceID].y;\n"
+		"\tgl_ViewportIndex = gl_InstanceID;\n"
 		"\txLayer = float(shadow_layers[gl_InstanceID].x);\n"
 		"}\n");
 	free(source);

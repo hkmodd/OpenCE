@@ -91,6 +91,7 @@ symbols in this file:
 #include "rasterizer/xbox/rasterizer_xbox_pixel_shader.h"
 #include "rasterizer/xbox/rasterizer_xbox_draw_primitives.h"
 #include "shadow_projection.h" /* port: port/linux/game/shadow_projection.c */
+#include "shadow_silhouette.h" /* port: port/linux/game/shadow_silhouette.c */
 
 /* ---------- constants */
 
@@ -1028,16 +1029,18 @@ void rasterizer_environment_shadows_convolve(
 				}
 			}
 			rasterizer_environment_shadow_slot(first);
-			halo_shadow_layers(active, maps[0], maps[1]);
+			/* (each pass's taps' distance from a texel, rasterizer_shadow_convolve's
+			and rasterizer_shadow_convolve_pass's) */
+			halo_shadow_layers(active, maps[0], maps[1], 0.00390625f / (real)scale);
 			rasterizer_shadow_convolve(FALSE);
 			for (distance = 1; distance < scale; distance *= 2)
 			{
-				halo_shadow_layers(active, maps[1], maps[0]);
+				halo_shadow_layers(active, maps[1], maps[0], (real)distance / (real)(128 * scale));
 				rasterizer_shadow_convolve_pass(3, 2, (real)distance / (real)(128 * scale));
-				halo_shadow_layers(active, maps[0], maps[1]);
+				halo_shadow_layers(active, maps[0], maps[1], (real)distance / (real)(128 * scale));
 				rasterizer_shadow_convolve_pass(2, 3, (real)distance / (real)(128 * scale));
 			}
-			halo_shadow_layers(0, NULL, NULL);
+			halo_shadow_layers(0, NULL, NULL, 0.f);
 		}
 	}
 
@@ -1151,6 +1154,8 @@ void rasterizer_environment_shadow_cache_flush(
 		shadow_cache[entry].pass = 0;
 	}
 	csmemset(shadow_cache_objects, 0, sizeof(shadow_cache_objects));
+	/* port: the parts' extents (shadow_silhouette.c) */
+	shadow_silhouette_flush();
 
 	return;
 }
@@ -1269,11 +1274,14 @@ static void shadow_model_draw_device(
 		vertex_constants,
 		3);
 
+	/* port: the extent of the part's shadow, which the blur draws within */
+	shadow_silhouette_bounds_begin(triangle_buffer, vertex_buffer);
 	rasterizer_draw_static_triangles_static_vertices(
 		triangle_buffer,
 		0,
 		triangle_buffer->count,
 		vertex_buffer);
+	shadow_silhouette_bounds_end();
 
 	return;
 }

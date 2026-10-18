@@ -280,6 +280,7 @@ context has the extension, never required (gl_functions.c). On ES 3.0 and
 	X(glDrawArraysInstanced) \
 	X(glUniform2iv) \
 	X(glTextureBarrier) \
+	X(glScissorIndexed) \
 	X(glDebugMessageCallback)
 #endif
 
@@ -536,6 +537,7 @@ pointers, sees the declarations without these aliases */
 #define glDrawArraysInstanced halo_glDrawArraysInstanced
 #define glUniform2iv halo_glUniform2iv
 #define glTextureBarrier halo_glTextureBarrier
+#define glScissorIndexed halo_glScissorIndexed
 #define glDebugMessageCallback halo_glDebugMessageCallback
 
 #endif

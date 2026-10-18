@@ -84,10 +84,19 @@ int halo_model_detail_stock(void);
 /* the shadow maps' blurs drawn a batch of shadows at a time, each pass one
 draw (port/linux/src/d3d8_gl.c): nonzero where they can be; the next
 immediate draw's instances, each drawing what the draw draws from its
-source map into its destination (count 0 for none) */
+source map into its destination (count 0 for none), a pass of a blur whose
+taps read the source within reach of each texel (in the maps' widths) and
+which draws black where they read only black */
 #define HALO_SHADOW_LAYERS_MAXIMUM 8
 unsigned char halo_shadow_layers_supported(void);
-void halo_shadow_layers(short count, struct D3DSurface *const *sources, struct D3DSurface *const *destinations);
+void halo_shadow_layers(short count, struct D3DSurface *const *sources, struct D3DSurface *const *destinations,
+	float reach);
+/* the extent of the next draws, of a model's compressed vertices drawn by
+the shadows' model vertex programs (port/linux/src/d3d8_gl.c): for each node
+the vertices name, the node's index as they carry it, then the least x, y
+and z of the vertices that name it and the greatest, in the node's space
+(count 0 for none) */
+void halo_draw_bounds(short count, const float (*nodes)[7]);
 /* the shadow cache (rasterizer_xbox_shadows.c): nonzero where a shadow map
 can be copied; a copy of a shadow map, as it is when the copy is made,
 into another the game made the same way */

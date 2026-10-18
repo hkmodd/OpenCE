@@ -899,6 +899,13 @@ struct render_target_entry
 	/* a shadow map's layer of the array its texture is a view of, plus 1, or 0
 	(shadow_layer_take) */
 	int shadow_layer;
+	/* a shadow map's bound (target bounds): outside the rectangle (left, top,
+	right, bottom; empty if left >= right) and the band of bound_edge pixels
+	along its edges, every pixel's colour is black, while target.written is
+	bound_written */
+	GLint bound[4];
+	GLint bound_edge;
+	unsigned long bound_written;
 };
 
 /* every draw looks up its targets and whether its textures are render
@@ -2103,6 +2110,7 @@ struct shadow_layers_request
 	int count;
 	D3DSurface sources[SHADOW_LAYER_INSTANCES];
 	D3DSurface destinations[SHADOW_LAYER_INSTANCES];
+	float reach;
 };
 
 static struct shadow_layers_request shadow_layers_requested;
@@ -2118,6 +2126,9 @@ static struct
 	GLint layers[2 * SHADOW_LAYER_INSTANCES];
 	struct render_target_entry *sources[SHADOW_LAYER_INSTANCES];
 	struct render_target_entry *destinations[SHADOW_LAYER_INSTANCES];
+	/* each destination's written before the draw, and the request's reach */
+	unsigned long written[SHADOW_LAYER_INSTANCES];
+	float reach;
 } shadow_instances;
 
 static void shadow_layers_forget(void)
@@ -2500,6 +2511,223 @@ static GLint target_pixel(float coordinate, int axis)
 	return scaled_pixel(coordinate, target_scale[axis]);
 }
 
+/* ---------- target bounds */
+
+/* A shadow's silhouette covers a part of its map, and the rest of the map is
+black, yet each pass of its blur (rasterizer_xbox_shadows.c) is drawn over
+the whole map. A shadow map's bound is a rectangle and a band along its edges
+outside which every pixel is black: a clear of the whole map to black empties
+it, a draw the game names the extent of (halo_draw_bounds) adds that extent's
+rectangle, and a pass of the blur makes its destination's from its source's,
+wider by the pass's reach, drawing each instance only within its source's
+bound so widened and its destination's (shadow_instances_draw): every other
+pixel of the destination is black and stays black. Any other draw into a map
+leaves it no bound, as a bound holds only while the map's written is the one
+it was made at. */
+#ifndef HALO_GLES
+/* the colour target of the latest draw or clear (bind_targets), and its
+written before it */
+static struct render_target_entry *bound_target;
+static unsigned long bound_target_previous;
+/* the deferred draws are being drawn (instancing_draw_all), long after the
+extent named for each */
+static BOOL instancing_drawing;
+
+/* the next draws' extent (halo_draw_bounds): for each node, the node's index
+as the vertices carry it (0 to 255), then the least and the greatest x, y and
+z of the vertices weighted to it, in the node's space */
+#define DRAW_BOUNDS_NODES 32
+
+struct draw_bounds_request
+{
+	int count;
+	float nodes[DRAW_BOUNDS_NODES][7];
+};
+
+static struct draw_bounds_request draw_bounds;
+
+static void draw_bounds_command(void *payload)
+{
+	struct draw_bounds_request *request = payload;
+
+	draw_bounds.count = request->count;
+	memcpy(draw_bounds.nodes, request->nodes, (size_t)request->count * sizeof(draw_bounds.nodes[0]));
+}
+
+static BOOL target_bound_valid(const struct render_target_entry *entry, unsigned long written)
+{
+	return entry->bound_written && entry->bound_written == written;
+}
+
+static BOOL bound_empty(const GLint *bound)
+{
+	return bound[0] >= bound[2] || bound[1] >= bound[3];
+}
+
+/* the rectangle of the next draw's extent in the target's pixels, each corner
+of each node's box placed as the shadows' model vertex programs place a
+vertex (the node's rows from c[-36] at the vertices' index times c[-89].w,
+c[-68]..c[-65], then c[-38] and c[-37] and the epilogue), three pixels wider
+for the difference in rounding; FALSE where a corner is not in front of the
+eye, or a node's index is too near to rounding the other way. A vertex
+weighted to two nodes is between its places under each, which are within
+each node's corners so placed */
+static BOOL draw_bounds_rect(GLint *rect)
+{
+	const float (*clip)[4] = (const float (*)[4])device.constants[XGPU_VERTEX_CONSTANT_BIAS - 68];
+	const float *screen_scale = device.constants[XGPU_VERTEX_CONSTANT_BIAS - 38];
+	const float *screen_offset = device.constants[XGPU_VERTEX_CONSTANT_BIAS - 37];
+	float node_scale = device.constants[XGPU_VERTEX_CONSTANT_BIAS - 89][3];
+	float scale_x = device.viewport_scale[0] != 0.0f ? device.viewport_scale[0] : 1.0f;
+	float scale_y = device.viewport_scale[1] != 0.0f ? device.viewport_scale[1] : 1.0f;
+	float left = (float)gl_state.scissor[0], top = (float)gl_state.scissor[1];
+	float right = left + (float)gl_state.scissor[2], bottom = top + (float)gl_state.scissor[3];
+	float x0 = right, y0 = bottom, x1 = left, y1 = top;
+	int node, corner, row;
+
+	if ((device.shader_constant_mode & D3DSCM_NORESERVEDCONSTANTS) || !gl_state.scissor_test ||
+		gl_state.scissor[2] <= 0 || gl_state.scissor[3] <= 0)
+	{
+		return FALSE;
+	}
+	for (node = 0; node < draw_bounds.count; node++)
+	{
+		const float *box = draw_bounds.nodes[node];
+		const float *rows[3];
+		float index = box[0] / 255.0f * node_scale + 0.001f;
+		long first;
+
+		if (!(index >= 0.0f && index < 256.0f))
+			return FALSE;
+		first = (long)index;
+		if (index - (float)first < 1e-4f || index - (float)first > 1.0f - 1e-4f)
+			return FALSE;
+		for (row = 0; row < 3; row++)
+		{
+			long reg = XGPU_MODEL_NODE_REGISTER + first + row;
+
+			rows[row] = device.constants[reg < XGPU_VERTEX_CONSTANT_COUNT ? reg : XGPU_VERTEX_CONSTANT_COUNT - 1];
+		}
+		for (corner = 0; corner < 8; corner++)
+		{
+			float point[3], world[3], x, y, w;
+
+			point[0] = box[corner & 1 ? 4 : 1];
+			point[1] = box[corner & 2 ? 5 : 2];
+			point[2] = box[corner & 4 ? 6 : 3];
+			for (row = 0; row < 3; row++)
+				world[row] = rows[row][0] * point[0] + rows[row][1] * point[1] + rows[row][2] * point[2] + rows[row][3];
+			x = clip[0][0] * world[0] + clip[0][1] * world[1] + clip[0][2] * world[2] + clip[0][3];
+			y = clip[1][0] * world[0] + clip[1][1] * world[1] + clip[1][2] * world[2] + clip[1][3];
+			w = clip[3][0] * world[0] + clip[3][1] * world[1] + clip[3][2] * world[2] + clip[3][3];
+			/* (w is linear, so every point between the corners is in front with them) */
+			if (!(w > 1e-3f))
+				return FALSE;
+			x = (x / w * screen_scale[0] + screen_offset[0] + 0.5f + (float)UI_OFFSET - device.viewport_offset[0]) /
+				scale_x;
+			y = (y / w * screen_scale[1] + screen_offset[1] + 0.5f - device.viewport_offset[1]) / scale_y;
+			x = (float)gl_state.viewport[0] + (x + 1.0f) * 0.5f * (float)gl_state.viewport[2];
+			y = (float)gl_state.viewport[1] + (1.0f - y) * 0.5f * (float)gl_state.viewport[3];
+			if (!(x == x && y == y))
+				return FALSE;
+			if (x0 > x) x0 = x;
+			if (x1 < x) x1 = x;
+			if (y0 > y) y0 = y;
+			if (y1 < y) y1 = y;
+		}
+	}
+	/* (in the scissor first, so that the conversions hold the values) */
+	x0 = x0 < left ? left : x0 > right ? right : x0;
+	y0 = y0 < top ? top : y0 > bottom ? bottom : y0;
+	x1 = x1 < left ? left : x1 > right ? right : x1;
+	y1 = y1 < top ? top : y1 > bottom ? bottom : y1;
+	rect[0] = (GLint)x0 - 3;
+	rect[1] = (GLint)y0 - 3;
+	rect[2] = (GLint)x1 + 3;
+	rect[3] = (GLint)y1 + 3;
+	if (rect[0] < gl_state.scissor[0]) rect[0] = gl_state.scissor[0];
+	if (rect[1] < gl_state.scissor[1]) rect[1] = gl_state.scissor[1];
+	if (rect[2] > gl_state.scissor[0] + gl_state.scissor[2]) rect[2] = gl_state.scissor[0] + gl_state.scissor[2];
+	if (rect[3] > gl_state.scissor[1] + gl_state.scissor[3]) rect[3] = gl_state.scissor[1] + gl_state.scissor[3];
+	return TRUE;
+}
+
+/* a draw into the latest target (prepare_draw_as), alone: its extent's
+rectangle added to the target's bound */
+static void target_bound_draw(BOOL alone)
+{
+	struct render_target_entry *entry = bound_target;
+	GLint rect[4];
+
+	if (!entry || entry->kind != _render_target_shadow_map || !alone || instancing_drawing || !draw_bounds.count ||
+		!target_bound_valid(entry, bound_target_previous) || !draw_bounds_rect(rect))
+	{
+		return;
+	}
+	if (!bound_empty(rect))
+	{
+		if (bound_empty(entry->bound))
+			memcpy(entry->bound, rect, sizeof(rect));
+		else
+		{
+			if (entry->bound[0] > rect[0]) entry->bound[0] = rect[0];
+			if (entry->bound[1] > rect[1]) entry->bound[1] = rect[1];
+			if (entry->bound[2] < rect[2]) entry->bound[2] = rect[2];
+			if (entry->bound[3] < rect[3]) entry->bound[3] = rect[3];
+		}
+	}
+	entry->bound_written = entry->target.written;
+}
+
+/* a clear of the latest target (run_clear): one of the whole target to
+black empties its bound, and one that leaves its colour or blackens a part
+of it keeps it */
+static void target_bound_clear(DWORD count, CONST D3DRECT *rectangles, DWORD flags, D3DCOLOR color)
+{
+	struct render_target_entry *entry = bound_target;
+	BOOL black = (!(flags & D3DCLEAR_TARGET_R) || !(color & 0xff0000)) &&
+		(!(flags & D3DCLEAR_TARGET_G) || !(color & 0xff00)) && (!(flags & D3DCLEAR_TARGET_B) || !(color & 0xff));
+
+	if (!entry || entry->kind != _render_target_shadow_map)
+		return;
+	if (black && (flags & D3DCLEAR_TARGET_R) && (flags & D3DCLEAR_TARGET_G) && (flags & D3DCLEAR_TARGET_B) &&
+		(!count || !rectangles) && target_pixel((float)device.viewport.X, 0) <= 0 &&
+		target_pixel((float)device.viewport.Y, 1) <= 0 &&
+		target_pixel((float)(device.viewport.X + device.viewport.Width), 0) >= (GLint)entry->target.gl_width &&
+		target_pixel((float)(device.viewport.Y + device.viewport.Height), 1) >= (GLint)entry->target.gl_height)
+	{
+		memset(entry->bound, 0, sizeof(entry->bound));
+		entry->bound_edge = 0;
+	}
+	else if (!black || !target_bound_valid(entry, bound_target_previous))
+	{
+		entry->bound_written = 0;
+		return;
+	}
+	entry->bound_written = entry->target.written;
+}
+#endif
+
+void halo_draw_bounds(short count, const float (*nodes)[7])
+{
+#ifndef HALO_GLES
+	struct draw_bounds_request request;
+	unsigned long size;
+
+	request.count = nodes && count > 0 && count <= DRAW_BOUNDS_NODES ? count : 0;
+	if (request.count)
+		memcpy(request.nodes, nodes, (size_t)request.count * sizeof(request.nodes[0]));
+	size = (unsigned long)((char *)request.nodes[request.count] - (char *)&request);
+	if (queued())
+		memcpy(render_thread_record(draw_bounds_command, size), &request, size);
+	else
+		draw_bounds_command(&request);
+#else
+	(void)count;
+	(void)nodes;
+#endif
+}
+
 /* binds the framebuffer for the current targets; returns FALSE if there is
 nothing to draw into */
 static BOOL bind_targets(BOOL *has_depth)
@@ -2512,6 +2740,10 @@ static BOOL bind_targets(BOOL *has_depth)
 		depth = NULL;
 	if (!color && !depth)
 		return FALSE;
+#ifndef HALO_GLES
+	bound_target = color;
+	bound_target_previous = color ? color->target.written : 0;
+#endif
 	if (color)
 	{
 		color->last_rendered = device.frame + 1;
@@ -5593,6 +5825,9 @@ static struct program_entry *prepare_draw_as(BOOL immediate, BOOL instanced)
 		state_framebuffer(shadow_layers.framebuffer);
 #endif
 	apply_raster_state(has_depth);
+#ifndef HALO_GLES
+	target_bound_draw(!immediate && !instanced && !key.layered);
+#endif
 	for (stage = 0; stage < D3DTSS_MAXSTAGES; stage++)
 	{
 		key.alpha_kill[stage] = texture_state[stage][D3DTSS_ALPHAKILL] == D3DTALPHAKILL_ENABLE;
@@ -7649,6 +7884,9 @@ static void instancing_draw_all(void)
 		render_thread_release();
 		return;
 	}
+#ifndef HALO_GLES
+	instancing_drawing = TRUE;
+#endif
 	memcpy(live.render_states, render_states, sizeof(live.render_states));
 	memcpy(live.texture_states, texture_states, sizeof(live.texture_states));
 	memcpy(live.bindings, bindings, sizeof(live.bindings));
@@ -7714,6 +7952,9 @@ static void instancing_draw_all(void)
 	instancing.batch_count = 0;
 	instancing.draw_count = 0;
 	instancing.captured_count = 0;
+#ifndef HALO_GLES
+	instancing_drawing = FALSE;
+#endif
 	render_thread_release();
 }
 
@@ -8089,7 +8330,8 @@ static void shadow_layers_command(void *payload)
 }
 #endif
 
-void halo_shadow_layers(short count, struct D3DSurface *const *sources, struct D3DSurface *const *destinations)
+void halo_shadow_layers(short count, struct D3DSurface *const *sources, struct D3DSurface *const *destinations,
+	float reach)
 {
 #ifndef HALO_GLES
 	struct shadow_layers_request request;
@@ -8097,6 +8339,7 @@ void halo_shadow_layers(short count, struct D3DSurface *const *sources, struct D
 
 	memset(&request, 0, sizeof(request));
 	request.count = count > 0 && count <= SHADOW_LAYER_INSTANCES ? count : 0;
+	request.reach = reach;
 	for (index = 0; index < request.count; index++)
 	{
 		request.sources[index] = *sources[index];
@@ -8217,6 +8460,7 @@ static void shadow_layers_resolve(D3DPRIMITIVETYPE type)
 		shadow_instances.layers[index * 2 + 1] = destination->shadow_layer - 1;
 		shadow_instances.sources[index] = source;
 		shadow_instances.destinations[index] = destination;
+		shadow_instances.written[index] = destination->target.written;
 	}
 	if (index != count)
 	{
@@ -8235,6 +8479,7 @@ static void shadow_layers_resolve(D3DPRIMITIVETYPE type)
 	}
 	shadow_instances.count = count;
 	shadow_instances.layered = layered;
+	shadow_instances.reach = request->reach;
 }
 
 /* binds instance index's maps in place of the first's, for a draw of its
@@ -8253,6 +8498,135 @@ static void shadow_instance_bind(int index)
 		}
 	}
 	state_framebuffer(framebuffer_get(shadow_instances.destinations[index]->target.texture, 0));
+}
+
+/* draws the layered blur's instances, each only within its source's bound
+widened by the pass's reach and its destination's bound (target bounds),
+through its own scissor (gl_ViewportIndex, nv2a_vsh.c): the rectangles', then
+the edges' bands. A pass reads its source within the reach of each pixel, and
+draws black where it reads only black (the fog is the combiners' to read, and
+the blur's do not), so long as it writes the colour alone, unblended and
+untested, and no stage is killing pixels, and the viewport (the scissor) is
+the whole map, so that the pass draws every pixel of it; a source without a
+bound draws its instance whole, and leaves its destination without one, and a
+pass that cannot be cut is drawn as it is, leaving every destination without
+one */
+static void shadow_instances_draw(GLenum mode, GLint first, GLsizei count)
+{
+	GLint width = (GLint)shadow_instances.destinations[0]->target.gl_width;
+	GLint height = (GLint)shadow_instances.destinations[0]->target.gl_height;
+	GLint scissors[SHADOW_LAYER_INSTANCES][4], edges[SHADOW_LAYER_INSTANCES];
+	GLint reach, edge = 0, strip;
+	float reach_texels = shadow_instances.reach * (float)width;
+	BOOL cut = reach_texels > 0.0f && reach_texels < (float)width &&
+		!render_state[D3DRS_ALPHABLENDENABLE] && !render_state[D3DRS_ALPHATESTENABLE] &&
+		(render_state[D3DRS_COLORWRITEENABLE] & D3DCOLORWRITEENABLE_ALL) ==
+		(D3DCOLORWRITEENABLE_RED | D3DCOLORWRITEENABLE_GREEN | D3DCOLORWRITEENABLE_BLUE) &&
+		gl_state.scissor_test && !gl_state.scissor[0] && !gl_state.scissor[1] && gl_state.scissor[2] == width &&
+		gl_state.scissor[3] == height;
+	int index, stage;
+
+	for (stage = 0; stage < 4; stage++)
+	{
+		if (texture_state[stage][D3DTSS_ALPHAKILL] == D3DTALPHAKILL_ENABLE)
+			cut = FALSE;
+	}
+	if (!cut)
+	{
+		for (index = 0; index < shadow_instances.count; index++)
+			shadow_instances.destinations[index]->bound_written = 0;
+		glDrawArraysInstanced(mode, first, count, (GLsizei)shadow_instances.count);
+		return;
+	}
+	/* (a tap's four texels are within its distance plus one) */
+	reach = (GLint)reach_texels + 2;
+	for (index = 0; index < shadow_instances.count; index++)
+	{
+		struct render_target_entry *source = shadow_instances.sources[index];
+		struct render_target_entry *destination = shadow_instances.destinations[index];
+		GLint *scissor = scissors[index];
+		GLint bound[4], bound_edge, drawn[4];
+
+		scissor[0] = 0;
+		scissor[1] = 0;
+		scissor[2] = width;
+		scissor[3] = height;
+		edges[index] = 0;
+		if (!target_bound_valid(source, source->target.written))
+		{
+			destination->bound_written = 0;
+			continue;
+		}
+		if (bound_empty(source->bound))
+			memset(bound, 0, sizeof(bound));
+		else
+		{
+			bound[0] = source->bound[0] - reach > 0 ? source->bound[0] - reach : 0;
+			bound[1] = source->bound[1] - reach > 0 ? source->bound[1] - reach : 0;
+			bound[2] = source->bound[2] + reach < width ? source->bound[2] + reach : width;
+			bound[3] = source->bound[3] + reach < height ? source->bound[3] + reach : height;
+		}
+		bound_edge = source->bound_edge + reach < width ? source->bound_edge + reach : width;
+		/* (the destination's pixels outside its bound before the pass are
+		black, and so are the pass's outside the bound it makes) */
+		if (target_bound_valid(destination, shadow_instances.written[index]))
+		{
+			memcpy(drawn, bound, sizeof(drawn));
+			if (bound_empty(drawn))
+				memcpy(drawn, destination->bound, sizeof(drawn));
+			else if (!bound_empty(destination->bound))
+			{
+				if (drawn[0] > destination->bound[0]) drawn[0] = destination->bound[0];
+				if (drawn[1] > destination->bound[1]) drawn[1] = destination->bound[1];
+				if (drawn[2] < destination->bound[2]) drawn[2] = destination->bound[2];
+				if (drawn[3] < destination->bound[3]) drawn[3] = destination->bound[3];
+			}
+			edges[index] = bound_edge > destination->bound_edge ? bound_edge : destination->bound_edge;
+			if (2 * edges[index] < width && 2 * edges[index] < height)
+			{
+				if (bound_empty(drawn))
+					memset(scissor, 0, sizeof(scissors[index]));
+				else
+				{
+					scissor[0] = drawn[0];
+					scissor[1] = drawn[1];
+					scissor[2] = drawn[2] - drawn[0];
+					scissor[3] = drawn[3] - drawn[1];
+				}
+			}
+			else
+				edges[index] = 0;
+		}
+		memcpy(destination->bound, bound, sizeof(bound));
+		destination->bound_edge = bound_edge;
+		destination->bound_written = destination->target.written;
+	}
+	glEnable(GL_SCISSOR_TEST);
+	for (index = 0; index < shadow_instances.count; index++)
+	{
+		glScissorIndexed((GLuint)index, scissors[index][0], scissors[index][1], scissors[index][2], scissors[index][3]);
+		if (edge < edges[index])
+			edge = edges[index];
+	}
+	glDrawArraysInstanced(mode, first, count, (GLsizei)shadow_instances.count);
+	/* the bands along the edges: the top's and the bottom's, then the
+	left's and the right's between them */
+	for (strip = 0; edge && strip < 4; strip++)
+	{
+		for (index = 0; index < shadow_instances.count; index++)
+		{
+			GLint band = edges[index];
+
+			if (strip < 2)
+				glScissorIndexed((GLuint)index, 0, strip ? height - band : 0, band ? width : 0, band);
+			else
+				glScissorIndexed((GLuint)index, strip == 3 ? width - band : 0, band, band, band ? height - 2 * band : 0);
+		}
+		glDrawArraysInstanced(mode, first, count, (GLsizei)shadow_instances.count);
+	}
+	/* (glScissor sets every viewport's scissor again) */
+	memset(gl_state.scissor, 0xff, sizeof(gl_state.scissor));
+	gl_state.scissor_test = 1;
 }
 #endif
 
@@ -8452,8 +8826,7 @@ static void run_end(void)
 	{
 		/* (the layers it reads, the passes before it drew) */
 		glTextureBarrier();
-		glDrawArraysInstanced(primitive_mode(type), (GLint)first_vertex, (GLsizei)count,
-			(GLsizei)shadow_instances.count);
+		shadow_instances_draw(primitive_mode(type), (GLint)first_vertex, (GLsizei)count);
 	}
 #endif
 	else
@@ -8675,6 +9048,9 @@ static void run_clear(DWORD count, CONST D3DRECT *rectangles, DWORD flags, D3DCO
 
 	if (!device.gl_ready || !bind_targets(&has_depth))
 		return;
+#ifndef HALO_GLES
+	target_bound_clear(count, rectangles, flags, color);
+#endif
 	if (trace_frame())
 		platform_log("clear flags %lx color %08lx z %g count %lu target %08lx depth %08lx", (unsigned long)flags,
 			(unsigned long)color, z, (unsigned long)count,
