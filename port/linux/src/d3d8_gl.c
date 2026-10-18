@@ -7656,9 +7656,13 @@ struct shadow_map_copy
 static void shadow_map_copy_command(void *payload)
 {
 	struct shadow_map_copy *copy = payload;
-	struct render_target_entry *source = render_target_get(&copy->source);
+	struct render_target_entry *source;
 	struct render_target_entry *destination;
 
+	/* (nothing to copy without a GL context: debug.null_renderer) */
+	if (!device.gl_ready)
+		return;
+	source = render_target_get(&copy->source);
 	shadow_layer_refused = TRUE;
 	destination = render_target_get(&copy->destination);
 	shadow_layer_refused = FALSE;
