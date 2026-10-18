@@ -142,6 +142,17 @@ enum
 	the first 512 portals, the most a bsp has) and their vertices */
 	MAXIMUM_PORTAL_HULL_CACHE_ENTRIES = 1024,
 	MAXIMUM_PORTAL_HULL_CACHE_VERTICES = 8192,
+	/* port: a portal traversal shared with the worker threads: the depth
+	of the clusters that each begin a part of it, the parts and the visits
+	before them it holds, the vertices of the parts' first regions, the
+	threads, and the visits (of the last traversal from the same cluster)
+	that make sharing it worth it */
+	PORTAL_TRAVERSAL_SPLIT_DEPTH = 2,
+	MAXIMUM_PORTAL_TRAVERSAL_TASKS = 128,
+	MAXIMUM_PORTAL_TRAVERSAL_EVENTS = 512,
+	MAXIMUM_PORTAL_TRAVERSAL_VERTICES = 8192,
+	MAXIMUM_PORTAL_TRAVERSAL_RUNNERS = 9,
+	PORTAL_TRAVERSAL_SHARED_VISITS = 256,
 	_shader_type_environment = 3,
 };
 
@@ -169,10 +180,12 @@ struct portal_hull
 };
 
 /* port: a portal's hull in one direction, as the traversal numbered
-traversal projected it */
+traversal projected it (claimed: the traversal whose thread projecting it
+writes it here; traversal, written last, says it is written) */
 struct portal_hull_cache_entry
 {
 	unsigned long traversal;
+	unsigned long claimed;
 	short result;
 	short vertex_count;
 	long first_vertex_index;
@@ -248,6 +261,67 @@ struct structure_visibility_globals
 	short rendered_cluster_indices[MAXIMUM_CLUSTERS_PER_STRUCTURE];
 };
 
+/* port: a part of a shared portal traversal: the traversal from a cluster
+through the region of it seen (vertex_count vertices from
+first_vertex_index), the clusters on the way to it visited, and the
+clusters it reached (NONE: too many, or it cannot be shared), each with its
+clip bounds as the part grew them from none */
+struct portal_traversal_cluster
+{
+	short cluster_index;
+	word pad;
+	real_rectangle2d clip_bounds;
+};
+
+struct portal_traversal_task
+{
+	short cluster_index;
+	short vertex_count;
+	long first_vertex_index;
+	long visit_count;
+	short cluster_count;
+	word pad;
+	unsigned long visited_cluster_flags[MAXIMUM_CLUSTERS_PER_STRUCTURE / LONG_BITS];
+	struct portal_traversal_cluster clusters[MAXIMUM_RENDERED_CLUSTERS];
+};
+
+/* port: what the traversal did before its parts, in order: a visit of a
+cluster (task_index NONE) with the clip bounds it grew from none, or a part */
+struct portal_traversal_event
+{
+	short task_index;
+	short cluster_index;
+	real_rectangle2d clip_bounds;
+};
+
+/* port: a thread's clusters visited on the way and reached in a part, and
+the place of each reached in the part's clusters */
+struct portal_traversal_runner
+{
+	unsigned long visited_cluster_flags[MAXIMUM_CLUSTERS_PER_STRUCTURE / LONG_BITS];
+	unsigned long reached_cluster_flags[MAXIMUM_CLUSTERS_PER_STRUCTURE / LONG_BITS];
+	short cluster_indices[MAXIMUM_CLUSTERS_PER_STRUCTURE];
+};
+
+struct portal_traversal
+{
+	short task_count;
+	short event_count;
+	long vertex_count;
+	long visit_count;
+	long next_task;
+	long next_runner;
+	struct structure_bsp *structure;
+	/* the visits of the last traversal from each cluster, and the clusters
+	whose traversal could not be shared */
+	unsigned short cluster_visit_counts[MAXIMUM_CLUSTERS_PER_STRUCTURE];
+	unsigned long unshared_cluster_flags[MAXIMUM_CLUSTERS_PER_STRUCTURE / LONG_BITS];
+	struct portal_traversal_event events[MAXIMUM_PORTAL_TRAVERSAL_EVENTS];
+	struct portal_traversal_task tasks[MAXIMUM_PORTAL_TRAVERSAL_TASKS];
+	real_point2d vertices[MAXIMUM_PORTAL_TRAVERSAL_VERTICES];
+	struct portal_traversal_runner runners[MAXIMUM_PORTAL_TRAVERSAL_RUNNERS];
+};
+
 struct structure_visibility_shader_environment
 {
 	struct shader shader;
@@ -308,6 +382,21 @@ static void structure_visibility_traverse_cluster(
 	struct portal_hull const *visible_region);
 static void structure_visibility_find_clusters(
 	void);
+static boolean portal_traversal_visit(
+	struct portal_traversal_runner *runner,
+	struct portal_traversal_task *task,
+	short cluster_index,
+	struct portal_hull const *visible_region,
+	short depth);
+static void portal_traversal_run_tasks(
+	struct portal_traversal_runner *runner);
+static void portal_traversal_job(
+	void);
+static boolean portal_traversal_merge_cluster(
+	short cluster_index,
+	real_rectangle2d const *clip_bounds);
+static boolean structure_visibility_find_clusters_shared(
+	struct portal_hull const *screen_hull);
 static short structure_visibility_build_surfaces_traverse_clusters(
 	long *surface_indices,
 	short maximum_count,
@@ -370,6 +459,8 @@ static boolean warned_about_environment_surfaces;
 static struct structure_visibility_globals structure_visibility_globals;
 /* port: the hulls projected in the current portal traversal */
 static struct portal_hull_cache portal_hull_cache;
+/* port: the traversal shared with the worker threads */
+static struct portal_traversal portal_traversal;
 static struct profile_section render_structure_visibility_portal_traversal =
 	{ "render_structure_visibility_portal_traversal", NONE, TRUE };
 /* port: shared with the culling walk so both paths use the same profile sections */
@@ -845,14 +936,20 @@ static void grow_clipping_rectangle_by_portal_hull(
 /* port: the traversal reaches a portal once on each path through the
 portals before it and projected the portal again each time, with the same
 camera and frustum, so it now takes a hull projected before in the same
-traversal from portal_hull_cache: the same result and vertices, copied */
+traversal from portal_hull_cache: the same result and vertices, copied.
+The threads of a shared traversal (structure_visibility_find_clusters_shared)
+share it: the first to claim a hull writes it, and one finding it claimed
+but not yet written projects it for itself */
 static short portal_hull_from_portal_cached(
 	short portal_index,
 	boolean direction,
 	struct portal_hull *result)
 {
 	long entry_index = 2 * (long)portal_index + (direction ? 1 : 0);
+	unsigned long traversal = portal_hull_cache.traversal;
 	struct portal_hull_cache_entry *entry;
+	unsigned long claimed;
+	long first_vertex_index;
 	short hull_result;
 
 	if (entry_index < 0 || entry_index >= MAXIMUM_PORTAL_HULL_CACHE_ENTRIES)
@@ -861,7 +958,7 @@ static short portal_hull_from_portal_cached(
 	}
 
 	entry = &portal_hull_cache.entries[entry_index];
-	if (entry->traversal == portal_hull_cache.traversal)
+	if (__atomic_load_n(&entry->traversal, __ATOMIC_ACQUIRE) == traversal)
 	{
 		result->vertex_count = entry->vertex_count;
 		csmemcpy(
@@ -872,17 +969,27 @@ static short portal_hull_from_portal_cached(
 	}
 
 	hull_result = portal_hull_from_portal(portal_index, direction, result);
-	if (result->vertex_count <= MAXIMUM_PORTAL_HULL_CACHE_VERTICES - portal_hull_cache.vertex_count)
+	claimed = __atomic_load_n(&entry->claimed, __ATOMIC_RELAXED);
+	if (claimed != traversal &&
+		__atomic_compare_exchange_n(&entry->claimed, &claimed, traversal, FALSE, __ATOMIC_RELAXED, __ATOMIC_RELAXED))
 	{
-		entry->traversal = portal_hull_cache.traversal;
-		entry->result = hull_result;
-		entry->vertex_count = result->vertex_count;
-		entry->first_vertex_index = portal_hull_cache.vertex_count;
-		csmemcpy(
-			&portal_hull_cache.vertices[entry->first_vertex_index],
-			result->vertices,
-			result->vertex_count * sizeof(real_point2d));
-		portal_hull_cache.vertex_count += result->vertex_count;
+		first_vertex_index = __atomic_load_n(&portal_hull_cache.vertex_count, __ATOMIC_RELAXED);
+		while (result->vertex_count <= MAXIMUM_PORTAL_HULL_CACHE_VERTICES - first_vertex_index)
+		{
+			if (__atomic_compare_exchange_n(&portal_hull_cache.vertex_count, &first_vertex_index,
+				first_vertex_index + result->vertex_count, FALSE, __ATOMIC_RELAXED, __ATOMIC_RELAXED))
+			{
+				entry->result = hull_result;
+				entry->vertex_count = result->vertex_count;
+				entry->first_vertex_index = first_vertex_index;
+				csmemcpy(
+					&portal_hull_cache.vertices[first_vertex_index],
+					result->vertices,
+					result->vertex_count * sizeof(real_point2d));
+				__atomic_store_n(&entry->traversal, traversal, __ATOMIC_RELEASE);
+				break;
+			}
+		}
 	}
 
 	return hull_result;
@@ -1762,6 +1869,8 @@ static void structure_visibility_traverse_cluster(
 		return;
 	}
 
+	/* port: counted for structure_visibility_find_clusters_shared */
+	portal_traversal.visit_count++;
 	BIT_VECTOR_SET_FLAG(
 		structure_visibility_globals.visited_cluster_flags,
 		cluster_index,
@@ -1904,6 +2013,394 @@ static void structure_visibility_traverse_cluster(
 	return;
 }
 
+/* port: structure_visibility_traverse_cluster's visit, in a traversal
+shared with the worker threads. On the game's thread (task NULL), before
+the traversal is shared, a visit is an event, and a cluster at
+PORTAL_TRAVERSAL_SPLIT_DEPTH begins a part (a task) instead; in a part, on
+any thread, a visit grows the clip bounds of the part's own clusters. As a
+traversal from a cluster reads only the clusters visited on the way to it,
+the parts may run in any order and at once. FALSE: the traversal cannot be
+shared (more clusters reached than are rendered, a portal with too many
+vertices, an intersection failed, or no room left) */
+static boolean portal_traversal_visit(
+	struct portal_traversal_runner *runner,
+	struct portal_traversal_task *task,
+	short cluster_index,
+	struct portal_hull const *visible_region,
+	short depth)
+{
+	struct structure_bsp *structure = global_structure_bsp_get();
+	struct tag_block *clusters = &structure->clusters;
+	struct structure_visibility_cluster *cluster = TAG_BLOCK_GET_ELEMENT(
+		clusters,
+		cluster_index,
+		struct structure_visibility_cluster);
+	unsigned long *cluster_pvs = structure_bsp_get_cluster_pvs(
+		structure,
+		(short)render.cluster_index);
+	real_rectangle2d *clip_bounds;
+	long portal_list_index;
+
+	if (task)
+	{
+		if (!BIT_VECTOR_TEST_FLAG(runner->reached_cluster_flags, cluster_index))
+		{
+			if (task->cluster_count >= MAXIMUM_RENDERED_CLUSTERS)
+			{
+				return FALSE;
+			}
+			BIT_VECTOR_SET_FLAG(runner->reached_cluster_flags, cluster_index, TRUE);
+			runner->cluster_indices[cluster_index] = task->cluster_count;
+			task->clusters[task->cluster_count].cluster_index = cluster_index;
+			task->clusters[task->cluster_count].clip_bounds = *global_null_rectangle2d;
+			task->cluster_count++;
+		}
+		clip_bounds = &task->clusters[runner->cluster_indices[cluster_index]].clip_bounds;
+		task->visit_count++;
+	}
+	else if (depth < PORTAL_TRAVERSAL_SPLIT_DEPTH)
+	{
+		struct portal_traversal_event *event;
+
+		if (portal_traversal.event_count >= MAXIMUM_PORTAL_TRAVERSAL_EVENTS)
+		{
+			return FALSE;
+		}
+		event = &portal_traversal.events[portal_traversal.event_count++];
+		event->task_index = NONE;
+		event->cluster_index = cluster_index;
+		event->clip_bounds = *global_null_rectangle2d;
+		clip_bounds = &event->clip_bounds;
+		portal_traversal.visit_count++;
+	}
+	else
+	{
+		struct portal_traversal_task *new_task;
+		struct portal_traversal_event *event;
+
+		if (portal_traversal.event_count >= MAXIMUM_PORTAL_TRAVERSAL_EVENTS ||
+			portal_traversal.task_count >= MAXIMUM_PORTAL_TRAVERSAL_TASKS ||
+			visible_region->vertex_count > MAXIMUM_PORTAL_TRAVERSAL_VERTICES - portal_traversal.vertex_count)
+		{
+			return FALSE;
+		}
+		new_task = &portal_traversal.tasks[portal_traversal.task_count];
+		new_task->cluster_index = cluster_index;
+		new_task->vertex_count = visible_region->vertex_count;
+		new_task->first_vertex_index = portal_traversal.vertex_count;
+		csmemcpy(
+			&portal_traversal.vertices[portal_traversal.vertex_count],
+			visible_region->vertices,
+			visible_region->vertex_count * sizeof(real_point2d));
+		portal_traversal.vertex_count += visible_region->vertex_count;
+		csmemcpy(
+			new_task->visited_cluster_flags,
+			runner->visited_cluster_flags,
+			sizeof(new_task->visited_cluster_flags));
+		event = &portal_traversal.events[portal_traversal.event_count++];
+		event->task_index = portal_traversal.task_count++;
+		event->cluster_index = cluster_index;
+		return TRUE;
+	}
+
+	BIT_VECTOR_SET_FLAG(runner->visited_cluster_flags, cluster_index, TRUE);
+	grow_clipping_rectangle_by_portal_hull(clip_bounds, visible_region);
+
+	for (portal_list_index = 0;
+		(short)portal_list_index < cluster->portal_indices.count;
+		portal_list_index++)
+	{
+		short portal_index = *TAG_BLOCK_GET_ELEMENT(
+			&cluster->portal_indices,
+			(short)portal_list_index,
+			short);
+		struct structure_visibility_portal *portal;
+		boolean direction;
+		short neighbor_cluster_index;
+
+		if (portal_index < 0 || portal_index >= structure->cluster_portals.count)
+		{
+			continue;
+		}
+		portal = TAG_BLOCK_GET_ELEMENT(
+			&structure->cluster_portals,
+			portal_index,
+			struct structure_visibility_portal);
+		direction = portal->cluster_indices[0] == cluster_index;
+		neighbor_cluster_index = portal->cluster_indices[direction];
+
+		if (neighbor_cluster_index >= 0 &&
+			neighbor_cluster_index < clusters->count &&
+			!BIT_VECTOR_TEST_FLAG(runner->visited_cluster_flags, neighbor_cluster_index) &&
+			BIT_VECTOR_TEST_FLAG(cluster_pvs, neighbor_cluster_index))
+		{
+			struct portal_hull portal_hull;
+			short portal_result;
+			boolean traversed = TRUE;
+
+			/* (portal_hull_from_points reports it, on the game's thread) */
+			if ((short)portal->vertices.count < 0 ||
+				(short)portal->vertices.count > MAXIMUM_PORTAL_HULL_VERTICES)
+			{
+				return FALSE;
+			}
+			portal_result = portal_hull_from_portal_cached(
+				portal_index,
+				direction,
+				&portal_hull);
+
+			if (portal_result == _portal_hull_from_portal_degenerate)
+			{
+				traversed = portal_traversal_visit(
+					runner,
+					task,
+					neighbor_cluster_index,
+					visible_region,
+					depth + 1);
+			}
+			else if (portal_result == _portal_hull_from_portal_succeeded &&
+				(render.visible_sky_model ||
+					points_within_distance(
+						(short)portal->vertices.count,
+						(real_point3d const *)portal->vertices.address,
+						render.camera.z_far)))
+			{
+				struct portal_hull clipped_hull;
+
+				clipped_hull.vertex_count = convex_hull2d_intersect(
+					visible_region->vertex_count,
+					visible_region->vertices,
+					portal_hull.vertex_count,
+					portal_hull.vertices,
+					MAXIMUM_PORTAL_HULL_VERTICES,
+					clipped_hull.vertices,
+					0.0001f);
+				if (clipped_hull.vertex_count > 0)
+				{
+					traversed = portal_traversal_visit(
+						runner,
+						task,
+						neighbor_cluster_index,
+						&clipped_hull,
+						depth + 1);
+				}
+				else if (clipped_hull.vertex_count == NONE)
+				{
+					traversed = FALSE;
+				}
+			}
+			if (!traversed)
+			{
+				return FALSE;
+			}
+		}
+	}
+
+	BIT_VECTOR_SET_FLAG(runner->visited_cluster_flags, cluster_index, FALSE);
+
+	return TRUE;
+}
+
+/* port: the parts of a shared traversal not yet taken, run on one thread */
+static void portal_traversal_run_tasks(
+	struct portal_traversal_runner *runner)
+{
+	long task_index;
+
+	while ((task_index = __atomic_fetch_add(&portal_traversal.next_task, 1, __ATOMIC_RELAXED)) <
+		portal_traversal.task_count)
+	{
+		struct portal_traversal_task *task = &portal_traversal.tasks[task_index];
+		struct portal_hull visible_region;
+
+		visible_region.vertex_count = task->vertex_count;
+		csmemcpy(
+			visible_region.vertices,
+			&portal_traversal.vertices[task->first_vertex_index],
+			task->vertex_count * sizeof(real_point2d));
+		csmemcpy(
+			runner->visited_cluster_flags,
+			task->visited_cluster_flags,
+			sizeof(runner->visited_cluster_flags));
+		csmemset(runner->reached_cluster_flags, 0, sizeof(runner->reached_cluster_flags));
+		task->cluster_count = 0;
+		task->visit_count = 0;
+		if (!portal_traversal_visit(runner, task, task->cluster_index, &visible_region, 0))
+		{
+			task->cluster_count = NONE;
+		}
+	}
+
+	return;
+}
+
+/* port: a worker thread's job in a shared traversal */
+static void portal_traversal_job(
+	void)
+{
+	long runner_index = __atomic_fetch_add(&portal_traversal.next_runner, 1, __ATOMIC_RELAXED);
+
+	if (runner_index < MAXIMUM_PORTAL_TRAVERSAL_RUNNERS)
+	{
+		portal_traversal_run_tasks(&portal_traversal.runners[runner_index]);
+	}
+
+	return;
+}
+
+/* port: a cluster a shared traversal reached, written as
+structure_visibility_traverse_cluster writes it: rendered when first
+reached, its clip bounds grown by the bounds a visit or part grew from none
+(the smaller and the larger of each kept, the earlier when they are equal,
+as growing them by the vertices keeps them). FALSE: more clusters than are
+rendered */
+static boolean portal_traversal_merge_cluster(
+	short cluster_index,
+	real_rectangle2d const *clip_bounds)
+{
+	struct rendered_cluster *rendered_cluster;
+
+	if (!BIT_VECTOR_TEST_FLAG(render.visible_cluster_flags, cluster_index))
+	{
+		if (render.rendered_cluster_count >= MAXIMUM_RENDERED_CLUSTERS)
+		{
+			return FALSE;
+		}
+		structure_visibility_globals.rendered_cluster_indices[cluster_index] = render.rendered_cluster_count++;
+		rendered_cluster = rendered_cluster_get(structure_visibility_globals.rendered_cluster_indices[cluster_index]);
+		rendered_cluster->cluster_index = cluster_index;
+		rendered_cluster->clip_bounds = *global_null_rectangle2d;
+		BIT_VECTOR_SET_FLAG(render.visible_cluster_flags, cluster_index, TRUE);
+	}
+	else
+	{
+		rendered_cluster = rendered_cluster_get(
+			structure_visibility_globals.rendered_cluster_indices[cluster_index]);
+	}
+
+	if (rendered_cluster->clip_bounds.x0 > clip_bounds->x0)
+	{
+		rendered_cluster->clip_bounds.x0 = clip_bounds->x0;
+	}
+	if (rendered_cluster->clip_bounds.x1 < clip_bounds->x1)
+	{
+		rendered_cluster->clip_bounds.x1 = clip_bounds->x1;
+	}
+	if (rendered_cluster->clip_bounds.y0 > clip_bounds->y0)
+	{
+		rendered_cluster->clip_bounds.y0 = clip_bounds->y0;
+	}
+	if (rendered_cluster->clip_bounds.y1 < clip_bounds->y1)
+	{
+		rendered_cluster->clip_bounds.y1 = clip_bounds->y1;
+	}
+
+	return TRUE;
+}
+
+/* port: the portal traversal from the camera's cluster, when the last one
+from it visited many clusters, shared with the worker threads
+(display.interpolation_threads): the visits to PORTAL_TRAVERSAL_SPLIT_DEPTH
+on the game's thread, the parts beyond them on every thread, then the
+clusters reached written in the order the traversal reaches them. The
+clusters, their order and their clip bounds are those of
+structure_visibility_traverse_cluster. FALSE: nothing is written, and the
+traversal is to run as it was (debug drawing, no worker threads, a light
+traversal, or one that cannot be shared) */
+static boolean structure_visibility_find_clusters_shared(
+	struct portal_hull const *screen_hull)
+{
+	struct structure_bsp *structure = global_structure_bsp_get();
+	short cluster_index = (short)render.cluster_index;
+	boolean shared = FALSE;
+	long visit_count = 0;
+
+	if (portal_traversal.structure != structure)
+	{
+		csmemset(portal_traversal.cluster_visit_counts, 0, sizeof(portal_traversal.cluster_visit_counts));
+		csmemset(portal_traversal.unshared_cluster_flags, 0, sizeof(portal_traversal.unshared_cluster_flags));
+		portal_traversal.structure = structure;
+	}
+	/* (ai_debug_highlight_cluster draws only when this holds) */
+	if (debug_portals ||
+		(ai_debug.render_encounter_activeregion && ai_debug.selected_squad_index != NONE) ||
+		portal_traversal.cluster_visit_counts[cluster_index] < PORTAL_TRAVERSAL_SHARED_VISITS ||
+		BIT_VECTOR_TEST_FLAG(portal_traversal.unshared_cluster_flags, cluster_index) ||
+		worker_pool_start(0) == 0)
+	{
+		return FALSE;
+	}
+
+	portal_traversal.task_count = 0;
+	portal_traversal.event_count = 0;
+	portal_traversal.vertex_count = 0;
+	portal_traversal.visit_count = 0;
+	csmemset(
+		portal_traversal.runners[0].visited_cluster_flags,
+		0,
+		sizeof(portal_traversal.runners[0].visited_cluster_flags));
+	if (portal_traversal_visit(&portal_traversal.runners[0], NULL, cluster_index, screen_hull, 0))
+	{
+		short event_index;
+
+		portal_traversal.next_task = 0;
+		portal_traversal.next_runner = 1;
+		if (portal_traversal.task_count > 1)
+		{
+			worker_pool_begin(portal_traversal_job);
+		}
+		portal_traversal_run_tasks(&portal_traversal.runners[0]);
+		if (portal_traversal.task_count > 1)
+		{
+			worker_pool_end();
+		}
+
+		shared = TRUE;
+		visit_count = portal_traversal.visit_count;
+		for (event_index = 0; shared && event_index < portal_traversal.event_count; event_index++)
+		{
+			struct portal_traversal_event const *event = &portal_traversal.events[event_index];
+
+			if (event->task_index == NONE)
+			{
+				shared = portal_traversal_merge_cluster(event->cluster_index, &event->clip_bounds);
+			}
+			else
+			{
+				struct portal_traversal_task const *task = &portal_traversal.tasks[event->task_index];
+				short task_cluster_index;
+
+				shared = task->cluster_count != NONE;
+				for (task_cluster_index = 0;
+					shared && task_cluster_index < task->cluster_count;
+					task_cluster_index++)
+				{
+					shared = portal_traversal_merge_cluster(
+						task->clusters[task_cluster_index].cluster_index,
+						&task->clusters[task_cluster_index].clip_bounds);
+				}
+				visit_count += task->visit_count;
+			}
+		}
+	}
+
+	if (!shared)
+	{
+		csmemset(
+			render.visible_cluster_flags,
+			0,
+			BIT_VECTOR_SIZE_IN_BYTES(structure->clusters.count));
+		render.rendered_cluster_count = 0;
+		BIT_VECTOR_SET_FLAG(portal_traversal.unshared_cluster_flags, cluster_index, TRUE);
+		return FALSE;
+	}
+
+	portal_traversal.cluster_visit_counts[cluster_index] =
+		(unsigned short)(visit_count < 0xFFFF ? visit_count : 0xFFFF);
+
+	return TRUE;
+}
+
 static void structure_visibility_find_clusters(
 	void)
 {
@@ -1940,9 +2437,17 @@ static void structure_visibility_find_clusters(
 			visited_cluster_flags,
 			0,
 			sizeof(visited_cluster_flags));
-		structure_visibility_traverse_cluster(
-			(short)render.cluster_index,
-			&screen_hull);
+		/* port: shared with the worker threads when that is worth it, and
+		its visits counted for the next from the same cluster */
+		if (!structure_visibility_find_clusters_shared(&screen_hull))
+		{
+			portal_traversal.visit_count = 0;
+			structure_visibility_traverse_cluster(
+				(short)render.cluster_index,
+				&screen_hull);
+			portal_traversal.cluster_visit_counts[render.cluster_index] = (unsigned short)
+				(portal_traversal.visit_count < 0xFFFF ? portal_traversal.visit_count : 0xFFFF);
+		}
 
 		for (rendered_cluster_index = 0;
 			(short)rendered_cluster_index < render.rendered_cluster_count;

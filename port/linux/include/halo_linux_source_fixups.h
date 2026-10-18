@@ -157,7 +157,10 @@ middle button, R and F are held, and the wheel's notches since the last call
 int halo_linux_debug_camera_input(int *middle, int *up, int *down, float *wheel);
 /* a job run on the worker threads beside the game's thread, and the wait
 for them to return from it (port/linux/src/worker_pool.c; none on Android
-and the web): render_particles works its sprites out on them */
+and the web): render_particles works its sprites out on them, and
+structure_visibility shares a long portal traversal with them (the count
+started: worker_pool_start(0) starts none) */
+int worker_pool_start(int count);
 void worker_pool_begin(void (*job)(void));
 void worker_pool_end(void);
 

@@ -6,7 +6,10 @@ structure_visibility_traverse_cluster) with its hulls remembered
 (portal_hull_from_portal_cached), over fake bsps: the clusters it renders, their
 clip bounds and frustums and the visible clusters' flags must be those the
 traversal gives when it projects every portal it reaches, and each portal's
-hull must be projected at most once in each direction a traversal.
+hull must be projected at most once in each direction a traversal. Shared
+with worker threads (structure_visibility_find_clusters_shared), its parts run
+here one after another, in a shuffled order and by the game's thread or a
+worker's, and it must render the same, or not be shared.
 test_portal_hull_cache.py takes the code (under_test.inc) from the sources: the
 traversal twice, the second as the game had it (projecting every time).
 */
@@ -31,6 +34,9 @@ enum { LONG_BITS = 32, LONG_BITS_BITS = 5, NUMBER_OF_POINTS_PER_RECTANGLE = 4 };
 #define match_vassert(file, line, condition, message) ((void)0)
 #define structure_visibility_render_debug_portal_hull(hull, color, offset) ((void)0)
 #define ai_debug_highlight_cluster(cluster_index, color) FALSE
+/* the parts of a shared traversal taken in the order the test chooses */
+static long fake_fetch_add(long *pointer, long value);
+#define __atomic_fetch_add(pointer, value, order) fake_fetch_add((long *)(pointer), (long)(value))
 
 /* the camera is a number (view) that every hull and frustum depends on */
 struct render_camera { long view; real z_far; };
@@ -61,6 +67,84 @@ static real_rectangle2d const null_rectangle = { 1.0e30f, -1.0e30f, 1.0e30f, -1.
 static real_rectangle2d const *global_null_rectangle2d = &null_rectangle;
 static struct structure_visibility_globals structure_visibility_globals;
 static struct portal_hull_cache portal_hull_cache;
+static struct portal_traversal portal_traversal;
+/* (what the game's traversal counts, apart) */
+static struct portal_traversal reference_traversal;
+static struct { boolean render_encounter_activeregion; int selected_squad_index; } ai_debug;
+
+/* the worker threads: none run at once. _parts_on_the_games_thread: the game's thread takes every part, the workers
+none; _parts_on_a_worker: a worker takes them all as they begin; _parts_on_both: the game's thread takes its first and
+a worker the others, at its second */
+enum { _parts_on_the_games_thread, _parts_on_a_worker, _parts_on_both, NUMBER_OF_PART_ORDERS };
+static int worker_count;
+static int part_order;
+static void (*pool_job)(void);
+static boolean in_worker;
+static long task_claims;
+static short task_order[MAXIMUM_PORTAL_TRAVERSAL_TASKS];
+static unsigned long order_seed;
+static int worker_pool_start(int count)
+{
+	return worker_count;
+}
+static void worker_pool_begin(void (*job)(void))
+{
+	CHECK(worker_count > 0, "a job begun with no workers");
+	pool_job = job;
+	if (part_order == _parts_on_a_worker)
+	{
+		in_worker = TRUE;
+		job();
+		in_worker = FALSE;
+	}
+}
+static void worker_pool_end(void)
+{
+	int worker;
+
+	in_worker = TRUE;
+	for (worker = 0; worker < worker_count; worker++)
+		pool_job();
+	in_worker = FALSE;
+}
+/* a part claimed: the parts in a shuffled order */
+static long fake_fetch_add(long *pointer, long value)
+{
+	long previous = *pointer;
+
+	if (pointer == &portal_traversal.next_task)
+	{
+		task_claims++;
+		if (previous == 0)
+		{
+			short index;
+
+			for (index = 0; index < portal_traversal.task_count; index++)
+				task_order[index] = index;
+			for (index = portal_traversal.task_count - 1; index > 0; index--)
+			{
+				short other, swapped;
+
+				order_seed = order_seed * 1103515245UL + 12345UL;
+				other = (short)((order_seed >> 8) % (unsigned long)(index + 1));
+				swapped = task_order[index];
+				task_order[index] = task_order[other];
+				task_order[other] = swapped;
+			}
+		}
+		if (part_order == _parts_on_both && previous == 1 && !in_worker && pool_job)
+		{
+			in_worker = TRUE;
+			pool_job();
+			in_worker = FALSE;
+			previous = *pointer;
+		}
+		*pointer = previous + value;
+		return previous < portal_traversal.task_count ? task_order[previous] : previous;
+	}
+	*pointer = previous + value;
+	return previous;
+}
 
 static struct structure_bsp *global_structure_bsp_get(void) { return &bsp; }
 static unsigned long *structure_bsp_get_cluster_pvs(struct structure_bsp *structure, short cluster_index)
@@ -138,7 +222,11 @@ static short portal_hull_from_portal(short portal_index, boolean direction, stru
 	return result->vertex_count >= 3 && (hash >> 22) % 4 ? _portal_hull_from_portal_succeeded : _portal_hull_from_portal_discarded;
 }
 
-/* the intersection: hashed from both hulls' vertices to the bit, empty a third of the time, so that the paths end */
+/* the intersection: hashed from both hulls' vertices to the bit, empty a third of the time, so that the paths end
+(never once intersections are never empty, for a bsp whose paths end anyway), and failing a seventh of the time once
+intersections fail */
+static boolean intersections_fail;
+static boolean intersections_never_empty;
 static short convex_hull2d_intersect(short p_count, real_point2d const *p, short q_count, real_point2d const *q,
 	short maximum_count, real_point2d *result, real epsilon)
 {
@@ -149,7 +237,11 @@ static short convex_hull2d_intersect(short p_count, real_point2d const *p, short
 		hash = hash_real(hash_real(hash, p[index].x), p[index].y);
 	for (index = 0; index < q_count; index++)
 		hash = hash_real(hash_real(hash, q[index].x), q[index].y);
-	if (hash % 3 == 0)
+	if (intersections_fail && hash % 7 == 1)
+	{
+		return NONE;
+	}
+	if (!intersections_never_empty && hash % 3 == 0)
 	{
 		return 0;
 	}
@@ -284,9 +376,85 @@ static void check_bsps(long bsp_count, long cluster_count, long portal_count, un
 	}
 }
 
+/* a bsp whose portals lead from each cluster to four more, as a tree (no path through it comes back), every cluster
+seeing every other */
+static void build_tree_bsp(long cluster_count)
+{
+	long index;
+
+	memset(clusters, 0, sizeof(clusters));
+	memset(portals, 0, sizeof(portals));
+	bsp.clusters.count = cluster_count;
+	bsp.clusters.address = clusters;
+	bsp.cluster_portals.count = cluster_count - 1;
+	bsp.cluster_portals.address = portals;
+	for (index = 0; index < cluster_count; index++)
+	{
+		clusters[index].portal_indices.address = portal_lists[index];
+		memset(pvs[index], 0xFF, sizeof(pvs[index]));
+	}
+	for (index = 1; index < cluster_count; index++)
+	{
+		short parent = (short)((index - 1) / 4);
+
+		portals[index - 1].cluster_indices[0] = parent;
+		portals[index - 1].cluster_indices[1] = (short)index;
+		portals[index - 1].vertices.count = 4;
+		portal_lists[parent][clusters[parent].portal_indices.count++] = (short)(index - 1);
+		portal_lists[index][clusters[index].portal_indices.count++] = (short)(index - 1);
+	}
+}
+
+/* a traversal from a cluster whose last traversal was heavy, its parts in a random order, checked against the game's:
+whether it was shared (its parts run, though it may then not have been) */
+static struct outcome shared_outcome, game_outcome;
+static boolean traverse_shared(long view, short from_cluster, char const *what)
+{
+	long claims = task_claims;
+
+	traverse(FALSE, view, from_cluster, &game_outcome);
+	portal_traversal.cluster_visit_counts[from_cluster] = 0xFFFF;
+	BIT_VECTOR_SET_FLAG(portal_traversal.unshared_cluster_flags, from_cluster, FALSE);
+	part_order = (int)next_random(NUMBER_OF_PART_ORDERS);
+	traverse(TRUE, view, from_cluster, &shared_outcome);
+	CHECK(same_outcome(&shared_outcome, &game_outcome), "%s: camera %ld from cluster %d (parts in order %d): %d clusters"
+		" rendered, the game's traversal renders %d", what, view, from_cluster, part_order,
+		shared_outcome.rendered_cluster_count, game_outcome.rendered_cluster_count);
+	return task_claims != claims;
+}
+
+/* random bsps traversed shared: how many traversals were, in how many parts, and how many could not be */
+static void check_shared_bsps(long bsp_count, long cluster_count, long portal_count, unsigned long density_percent,
+	char const *what, long *shared_count, long *part_count, long *unshared_count)
+{
+	long bsp_index, traversal;
+
+	for (bsp_index = 0; bsp_index < bsp_count; bsp_index++)
+	{
+		build_bsp(cluster_count, portal_count, density_percent);
+		for (traversal = 0; traversal < 4; traversal++)
+		{
+			short from_cluster = (short)next_random((unsigned long)cluster_count);
+
+			boolean claimed = traverse_shared((long)next_random(100000), from_cluster, what);
+
+			if (BIT_VECTOR_TEST_FLAG(portal_traversal.unshared_cluster_flags, from_cluster))
+			{
+				(*unshared_count)++;
+			}
+			else if (claimed)
+			{
+				(*shared_count)++;
+				*part_count += portal_traversal.task_count;
+			}
+		}
+	}
+}
+
 int main(int argc, char **argv)
 {
 	char const *case_name = argc > 1 ? argv[1] : "";
+	long shared_count = 0, part_count = 0, unshared_count = 0;
 	long cached_projections = 0, uncached_projections = 0;
 
 	seed = 12345;
@@ -349,6 +517,121 @@ int main(int argc, char **argv)
 			CHECK(same_outcome(&cached, &uncached), "bsp %ld: after the numbering wraps, %d clusters rendered, the game's %d",
 				bsp_index, cached.rendered_cluster_count, uncached.rendered_cluster_count);
 		}
+		return 0;
+	}
+
+	CASE("shared-same-as-game")
+	{
+		worker_count = 4;
+		check_shared_bsps(300, 20, 80, 80, "shared", &shared_count, &part_count, &unshared_count);
+		CHECK(shared_count > 600 && part_count > 3 * shared_count, "%ld of 1200 traversals shared, in %ld parts:"
+			" the bsps are not traversed deep enough", shared_count, part_count);
+		CHECK(unshared_count == 0, "%ld traversals not shared", unshared_count);
+		return 0;
+	}
+	CASE("shared-large-hulls")
+	{
+		/* past the parts' first regions' room, a traversal is not shared */
+		worker_count = 4;
+		large_hulls = TRUE;
+		check_shared_bsps(200, 18, 60, 80, "large hulls", &shared_count, &part_count, &unshared_count);
+		CHECK(shared_count > 0, "no traversal shared");
+		return 0;
+	}
+	CASE("too-many-clusters")
+	{
+		/* a traversal reaching more clusters than are rendered is not shared: the game's stops at the last
+		rendered */
+		long bsp_index, capped = 0;
+
+		worker_count = 4;
+		intersections_never_empty = TRUE;
+		for (bsp_index = 0; bsp_index < 200; bsp_index++)
+		{
+			build_tree_bsp(400);
+			warned_about_rendered_clusters = FALSE;
+			traverse_shared((long)next_random(100000), 0, "too many clusters");
+			/* warned by the game's traversal (the shared one leaves it to the game's, which then warns again) */
+			if (warned_about_rendered_clusters)
+			{
+				capped++;
+				CHECK(BIT_VECTOR_TEST_FLAG(portal_traversal.unshared_cluster_flags, 0),
+					"bsp %ld: a traversal reaching more clusters than are rendered was shared", bsp_index);
+			}
+		}
+		CHECK(capped > 10, "%ld of 200 traversals reached more clusters than are rendered", capped);
+		return 0;
+	}
+	CASE("intersections-fail")
+	{
+		/* a traversal in which an intersection fails is not shared */
+		worker_count = 4;
+		intersections_fail = TRUE;
+		check_shared_bsps(300, 16, 50, 80, "intersections fail", &shared_count, &part_count, &unshared_count);
+		CHECK(unshared_count > 50 && shared_count > 50, "%ld traversals shared, %ld not", shared_count,
+			unshared_count);
+		return 0;
+	}
+	CASE("light-stays-serial")
+	{
+		/* the first traversal from a cluster, and one after a light one, is not shared; one after a heavy one is */
+		boolean found_light = FALSE, found_heavy = FALSE;
+		long bsp_index;
+
+		worker_count = 4;
+		for (bsp_index = 0; bsp_index < 3000 && !(found_light && found_heavy); bsp_index++)
+		{
+			short from_cluster;
+			long claims = task_claims;
+			unsigned short visits;
+
+			build_bsp(20, 80, 80);
+			from_cluster = (short)next_random(20);
+			memset(portal_traversal.cluster_visit_counts, 0, sizeof(portal_traversal.cluster_visit_counts));
+			memset(portal_traversal.unshared_cluster_flags, 0, sizeof(portal_traversal.unshared_cluster_flags));
+			traverse(TRUE, 5, from_cluster, &shared_outcome);
+			CHECK(task_claims == claims, "bsp %ld: the first traversal from a cluster was shared", bsp_index);
+			visits = portal_traversal.cluster_visit_counts[from_cluster];
+			traverse(FALSE, 6, from_cluster, &game_outcome);
+			traverse(TRUE, 6, from_cluster, &shared_outcome);
+			CHECK(same_outcome(&shared_outcome, &game_outcome), "bsp %ld: %d clusters rendered, the game's traversal"
+				" renders %d", bsp_index, shared_outcome.rendered_cluster_count, game_outcome.rendered_cluster_count);
+			if (visits < PORTAL_TRAVERSAL_SHARED_VISITS)
+			{
+				CHECK(task_claims == claims, "bsp %ld: shared after a traversal of %u visits", bsp_index, visits);
+				found_light = TRUE;
+			}
+			else
+			{
+				CHECK(task_claims != claims || BIT_VECTOR_TEST_FLAG(portal_traversal.unshared_cluster_flags, from_cluster),
+					"bsp %ld: not shared after a traversal of %u visits", bsp_index, visits);
+				found_heavy = found_heavy || task_claims != claims;
+			}
+		}
+		CHECK(found_light && found_heavy, "no light traversal (%d) or no heavy one shared (%d)", found_light, found_heavy);
+		return 0;
+	}
+	CASE("not-shared")
+	{
+		/* with no worker threads, or portals or encounters drawn, a traversal is not shared */
+		long claims = task_claims;
+		long bsp_index;
+
+		for (bsp_index = 0; bsp_index < 100; bsp_index++)
+		{
+			build_bsp(16, 36, 80);
+			worker_count = 0;
+			traverse_shared((long)next_random(100000), 0, "no workers");
+			worker_count = 4;
+			debug_portals = TRUE;
+			traverse_shared((long)next_random(100000), 0, "portals drawn");
+			debug_portals = FALSE;
+			ai_debug.render_encounter_activeregion = TRUE;
+			ai_debug.selected_squad_index = 0;
+			traverse_shared((long)next_random(100000), 0, "encounters drawn");
+			ai_debug.render_encounter_activeregion = FALSE;
+		}
+		CHECK(task_claims == claims, "a traversal was shared");
 		return 0;
 	}
 
