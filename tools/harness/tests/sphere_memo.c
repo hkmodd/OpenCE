@@ -32,15 +32,17 @@ static struct { long sphere; } collision_bsp_usage_times;
 
 #include "context.inc"
 
+static struct collision_bsp bsps[2] = { { { { 10 } } }, { { { 10 } } } };
+
 /* the recursion: indices hashed from the bsp, the flags' content, the center and radius to the bit; small answers mostly,
-some too large to be remembered */
+some too large to be remembered (which, the same in every run: the bsp hashed by its index, not where it lies) */
 static long recursions;
 static unsigned long answer_hash(struct test_sphere_data const *data)
 {
 	unsigned long hash = 2166136261UL, word;
 	int index;
 
-	hash = (hash ^ (unsigned long)data->bsp) * 16777619UL;
+	hash = (hash ^ (unsigned long)((struct collision_bsp const *)data->bsp - bsps)) * 16777619UL;
 	for (index = 0; index < (data->breakable_surface_count + 7) / 8; index++)
 		hash = (hash ^ data->breakable_surface_flags[index]) * 16777619UL;
 	hash = (hash ^ (unsigned long)data->breakable_surface_count) * 16777619UL;
@@ -72,7 +74,6 @@ static void bsp3d_test_sphere_recursive(struct test_sphere_data *data, long node
 
 #include "under_test.inc"
 
-static struct collision_bsp bsps[2] = { { { { 10 } } }, { { { 10 } } } };
 static byte flags[2][32];
 
 /* whether two answers hold the same indices (only the counted ones mean anything) */
