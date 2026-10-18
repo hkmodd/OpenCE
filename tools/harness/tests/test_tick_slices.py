@@ -1,6 +1,7 @@
 """A long tick run in pieces on a second stack (display.tick_slices): its share of the frame it is begun on, the rest in
 the spare time and the frames after it, run whole once it has been due for too many, and the next begun ahead of its
-time by as long as the last took."""
+time by as long as the last took. A due tick's work is spread over a tick's time of fast frames, and one that runs long
+grows its shares with what it has run."""
 import re
 import sys
 from pathlib import Path
@@ -10,8 +11,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from harness import CHECK_FAILED, build, mutated, read, run
 
-CASES = ['disabled', 'short', 'spare', 'held', 'forced', 'ahead', 'room', 'room-due', 'spread', 'lead', 'finish',
-         'collision']
+CASES = ['disabled', 'short', 'spare', 'held', 'forced', 'ahead', 'room', 'room-due', 'spread', 'fast', 'hold',
+         'hold-ahead', 'outlier', 'lead', 'finish', 'complete', 'collision']
 CONTROLS = [
     ('whole = TRUE;', 'whole = FALSE;', 'forced'),
     ('if (tick_pending_counted)\n\t\t\tframes_due++;', 'frames_due++;', 'ahead'),
@@ -21,12 +22,25 @@ CONTROLS = [
     ('tick_pending_counted = counted;', 'tick_pending_counted = TRUE;', 'lead'),
     ('platform_fiber_clock() >= slice_deadline', 'platform_fiber_clock() > slice_deadline', 'held'),
     ('collision_log_continue_period(0);', ';', 'collision'),
+    ('\t\ttick_slices_run(0);\n}\n\nvoid tick_slices_finish', '\t\t;\n}\n\nvoid tick_slices_finish', 'complete'),
+    ('if (tick_pending && !tick_pending_ended && !in_tick)', 'if (tick_pending && !tick_pending_ended)', 'complete'),
+    ('if (tick_pending && !tick_pending_ended && !in_tick)', 'if (tick_pending && !in_tick)', 'complete'),
     ('share * clock_rate / 1000000u', 'share', 'spare'),
     ('(now - tick_pending_began) * 1000000u / clock_rate', '(now - tick_pending_began)', 'lead'),
     ('if (tick_pending_counted)\n\t{', 'if (0)\n\t{', 'room-due'),
     ('tick_pending_work += platform_fiber_clock() - now;', ';', 'spread'),
     ('\ttick_pending_work = 0;\n', '\n', 'spread'),
-    (' / (frames > 1 ? frames : 1)', '', 'spread'),
+    ('left = left * 1000000u / clock_rate / frames;', 'left = left * 1000000u / clock_rate;', 'spread'),
+    ('if (frames_due && elapsed < period)', 'if (elapsed < period)', 'spread'),
+    ('if (frames_left > frames)\n\t\t\t\tframes = frames_left;', ';', 'fast'),
+    ('* frames_due / elapsed', '/ elapsed', 'fast'),
+    ('left = tick_pending_work / 2;', 'left = 0;', 'outlier'),
+    ('tick_pending_work / 2;', 'tick_pending_work;', 'outlier'),
+    ('frames = TICK_SLICE_MINIMUM_FRAMES;', ';', 'outlier'),
+    (' &&\n\t\t\tplatform_fiber_clock() - tick_due_began >= clock_rate / TICKS_PER_SECOND * TICK_SLICE_LONGEST_HOLD',
+     '', 'hold'),
+    ('\ttick_due_began = tick_pending_began;\n', '\n', 'hold'),
+    ('\ttick_due_began = platform_fiber_clock();\n}', '}', 'hold-ahead'),
     ('(tick_pending_work - tick_work) / 8', '0', 'spread'),
     ('left > TICK_SLICE_FRAME_SHARE ? (unsigned long)left : TICK_SLICE_FRAME_SHARE', '(unsigned long)left', 'held'),
     ('room += share_used;', ';', 'room'),

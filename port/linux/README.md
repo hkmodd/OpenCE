@@ -688,10 +688,11 @@ those). Three frames queued did no better than two.
 the tick on a second stack of its thread (`src/posix_fiber.c`, the Windows
 build's `win32_fiber.c`, `game/tick_slices.c`), which hands back to the
 frames at points between the tick's parts (between the objects and the
-actors it updates): the tick runs for 0.3 ms of the frame it is begun on,
-then 0.1 ms at a time while the game's thread waits for the render thread,
-and 0.3 ms at the start of each frame after it; the eighth frame after it
-falls due runs what is left whole. One begun ahead of its time runs at the
+actors it updates, the objects it makes and the actors a squad places):
+the tick runs for 0.3 ms of the frame it is begun on, then 0.1 ms at a
+time while the game's thread waits for the render thread, and 0.3 ms at
+the start of each frame after it; a frame runs what is left whole once it
+has been due for eight frames and four ticks' time. One begun ahead of its time runs at the
 start of a frame only for as long as the frame before had to spare (its
 wait for the render thread, and the tick's own share), less 0.2 ms: a
 frame with no time to spare is not made later by a tick that is not due
@@ -700,8 +701,12 @@ held to 356 frames a second with one frame queued, had 1.4% of its frames
 over 2.75 ms instead of 3.0% where it had time to spare, and 10.9% instead
 of 12.2% where it had little. One that is due runs at the start of a
 frame for 0.3 ms or for longer: for what is left of as long as the latest
-ticks ran, spread over the frames before the eighth, so that the eighth
-is not left most of a long tick. In the same game, where the render
+ticks ran, spread over the frames left of eight, or of a tick's time at the
+rate the frames have come since it fell due, so that no frame is left most
+of a long tick. One that runs longer than the latest ticks (a script
+placing a squad, many objects made at once) is taken to have half as long
+again left, over four frames at the least: its shares grow with what it
+has run, and the clock takes the ticks it owes when it has ended. In the same game, where the render
 averaged 2–2.4 ms, 24.9% of the frames were over 2.75 ms instead of 29.2%,
 and 2.5% over 3.5 ms instead of 3.4%; 151 ticks were run whole instead
 of 479. A tick that runs in pieces takes longer from its start to
@@ -1577,7 +1582,7 @@ Other changes:
 | `game/players.c`, `networking/network_server_manager.c` | Bots (`game/bots.c`, `bots.count`): the lobby of a local Slayer game takes the bot players, each the one player of a machine of its own that no real machine is, and every tick their actions come from `game/bots.c` instead of their empty queues. Nothing changes in a system link or internet game. |
 | `input/input_xbox.c`, `physics/collision_usage.c` | The clock is read only for a button held, and for collision tests only when their times are shown: a read of the clock is slow in a browser. |
 | `main/main.c`, `interface/hud.c`, `interface/hud_unit.c`, `interface/hud_draw.c`, `game/game_engine.c` | The text chat of network games (`game/network_chat.c`): its keys are read each frame, and the debug keys are not while a line is typed; each view's HUD draws its lines, above the motion sensor, whose place the HUD notes (the left of the last picture drawn); the scoreboard's menu has Mute voice and chat, and the host's Mute for everyone. |
-| `game/game_time.c`, `game/game.c`, `objects/objects.c`, `ai/actors.c`, `main/main.c`, `saved games/game_state.c` | With `display.tick_slices`, the last tick of a frame may be left under way on a second stack and the next begun ahead of its time (`game/tick_slices.c`); the tick hands back between its parts, the objects and the actors; the game's clock takes a tick when it has ended and is due; the main loop's deferred actions, saving and network wait while one is under way, and one is ended before the game's state is disposed of, reverted or loaded. Refer to "The render thread". |
+| `game/game_time.c`, `game/game.c`, `objects/objects.c`, `ai/actors.c`, `ai/encounters.c`, `hs/hs.c`, `main/main.c`, `saved games/game_state.c` | With `display.tick_slices`, the last tick of a frame may be left under way on a second stack and the next begun ahead of its time (`game/tick_slices.c`); the tick hands back between its parts, the objects, the objects it makes, the actors and the actors a squad places; the game's clock takes a tick when it has ended and is due; the main loop's deferred actions, saving and network wait while one is under way, one runs to its end before a typed command runs, and one is ended before the game's state is disposed of, reverted or loaded. Refer to "The render thread". |
 
 The x86 inline assembly of the game is replaced by C. Thus the compiler
 can optimize that code for each processor:

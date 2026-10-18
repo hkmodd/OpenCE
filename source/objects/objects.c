@@ -4567,6 +4567,10 @@ void objects_update(
 					_object_header_being_created_bit,
 					FALSE);
 				object_update(DATUM_INDEX_NEW(i, object_header->identifier));
+				/* port: and between the first updates of the objects made
+				this tick, many when a script places a squad
+				(display.tick_slices) */
+				tick_slices_yield();
 			}
 
 			if (TEST_FLAG(object_header->flags, _object_header_being_deleted_bit))

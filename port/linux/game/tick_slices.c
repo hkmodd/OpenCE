@@ -23,9 +23,16 @@ go on drawing the two ticks before it, and the clock takes it, ended, when
 it is due. One that is due and has not ended yet holds the clock: the
 frames draw the tick before it, whole, until it has ended. It runs at the
 start of each frame for its share, or longer: for what is left of as long
-as the latest ticks ran, spread over the frames it may run on before one
-runs the rest whole, so that a frame with no time to spare is not left
-most of a long tick to run.
+as the latest ticks ran, spread over the frames left of a tick's time at
+the rate the frames have come so far (eight, at the least, from the frame
+it fell due on), so that a frame with no time to spare is not left most of
+a long tick to run. One that has run longer than the latest ticks did (a
+level's script placing a squad, many objects made at once) is taken to
+have half as long again left, over four frames at the least: its shares
+grow with what it has run. A frame runs the rest whole only once it has
+held the clock for eight frames and four ticks' time: a frame of a fast
+display is not left most of a long tick, and the clock takes the ticks it
+owes after it (game_time.c).
 
 Only one stack runs at a time, on the game's thread: a frame drawn while a
 tick is under way reads what the tick has left half done (its objects'
@@ -64,8 +71,13 @@ enum
 	before had to spare, for a frame that takes longer than the one before */
 	TICK_SLICE_MARGIN = 200,
 	/* the frames a tick that is due may run on before one runs it whole
-	(one begun ahead of its time holds nothing up until it falls due) */
-	TICK_SLICE_MAXIMUM_FRAMES = 8
+	(one begun ahead of its time holds nothing up until it falls due), and
+	the ticks' time it may hold the clock for before that too */
+	TICK_SLICE_MAXIMUM_FRAMES = 8,
+	TICK_SLICE_LONGEST_HOLD = 4,
+	/* the fewest frames the work a tick that is due has left is spread
+	over, once it has run longer than the latest ticks did */
+	TICK_SLICE_MINIMUM_FRAMES = 4
 };
 
 /* ---------- globals */
@@ -77,8 +89,9 @@ static boolean tick_pending;
 static boolean tick_pending_ended;
 static boolean tick_pending_counted;
 static unsigned long long tick_pending_began;
-/* the frames it has run on since it fell due */
+/* the frames it has run on since it fell due, and when it fell due */
 static short frames_due;
+static unsigned long long tick_due_began;
 /* how long the latest ticks took from their beginning to their end,
 smoothed (microseconds) */
 static unsigned long tick_duration;
@@ -189,12 +202,32 @@ static unsigned long tick_slices_frame_share(void)
 
 	if (tick_pending_counted)
 	{
-		/* (the work it has left, as long as the latest ticks took, spread
-		over the frames it may run on before one runs it whole) */
-		unsigned long long left = tick_work > tick_pending_work ? tick_work - tick_pending_work : 0;
-		int frames = TICK_SLICE_MAXIMUM_FRAMES - frames_due;
+		/* (the work it has left, as long as the latest ticks took less
+		what it has run, spread over the frames left of its eight, or of a
+		tick's time at the rate of the frames since it fell due; or, once
+		it has run longer, half as long again, over four frames at the
+		least) */
+		unsigned long long left;
+		unsigned long long frames = frames_due < TICK_SLICE_MAXIMUM_FRAMES ? TICK_SLICE_MAXIMUM_FRAMES - frames_due : 1;
+		unsigned long long period = clock_rate / TICKS_PER_SECOND;
+		unsigned long long elapsed = platform_fiber_clock() - tick_due_began;
 
-		left = left * 1000000u / clock_rate / (frames > 1 ? frames : 1);
+		if (frames_due && elapsed < period)
+		{
+			unsigned long long frames_left = elapsed ? (period - elapsed) * frames_due / elapsed : period;
+
+			if (frames_left > frames)
+				frames = frames_left;
+		}
+		if (tick_work > tick_pending_work)
+			left = tick_work - tick_pending_work;
+		else
+		{
+			left = tick_pending_work / 2;
+			if (frames < TICK_SLICE_MINIMUM_FRAMES)
+				frames = TICK_SLICE_MINIMUM_FRAMES;
+		}
+		left = left * 1000000u / clock_rate / frames;
 		return left > TICK_SLICE_FRAME_SHARE ? (unsigned long)left : TICK_SLICE_FRAME_SHARE;
 	}
 	/* (the room the frame before had with no share run in it) */
@@ -228,6 +261,7 @@ static void tick_slices_begin(boolean counted)
 	tick_pending_ended = FALSE;
 	tick_pending_counted = counted;
 	tick_pending_began = platform_fiber_clock();
+	tick_due_began = tick_pending_began;
 	tick_pending_work = 0;
 	frames_due = 0;
 	tick_slices_run_share();
@@ -289,8 +323,11 @@ boolean tick_slices_continue(boolean whole)
 	{
 		if (tick_pending_counted)
 			frames_due++;
-		if (frames_due >= TICK_SLICE_MAXIMUM_FRAMES)
+		if (frames_due >= TICK_SLICE_MAXIMUM_FRAMES &&
+			platform_fiber_clock() - tick_due_began >= clock_rate / TICKS_PER_SECOND * TICK_SLICE_LONGEST_HOLD)
+		{
 			whole = TRUE;
+		}
 		if (whole)
 			tick_slices_run(0);
 		else
@@ -302,6 +339,7 @@ boolean tick_slices_continue(boolean whole)
 void tick_slices_count(void)
 {
 	tick_pending_counted = TRUE;
+	tick_due_began = platform_fiber_clock();
 }
 
 void tick_slices_release(void)
@@ -311,13 +349,18 @@ void tick_slices_release(void)
 	tick_pending_counted = FALSE;
 }
 
-void tick_slices_finish(void)
+void tick_slices_complete(void)
 {
 	/* (not from the tick itself: it ends on its own) */
+	if (tick_pending && !tick_pending_ended && !in_tick)
+		tick_slices_run(0);
+}
+
+void tick_slices_finish(void)
+{
 	if (!tick_pending || in_tick)
 		return;
-	if (!tick_pending_ended)
-		tick_slices_run(0);
+	tick_slices_complete();
 	tick_slices_release();
 }
 

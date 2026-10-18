@@ -2806,6 +2806,7 @@ symbols in this file:
 #include "networking/network_game_manager.h"
 #include "networking/network_server_manager.h"
 #include "network_votekick.h" /* port: port/linux/game/network_votekick.c */
+#include "tick_slices.h" /* port: port/linux/game/tick_slices.c */
 #include "objects/damage.h"
 #include "objects/object_lights.h"
 #include "objects/scenery.h"
@@ -15525,6 +15526,10 @@ boolean hs_compile_and_evaluate(
 	boolean was_running = terminal_command_running;
 	boolean result;
 
+	/* port: not between the parts of a tick under way, which may have
+	handed back in the middle of a script (display.tick_slices): the tick
+	runs to its end first, and the clock takes it when it is due */
+	tick_slices_complete();
 	terminal_command_running = TRUE;
 	result = hs_compile_and_evaluate_command(expression);
 	terminal_command_running = was_running;
