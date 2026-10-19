@@ -34,6 +34,7 @@ LINES = {
     "ADD PLAYER": "+ GIOCATORE",
     "AIM ASSIST:": "MIRA ASSISTITA:",
     "ALLIES": "ALLEATI",
+    "ALLOWED": "CONSENTITA",
     "ANYONE NEAR": "CHIUNQUE VICINO",
     "ARM SHIELDS:": "SCUDI SULLE BRACCIA:",
     "ASSAULT RIFLE": "FUCILE D'ASSALTO",
@@ -45,6 +46,7 @@ LINES = {
     "Another controller: START joins.": "Un altro controller: START per unirsi.",
     "Anyone can see and join your game: it is listed\\nin everyone's Server Browser.":
         "Chiunque può vedere la partita e unirsi: appare\\nnell'elenco server di tutti.",
+    "BLOCK M+KB": "BLOCCA M+T",
     "BORDERLESS": "SENZA BORDI",
     "BUTTON LAYOUT:": "DISPOSIZIONE PULSANTI:",
     "BUTTON STYLE:": "STILE PULSANTI:",
@@ -75,8 +77,12 @@ LINES = {
     "DOWNLOAD MAPS:": "SCARICA MAPPE:",
     "Damage from the other players will only reduce\\nshields. Health will be unaffected.":
         "I danni degli altri giocatori ridurranno solo\\ngli scudi. La salute non ne risentirà.",
+    "Disable mouse aim assist for mouse/keyboard players.\\nController and touch aim assist are unchanged.":
+        "Disattiva la mira assistita per chi usa mouse e\\ntastiera. Controller e touch restano invariati.",
     "Downloading Custom Edition maps you do not have,\\nand helping send them to other players.":
         "Scaricare le mappe Custom Edition che non hai,\\ne aiutare a inviarle agli altri giocatori.",
+    "Draw a clock at the bottom right in multiplayer,\\ncounting up from the start of the game.":
+        "In multigiocatore, un orologio in basso a destra\\nche conta dall'inizio della partita.",
     "Draw a frame for every display refresh, blending\\nbetween the game's 30 ticks a second.":
         "Un fotogramma a ogni aggiornamento dello schermo,\\nfondendo i 30 tick al secondo del gioco.",
     "Draw a panel behind the scoreboard, for clearer\\ntext.":
@@ -89,17 +95,19 @@ LINES = {
         "L'HUD dai ridisegni ad alta risoluzione; se\\ndisattivato, le immagini del gioco.",
     "END GAME": "TERMINA PARTITA",
     "ENEMIES": "NEMICI",
+    "EXTRA EFFECTS:": "EFFETTI EXTRA:",
     "EXTRA ENEMIES:": "NEMICI AGGIUNTIVI:",
-    "Each enemy squad is this many times as large.": "Ogni squadra nemica è moltiplicata per questo valore.",
+    "EXTRA PICKUPS:": "OGGETTI AGGIUNTIVI:",
+    "EXTRA VEHICLES:": "VEICOLI AGGIUNTIVI:",
     "Each team's vehicles and their respawn time, for\\nthis game.":
         "I veicoli di ogni squadra e il loro tempo di\\nriapparizione, per questa partita.",
     "Echo sounds as the place you are in does, and\\nmuffle those behind walls, as the Xbox did.":
         "L'eco dei suoni come nel luogo in cui sei, e quelli\\ndietro i muri attutiti, come su Xbox.",
     "Enemy squads are as the campaign has them.": "Le squadre nemiche sono quelle della campagna.",
-    "Enemy squads are the amount below times as large,\\nhowever many players there are.":
-        "Le squadre nemiche sono moltiplicate per il valore\\nsotto, qualunque sia il numero di giocatori.",
-    "Enemy squads grow with the players: by the amount\\nbelow for each player past the first.":
-        "Le squadre nemiche crescono con i giocatori: del\\nvalore sotto per ogni giocatore oltre il primo.",
+    "Enemy squads grow with the players: by the value of\\n'Per Player' for each player past the first.":
+        "Le squadre nemiche crescono con i giocatori: di\\n'Per giocatore' per ogni giocatore oltre il primo.",
+    "Enemy squads use 'Multiplier', however many players\\nthere are.":
+        "Le squadre nemiche usano 'Moltiplicatore', qualunque\\nsia il numero di giocatori.",
     "Enter sets the key chosen; left and right choose\\nwhich of two. Then press the new key or button.":
         "Invio imposta il tasto scelto; sinistra e destra\\nscelgono quale dei due. Poi premi tasto o pulsante.",
     "Everyone has a limitless supply of grenades, which\\nmakes for loud, explosive and occasionally messy fun.":
@@ -143,12 +151,14 @@ LINES = {
     "FAILED": "ERRORE",
     "FOV AND VIEWMODELS:": "FOV E MODELLI ARMA:",
     "FRAME RATE LIMIT:": "LIMITE FOTOGRAMMI:",
+    "FRIENDLY FIRE OFF": "FUOCO AMICO SPENTO",
+    "FRIENDLY FIRE ON": "FUOCO AMICO ATTIVO",
     "FULLSCREEN": "SCHERMO INTERO",
     "Five hundred kills to win. You'll be here a while.": "Cinquecento uccisioni per vincere. Ci vorrà un po'.",
     "Flying vehicles pitch as aircraft do: pushing up\\nflies down.":
         "I veicoli volanti beccheggiano come gli aerei:\\nspingendo su si scende.",
-    "For each player past the first, enemy squads get\\nthis much more of themselves (100%: as many again).":
-        "Per ogni giocatore oltre il primo, le squadre nemiche\\ncrescono di tanto (100%: il doppio).",
+    "For each player past the first, options set to Per\\nPlayer get this much more (100%: as many again).":
+        "Per ogni giocatore oltre il primo, le opzioni su Per\\ngiocatore crescono di tanto (100%: il doppio).",
     "Free for all": "Tutti contro tutti",
     "Friendly fire and team balance, for this game.": "Fuoco amico e bilanciamento squadre, per questa partita.",
     "Friendly fire, the enemies and player collisions,\\nfor this game.":
@@ -160,9 +170,11 @@ LINES = {
     "GEMS": "GEMME",
     "GLOW INTENSITY:": "INTENSITÀ BAGLIORE:",
     "GRAPHICS:": "GRAFICA:",
+    "HDR DISPLAY:": "SCHERMO HDR:",
     "HELP SEND MAPS:": "AIUTA A INVIARE:",
     "HIGH-RES HUD:": "HUD ALTA RISOLUZIONE:",
     "HIGH-RES TEXT:": "TESTO ALTA RISOLUZIONE:",
+    "HIGHEST": "MASSIMA",
     "Halo Custom\\nEdition map": "Mappa di Halo\\nCustom Edition",
     "Halo: Combat Evolved, the Xbox\\ngame, on this computer.\\n\\nProfile:":
         "Halo: Combat Evolved, il gioco\\nper Xbox, su questo computer.\\n\\nProfilo:",
@@ -209,6 +221,10 @@ LINES = {
         "Entra nella partita di un link d'invito copiato\\nprima di passare al gioco.",
     "Joining a game on a Custom Edition map you do not\\nhave: download it from the players (if shared).":
         "Entrando in una partita su una mappa Custom Edition\\nche non hai: scaricala dai giocatori (se condivisa).",
+    "Keep floors and walls sharp at a grazing angle,\\nwhich the Xbox did not. Off: as the Xbox.":
+        "Pavimenti e muri nitidi anche di sbieco, come\\nsu Xbox non erano. Se disattivato, come su Xbox.",
+    "Keep the light of explosions, plasma and the sun\\npast white, and roll it off instead of clipping.":
+        "Tiene la luce di esplosioni, plasma e sole oltre\\nil bianco, e la attenua invece di tagliarla.",
     "LEAVE": "ESCI",
     "LEGACY": "CLASSICA",
     "LEGACY SOUTHPAW": "CLASSICA MANCINA",
@@ -235,7 +251,9 @@ LINES = {
     "MAP SHARING": "CONDIVISIONE MAPPE",
     "MAP SHARING:": "CONDIVISIONE MAPPE:",
     "MAP WEAPONS:": "ARMI DELLA MAPPA:",
+    "MATCH TIMER:": "TIMER PARTITA:",
     "MAXIMUM PLAYERS:": "GIOCATORI MAX:",
+    "MODEL DETAIL:": "DETTAGLIO MODELLI:",
     "MOVE DOWN": "SPOSTA GIÙ",
     "MOVE UP": "SPOSTA SU",
     "MULTIPLIER:": "MOLTIPLICATORE:",
@@ -257,9 +275,11 @@ LINES = {
     "OPEN MIC": "MICROFONO APERTO",
     "ORIGINAL": "ORIGINALE",
     "OUTPUT DEVICE:": "DISPOSITIVO DI USCITA:",
+    "OVERSHIELD:": "SOVRASCUDO:",
     "On foot, horizontal at 16:9, in degrees.\\nDefault keeps the stock view.":
         "A piedi, orizzontale in 16:9, in gradi.\\nPredefinito mantiene la visuale originale.",
     "Only players with your invite link can join.": "Solo chi ha il tuo link d'invito può entrare.",
+    "PASSENGER THIRD PERSON:": "TERZA PERSONA PASSEGGERI:",
     "PASTE LINK": "INCOLLA LINK",
     "PAUSE MENU": "MENU PAUSA",
     "PER PLAYER": "PER GIOCATORE",
@@ -278,6 +298,11 @@ LINES = {
     "PRIVATE": "PRIVATA",
     "PUBLIC": "PUBBLICA",
     "PUSH TO TALK": "PREMI E PARLA",
+    "Pickups are as the campaign has them.": "Gli oggetti sono quelli della campagna.",
+    "Pickups grow with the players: by the value of\\n'Per Player' for each player past the first.":
+        "Gli oggetti crescono con i giocatori: di\\n'Per giocatore' per ogni giocatore oltre il primo.",
+    "Pickups use 'Multiplier', up to eight times as many,\\nhowever many players there are.":
+        "Gli oggetti usano 'Moltiplicatore', fino a otto volte\\ntanti, qualunque sia il numero di giocatori.",
     "Play sound at all; from the next time the game\\nstarts.": "Riproduce l'audio; dal prossimo avvio del\\ngioco.",
     "Play the campaign with a\\nfriend in split screen:\\nplayer 2 on a gamepad.":
         "Gioca la campagna con un\\namico a schermo diviso:\\ngiocatore 2 col gamepad.",
@@ -316,6 +341,7 @@ LINES = {
     "Players hear their teammates who are near them.": "I giocatori sentono i compagni di squadra vicini.",
     "Players join this game by its invite link, or your\\nDiscord invite. Enter copies the link again.":
         "Si entra in questa partita col link d'invito o il tuo\\ninvito Discord. Invio copia di nuovo il link.",
+    "Players keep their current mouse aim assist setting.": "I giocatori tengono la loro mira assistita col mouse.",
     "Players walk through each other, so that no one\\nblocks a doorway. The AI's characters still block.":
         "I giocatori si attraversano, così nessuno blocca\\nuna porta. I personaggi dell'IA bloccano ancora.",
     "Players who join without the map cannot play.": "Chi entra senza la mappa non può giocare.",
@@ -352,6 +378,7 @@ LINES = {
     "START NOW": "INIZIA ORA",
     "STATIC MULTIPLIER": "MOLTIPLICATORE FISSO",
     "STICK LAYOUT:": "DISPOSIZIONE LEVETTE:",
+    "STOCK": "ORIGINALE",
     "SWAP A, L TRIGGER": "SCAMBIA A, GRILLETTO SX",
     "SWAP B, L TRIGGER": "SCAMBIA B, GRILLETTO SX",
     "SWAP B, R STICK": "SCAMBIA B, LEVETTA DX",
@@ -374,17 +401,23 @@ LINES = {
     "Smooth jagged edges, which the Xbox did not. FXAA\\nis cheap; MSAA is sharper.":
         "Smussa i bordi seghettati, cosa che Xbox non faceva.\\nFXAA è leggero; MSAA è più nitido.",
     "Starting in:": "Inizio tra:",
+    "Static amounts for the options set to this mode.\\nPickups are capped at eight times as many.":
+        "Quantità fisse per le opzioni in questa modalità.\\nGli oggetti arrivano al massimo a otto volte tanti.",
+    "Stock picks models' detail by the Xbox's 480 lines;\\nnative by this display's; highest, always the best.":
+        "Originale sceglie il dettaglio dalle 480 linee Xbox;\\nnativa dallo schermo; massima, sempre la migliore.",
     "Strict NAT, turn on UPnP: could not reach %s": "NAT rigido, attiva UPnP: impossibile raggiungere %s",
     "TEAM": "SQUADRA",
     "TEAM NEAR": "SQUADRA VICINA",
     "TEAM, ENEMIES NEAR": "SQUADRA E NEMICI",
     "TEAMPLAY OPTIONS:": "OPZIONI SQUADRE:",
     "TEAMS": "SQUADRE",
+    "TEXTURE FILTERING:": "FILTRO TEXTURE:",
     "Talk in network games: while PUSH TO TALK is held\\n(Controls), whenever you speak, or never.":
         "Parla nelle partite in rete: tenendo PREMI PER PARLARE\\n(Controlli), ogni volta che parli, o mai.",
     "Teams": "Squadre",
     "That is not the game's password. Try again.": "Non è la password della partita. Riprova.",
-    "The HUD, text, anti-aliasing, shadows and\\nlighting.": "HUD, testo, anti-aliasing, ombre e\\nilluminazione.",
+    "The HUD, text, anti-aliasing, shadows,\\nlighting and HDR.":
+        "HUD, testo, anti-aliasing, ombre,\\nilluminazione e HDR.",
     "The energy shield's flare on your first-person\\narms too, as on your body.":
         "Il lampo dello scudo energetico anche sulle braccia\\nin prima persona, come sul corpo.",
     "The field of view and the first-person\\nweapon. Their defaults keep the stock view.":
@@ -408,6 +441,8 @@ LINES = {
         "Il nome della partita negli elenchi delle partite.\\nInvio lo cambia.",
     "The new player's profile.": "Il profilo del nuovo giocatore.",
     "The other players' voices.": "Le voci degli altri giocatori.",
+    "The overshield rises up the body as it charges\\nand stays lit, in its own color. Off: stock.":
+        "Il sovrascudo sale lungo il corpo mentre si carica\\ne resta acceso, nel suo colore. Spento: originale.",
     "The reverb, and how sounds are converted to the\\noutput's rate.":
         "Il riverbero e la conversione dei suoni alla\\nfrequenza d'uscita.",
     "The server browser is off (network.public_lobby)": "L'elenco server è disattivato (network.public_lobby)",
@@ -420,6 +455,8 @@ LINES = {
     "The weapons follow the weapon set above.": "Le armi seguono il set di armi sopra.",
     "The window's size: 4:3, then 16:10, 16:9 and 21:9\\n(its edges can also be dragged).":
         "La dimensione della finestra: 4:3, poi 16:10, 16:9 e\\n21:9 (si possono anche trascinare i bordi).",
+    "Third-person Warthog and Scorpion passengers in\\nthe campaign and co-op. Weapon zoom is disabled.":
+        "Passeggeri di Warthog e Scorpion in terza persona\\nin campagna e co-op. Lo zoom delle armi è disattivato.",
     "This game has a password. Type it, then press\\nEnter to join.":
         "Questa partita ha una password. Digitala, poi\\npremi Invio per entrare.",
     "Two hundred and fifty kills to win.": "Duecentocinquanta uccisioni per vincere.",
@@ -438,6 +475,13 @@ LINES = {
     "VOICE VOLUME:": "VOLUME VOCE:",
     "VOTE KICK:": "VOTO ESPULSIONE:",
     "VOTED TO SKIP   %d OF %d": "VOTATO IL SALTO   %d SU %d",
+    "Vehicles are as the campaign has them.": "I veicoli sono quelli della campagna.",
+    "Vehicles respawn after being driven a short distance,\\nwith extra copies equal to ('Multiplier' - 1) * 2/3,\\nrounded down, however many players there are.":
+        "I veicoli riappaiono dopo un breve tragitto, con\\ncopie in più pari a ('Moltiplicatore' - 1) * 2/3,\\narrotondate per difetto, per ogni numero di giocatori.",
+    "Vehicles respawn after being driven a short distance\\nbased on the number of players: by two thirds the value of\\n'Per Player' for each player past the first.":
+        "I veicoli riappaiono dopo un breve tragitto in base\\nal numero di giocatori: di due terzi del valore di\\n'Per giocatore' per ogni giocatore oltre il primo.",
+    "Visual modifiers the stock game does not\\nhave, such as the shield glow.":
+        "Modifiche visive che il gioco originale non\\nha, come il bagliore dello scudo.",
     "Voices at 12 kilobits a second, in the lobby\\nand in the game.":
         "Voci a 12 kilobit al secondo, nella lobby\\ne in partita.",
     "Voices at 16 kilobits a second, in the lobby\\nand in the game.":
@@ -466,6 +510,8 @@ LINES = {
     "Which of the controller's buttons does what (not\\nthe keyboard's: Controls Setup sets those).":
         "Cosa fa ogni pulsante del controller (non quelli\\ndella tastiera: li imposta Impostazioni controlli).",
     "Which stick moves and which looks.": "Quale levetta muove e quale guarda.",
+    "With HDR, on an HDR display, show that light\\nbrighter than white. From the next start.":
+        "Con l'HDR, su schermo HDR, mostra quella luce\\npiù brillante del bianco. Dal prossimo avvio.",
     "With V-Sync off, the most frames a second. Auto:\\ntwice the display's refresh rate.":
         "Senza V-Sync, il massimo di fotogrammi al secondo.\\nAuto: il doppio della frequenza dello schermo.",
     "You come back beside them once it is safe": "Tornerai al suo fianco appena sarà sicuro",
@@ -555,7 +601,7 @@ LINES = {
 SAME = {
     "12 KBPS", "16 KBPS", "24 KBPS", "32 KBPS", "48 KBPS", "64 KBPS", "8 KBPS", "1 MB/S", "128 KB/S", "2 MB/S",
     "10 MB/S", "16 MB/S", "20 MB/S", "256 KB/S", "4 MB/S", "512 KB/S", "64 KB/S", "8 MB/S", "ANTI-ALIASING:",
-    "AUTO", "BUMPER JUMPER", "CO-OP", "FOV:", "FXAA", "MSAA 2X", "MSAA 4X", "MSAA 8X", "PASSWORD", "PASSWORD:",
+    "AUTO", "BUMPER JUMPER", "CO-OP", "FOV:", "FXAA", "HDR:", "MSAA 2X", "MSAA 4X", "MSAA 8X", "PASSWORD", "PASSWORD:",
     "SINC", "SMAA", "SSAA 2X", "V-SYNC:", ", password", "CHAT",
 }
 
