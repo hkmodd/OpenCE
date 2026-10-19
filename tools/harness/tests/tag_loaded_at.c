@@ -39,8 +39,11 @@ static int _stricmp(char const *a, char const *b)
 
 #define TAGS 3000
 #define ROOM (TAGS + 64)
-static struct cache_file_tag_instance instances[ROOM];
-static char names[ROOM][32];
+/* every absolute index a tag's index can name (a lookup that does not
+check the count reads inside them, empty past the room) */
+#define INDICES 0x10000
+static struct cache_file_tag_instance instances[INDICES];
+static char names[INDICES][32];
 static long const groups[] = { 0x6269746D, 0x756E6869, 0x68756467, 0x736E6421, 0x77706869 };
 
 static unsigned long random_state = 2342;
