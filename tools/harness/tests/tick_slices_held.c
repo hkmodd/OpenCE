@@ -96,6 +96,9 @@ static void tick_slices_finish(void)
 	tick_slices_release();
 }
 static boolean network_game_distributed_client(void) { return FALSE; }
+/* (a game's scene, not the main menu's; no debug.fixed_step) */
+static boolean game_time_menu_scene(void) { return FALSE; }
+static int halo_fixed_step(void) { return 0; }
 
 static struct game_time_globals_struct globals;
 static struct game_time_globals_struct *game_time_globals = &globals;
