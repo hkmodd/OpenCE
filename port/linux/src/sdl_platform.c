@@ -1370,7 +1370,7 @@ void platform_video_drawable_size(int *width, int *height)
 twice the display's refresh rate), or 0 for no limit. A GPU never left idle
 can hang (Intel's Raptor Lake graphics, whose reset then takes the desktop
 with it); the limit gives it a rest every frame. */
-static int even_frames;
+static int even_frames, frame_stats;
 static Uint64 frame_interval_ns(void)
 {
 	static int vsync;
@@ -1384,6 +1384,7 @@ static Uint64 frame_interval_ns(void)
 		vsync = config_boolean("display.vsync");
 		maximum = config_integer("display.max_fps");
 		even_frames = config_boolean("display.even_frames");
+		frame_stats = config_boolean("debug.frame_stats");
 	}
 	if (vsync || maximum < 0)
 		return 0;
@@ -1423,18 +1424,73 @@ void web_frame_shown(void);
 void web_js_post(int kind, const char *text);
 #endif
 
+#ifndef HALO_ANDROID
+/* debug.frame_stats: the time from one swap's return to the next (the
+time between the frames shown) and the swap's own time (where the driver
+holds the frame for the GPU, the display or its limiter), logged every 10
+seconds. A pause of a quarter of a second or more (a load) is left out. */
+static void frame_stats_count(Uint64 swap_start, Uint64 swap_end)
+{
+	static Uint64 last, window, total, swap_total, longest, swap_longest;
+	static unsigned long frames, over[3], counts[256];
+	unsigned long bin, seen;
+
+	if (last && swap_end - last < 250000000)
+	{
+		Uint64 period = swap_end - last, swap = swap_end - swap_start;
+
+		frames++;
+		total += period;
+		swap_total += swap;
+		over[0] += period > 2800000;
+		over[1] += period > 3500000;
+		over[2] += period > 5000000;
+		if (period > longest)
+		{
+			longest = period;
+			swap_longest = swap;
+		}
+		/* (in 50 microseconds; the last counts the rest) */
+		bin = (unsigned long)(period / 50000);
+		counts[bin < 255 ? bin : 255]++;
+	}
+	last = swap_end;
+	if (!window)
+		window = swap_end;
+	if (swap_end - window < 10000000000ULL || !frames)
+		return;
+	for (bin = 0, seen = 0; bin < 255; bin++)
+	{
+		seen += counts[bin];
+		if (seen * 100 >= frames * 99)
+			break;
+	}
+	platform_log("frame stats: %lu frames, mean %.3f ms (swap %.3f), over 2.8 ms %.2f%%, over 3.5 ms %.2f%%, "
+		"over 5 ms %.3f%%, 99%% within %.2f ms, longest %.2f ms (swap %.2f)",
+		frames, total / 1e6 / frames, swap_total / 1e6 / frames, 100.0 * over[0] / frames,
+		100.0 * over[1] / frames, 100.0 * over[2] / frames, (bin + 1) * 0.05, longest / 1e6, swap_longest / 1e6);
+	window = swap_end;
+	total = swap_total = longest = swap_longest = 0;
+	frames = 0;
+	memset(over, 0, sizeof(over));
+	memset(counts, 0, sizeof(counts));
+}
+#endif
+
 void platform_video_swap(void)
 {
 	Uint64 swap_start = SDL_GetTicks(), swap_time;
 #ifndef HALO_ANDROID
 	static Uint64 next_frame;
-	Uint64 interval;
+	Uint64 interval, stats_start = 0;
 
 	/* display.even_frames: a finished frame waits for its time, then is
 	shown; otherwise it is shown at once and the next frame waits */
 	interval = frame_interval_ns();
 	if (interval && even_frames)
 		next_frame = frame_wait(next_frame, interval);
+	if (frame_stats)
+		stats_start = SDL_GetTicksNS();
 #endif
 #ifdef HALO_WINDOWS
 	/* SDL can restore its fullscreen styles on a mode or focus change.
@@ -1448,6 +1504,10 @@ void platform_video_swap(void)
 	swap_time = SDL_GetTicks() - swap_start;
 	if (swap_time >= 2000)
 		platform_log("display: showing a frame took %.1f s in the graphics driver", (double)swap_time / 1000.0);
+#ifndef HALO_ANDROID
+	if (frame_stats)
+		frame_stats_count(stats_start, SDL_GetTicksNS());
+#endif
 #ifdef HALO_WEB
 	web_frame_shown();
 #endif
