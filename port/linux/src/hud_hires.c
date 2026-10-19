@@ -1027,13 +1027,15 @@ void hud_hires_map_unloaded(void)
 	decode_stopping = 1;
 	while (decode_running)
 		pthread_cond_wait(&decode_finished, &decode_lock);
-	pthread_mutex_unlock(&decode_lock);
+	/* (under the lock: with display.render_thread, the renderer takes a
+	texture's texels, at its first draw, on a thread of its own) */
 	for (asset = 0; asset < MAXIMUM_TEXTURES; asset++)
 	{
 		free(textures[asset].pixels);
 		textures[asset].pixels = NULL;
 		textures[asset].decode_state = _decode_none;
 	}
+	pthread_mutex_unlock(&decode_lock);
 #endif
 }
 
