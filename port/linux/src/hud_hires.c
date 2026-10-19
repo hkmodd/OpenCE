@@ -985,6 +985,31 @@ static void *decode_thread_main(void *unused)
 	pthread_mutex_unlock(&decode_lock);
 	return NULL;
 }
+
+/* the GL textures of those being decoded ahead, made as the map loads on
+the thread with the GL context: making one (its texels copied and its
+mipmaps made, on the driver's thread: 10 ms for 2048 by 2048) held up the
+frame it was first drawn in. Each is waited for, or decoded here if the
+decoding thread has not reached it. */
+static void textures_make_ahead(void *unused)
+{
+	long asset, count = hud_hires_asset_count();
+
+	(void)unused;
+	for (asset = 0; asset < count; asset++)
+	{
+		unsigned long levels;
+		int queued;
+
+		pthread_mutex_lock(&decode_lock);
+		queued = textures[asset].decode_state != _decode_none;
+		pthread_mutex_unlock(&decode_lock);
+		if (queued)
+			hud_hires_override_texture(asset, &levels);
+	}
+	/* (and the driver's work on them done now, not in the first frames) */
+	glFinish();
+}
 #endif
 
 void hud_hires_map_unloaded(void)
@@ -1035,6 +1060,15 @@ void hud_hires_map_loaded(const long *assets, long count)
 	if (pthread_create(&thread, NULL, decode_thread_main, NULL) == 0)
 	{
 		pthread_detach(thread);
+		/* (their GL textures made now too: with display.render_thread, by the
+		render thread, while this one loads on) */
+		if (render_thread_elsewhere())
+		{
+			render_thread_record(textures_make_ahead, 0);
+			render_thread_submit();
+		}
+		else
+			textures_make_ahead(NULL);
 	}
 	else
 	{
