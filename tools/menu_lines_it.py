@@ -10,6 +10,7 @@ shotgun), PARTECIPA (join game), multigiocatore, Profilo:."""
 
 # the English line: its Italian
 LINES = {
+    "%d %s on a newer version: update the game to join": "%d %s su una versione più recente: aggiorna il gioco per entrare",
     "%d players of %d, on %d machines%s": "%d di %d giocatori, su %d computer%s",
     "%s: %d %s of %d%s%s": "%s: %d %s su %d%s%s",
     "%s\\n%d of %d players\\non %d machines": "%s\\n%d di %d giocatori\\nsu %d computer",
@@ -373,6 +374,7 @@ LINES = {
     "Smooth jagged edges, which the Xbox did not. FXAA\\nis cheap; MSAA is sharper.":
         "Smussa i bordi seghettati, cosa che Xbox non faceva.\\nFXAA è leggero; MSAA è più nitido.",
     "Starting in:": "Inizio tra:",
+    "Strict NAT, turn on UPnP: could not reach %s": "NAT rigido, attiva UPnP: impossibile raggiungere %s",
     "TEAM": "SQUADRA",
     "TEAM NEAR": "SQUADRA VICINA",
     "TEAM, ENEMIES NEAR": "SQUADRA E NEMICI",
@@ -436,8 +438,6 @@ LINES = {
     "VOICE VOLUME:": "VOLUME VOCE:",
     "VOTE KICK:": "VOTO ESPULSIONE:",
     "VOTED TO SKIP   %d OF %d": "VOTATO IL SALTO   %d SU %d",
-    "Voice chat and votes to kick a player, for this\\ngame.":
-        "Chat vocale e voti per espellere un giocatore, per\\nquesta partita.",
     "Voices at 12 kilobits a second, in the lobby\\nand in the game.":
         "Voci a 12 kilobit al secondo, nella lobby\\ne in partita.",
     "Voices at 16 kilobits a second, in the lobby\\nand in the game.":
@@ -476,6 +476,8 @@ LINES = {
         "Il lampo dello scudo in un colore armatura, qualunque\\nsia l'armatura. Lo vedi solo tu. Predefinito: il suo.",
     "\\n\\nInvite link copied:\\npaste it to friends": "\\n\\nLink d'invito copiato:\\nincollalo agli amici",
     "\\n\\nJoining from here:": "\\n\\nEntra da qui:",
+    "game is": "partita è",
+    "games are": "partite sono",
     "player": "giocatore",
     "players": "giocatori",
     # (the controls' keys and buttons no loc.map string says)
@@ -490,11 +492,47 @@ LINES = {
     "STRAFE RIGHT": "PASSO A DESTRA",
     "MELEE": "CORPO A CORPO",
     "START GAME": "INIZIA PARTITA",
+    # (build-230's lines: the text chat and streamer mode)
+    "CENSOR INSULTS:": "CENSURA INSULTI:",
+    "CENSOR SLURS:": "CENSURA DISCRIMINAZIONI:",
+    "CENSOR SWEARING:": "CENSURA VOLGARITÀ:",
+    "CHAT TEXT:": "TESTO CHAT:",
+    "COLORS": "COLORI",
+    "HIDE": "NASCONDI",
+    "Hide offensive words in names and text from\\nother players, maps and mods, as stars.":
+        "Nasconde con asterischi le parole offensive nei\\nnomi e nei testi di giocatori, mappe e mod.",
+    "MILD AND WORSE": "LIEVI E PEGGIO",
+    "MULTIPLAYER HUD:": "HUD MULTIGIOCATORE:",
+    "Name-calling and insults that are not slurs.": "Offese e insulti non discriminatori.",
+    "No text chat in the game.": "Nessuna chat testuale nella partita.",
+    "Players can type to each other, links too. Off\\nin a public internet game.":
+        "I giocatori possono scriversi, anche link. Spenta\\nnelle partite internet pubbliche.",
+    "Players can type to each other; lines with links\\nare refused. Off in a public internet game.":
+        "I giocatori possono scriversi; le righe con link\\nsono rifiutate. Spenta nelle partite internet pubbliche.",
+    "Players' names above their heads, the\\nscoreboard, and the text chat.":
+        "I nomi sopra la testa dei giocatori, il\\npunteggio e la chat testuale.",
+    "SEVERE": "GRAVI",
+    "SHOW": "MOSTRA",
+    "SHOW the text chat, or HIDE it: no lines, and\\nits keys and D-pad Up open nothing.":
+        "MOSTRA la chat testuale, o NASCONDI: niente righe,\\ne i suoi tasti e la croce in su non aprono nulla.",
+    "STREAMER MODE:": "MODALITÀ STREAMER:",
+    "STRONG AND WORSE": "FORTI E PEGGIO",
+    "Slurs about race, sexuality, gender and\\ndisability.": "Insulti su etnia, orientamento, genere e\\ndisabilità.",
+    "Swearing and sexual words (STRONG AND WORSE\\nleaves the mildest showing).":
+        "Volgarità e parole sessuali (FORTI E PEGGIO\\nlascia visibili le più lievi).",
+    "TEAM CHAT": "CHAT SQUADRA",
+    "TEXT CHAT:": "CHAT TESTUALE:",
+    "The text chat's colors: COLORS, names in their\\nteam's color; WHITE, as Custom Edition.":
+        "I colori della chat: COLORI, i nomi nel colore della\\nsquadra; BIANCO, come in Custom Edition.",
+    "Voice chat, text chat and votes to kick a player,\\nfor this game.":
+        "Chat vocale, chat testuale e voti per espellere un\\ngiocatore, per questa partita.",
+    "WITH LINKS": "CON LINK",
     # (the port's titles)
     "PLAYER 2 PROFILE": "PROFILO GIOCATORE 2",
     "GAME LOBBY": "LOBBY PARTITA",
     "CO-OP OPTIONS": "OPZIONI COOPERATIVA",
     "VOICE AND VOTING": "VOCE E VOTAZIONI",
+    "COMMUNICATION": "COMUNICAZIONE",
     "MODS": "MOD",
     "Left Shift": "MAIUSC SX",
     "Right Shift": "MAIUSC DX",
@@ -516,8 +554,9 @@ LINES = {
 # lines Italian says as English does
 SAME = {
     "12 KBPS", "16 KBPS", "24 KBPS", "32 KBPS", "48 KBPS", "64 KBPS", "8 KBPS", "1 MB/S", "128 KB/S", "2 MB/S",
-    "256 KB/S", "4 MB/S", "512 KB/S", "64 KB/S", "8 MB/S", "ANTI-ALIASING:", "AUTO", "CO-OP", "FOV:", "FXAA", "MSAA 2X",
-    "MSAA 4X", "MSAA 8X", "PASSWORD", "PASSWORD:", "SINC", "SMAA", "SSAA 2X", "V-SYNC:", ", password",
+    "10 MB/S", "16 MB/S", "20 MB/S", "256 KB/S", "4 MB/S", "512 KB/S", "64 KB/S", "8 MB/S", "ANTI-ALIASING:",
+    "AUTO", "BUMPER JUMPER", "CO-OP", "FOV:", "FXAA", "MSAA 2X", "MSAA 4X", "MSAA 8X", "PASSWORD", "PASSWORD:",
+    "SINC", "SMAA", "SSAA 2X", "V-SYNC:", ", password", "CHAT",
 }
 
 # the PC version's strings the Italian edition's loc.map says wider than
