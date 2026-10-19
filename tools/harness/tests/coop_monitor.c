@@ -53,6 +53,7 @@ static void match_vassert(char const *f,int line,int condition,void *p){(void)f;
 static int random_range(int a,int b){(void)b;return a;}
 static void encounter_update_status(long i){(void)i;}
 static void encounters_test_activation(void){}
+static void tick_slices_yield(void){}
 static short coop_enemies_extra_count(long e,short n){(void)e;extra_queries++;return extra*n;}
 static short squad_get_actor_type(struct squad_definition *s);
 #include "under_test.inc"
