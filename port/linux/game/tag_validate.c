@@ -63,6 +63,9 @@ enum
 
 	/* how deep blocks go in a schema (the deepest are 6 or 7) */
 	MAXIMUM_VALIDATION_DEPTH = 32,
+	/* the definitions whose walks are known (definition_walk_get: the
+	schemas have about 350) */
+	MAXIMUM_DEFINITION_WALKS = 1024,
 	/* the longest a tag's name is, with its terminator (Halo's tools' paths:
 	the game's buffers for them, game_state.c's, objects.c's, are this
 	size) */
@@ -93,6 +96,16 @@ enum
 	/* (into each block's elements, which take the same passes) */
 	/* the checks (tag_schema_check_proc), after every tag's other passes */
 	_pass_checks,
+};
+
+/* what a definition's elements do in the walks (definition_walk_get) */
+enum
+{
+	/* their first walk (extents and values) claims, cuts or corrects
+	something */
+	_definition_walk_first_bit,
+	/* they or an element in their blocks have a check */
+	_definition_walk_checks_bit,
 };
 
 /* ---------- structures */
@@ -194,6 +207,15 @@ struct tag_validation
 	char const *field_name;
 };
 
+/* a definition's walks: what its elements do in them, and how many levels
+of elements an element of it holds (itself, and its blocks' elements) */
+struct definition_walk
+{
+	struct tag_schema_definition const *definition;
+	short flags;
+	short height;
+};
+
 /* ---------- globals */
 
 static struct
@@ -217,6 +239,10 @@ holds */
 static unsigned long tag_validate_claims[CLAIM_WORDS];
 
 static char const tag_validate_empty_name[] = "";
+
+/* the definitions' walks, found as they are first walked (by their
+address: open addressing) */
+static struct definition_walk definition_walks[MAXIMUM_DEFINITION_WALKS];
 
 /* ---------- prototypes */
 
@@ -789,6 +815,89 @@ static void validate_value(
 	return;
 }
 
+/* what a definition's elements do in the walks (NULL if there is no room
+to keep it). A field other than a check (or a structure of such fields)
+does something in the first walk: a block's or data's extents are claimed,
+anything else is a value. A definition met again while its own walk is
+being found (a schema whose blocks hold their own definition) is taken to
+do everything, as high as anything can be */
+static struct definition_walk const *definition_walk_get(
+	struct tag_schema_definition const *definition)
+{
+	unsigned long slot = ((unsigned long)definition >> 4) % MAXIMUM_DEFINITION_WALKS;
+	unsigned long probes;
+	struct definition_walk *walk = NULL;
+	struct tag_schema_field const *field;
+	short flags = 0;
+	short height = 1;
+
+	for (probes = 0; probes < MAXIMUM_DEFINITION_WALKS; probes++)
+	{
+		walk = &definition_walks[(slot + probes) % MAXIMUM_DEFINITION_WALKS];
+		if (walk->definition == definition)
+			return walk;
+		if (!walk->definition)
+			break;
+	}
+	if (probes == MAXIMUM_DEFINITION_WALKS)
+		return NULL;
+
+	walk->definition = definition;
+	walk->flags = FLAG(_definition_walk_first_bit) | FLAG(_definition_walk_checks_bit);
+	walk->height = MAXIMUM_VALIDATION_DEPTH + 1;
+	for (field = definition->fields; field->type != _tag_schema_terminator; field++)
+	{
+		struct definition_walk const *inner;
+
+		switch (field->type)
+		{
+		case _tag_schema_check:
+			flags |= FLAG(_definition_walk_checks_bit);
+			break;
+
+		case _tag_schema_struct:
+		case _tag_schema_block:
+			inner = definition_walk_get(field->definition);
+			if (!inner)
+				return NULL;
+			flags |= inner->flags;
+			if (field->type == _tag_schema_block)
+			{
+				flags |= FLAG(_definition_walk_first_bit);
+				height = MAX(height, inner->height + 1);
+			}
+			else
+			{
+				height = MAX(height, inner->height);
+			}
+			break;
+
+		default:
+			flags |= FLAG(_definition_walk_first_bit);
+			break;
+		}
+	}
+	walk->flags = flags;
+	walk->height = MIN(height, MAXIMUM_VALIDATION_DEPTH + 1);
+
+	return walk;
+}
+
+/* whether walking a block's elements of a definition in this pass would
+do nothing: none of their fields does anything in it, and none of them
+(or of their blocks' elements) is too deep (validate_element) */
+static boolean block_walk_idle(
+	struct tag_validation *validation,
+	struct tag_schema_definition const *definition)
+{
+	struct definition_walk const *walk = definition_walk_get(definition);
+	short bit = validation->pass == _pass_checks ? _definition_walk_checks_bit : _definition_walk_first_bit;
+
+	return walk &&
+		validation->depth + walk->height <= MAXIMUM_VALIDATION_DEPTH &&
+		!TEST_FLAG(walk->flags, bit);
+}
+
 /* one pass over an element's fields (those of the structures in it too) */
 static void validate_fields(
 	struct tag_validation *validation,
@@ -825,8 +934,13 @@ static void validate_fields(
 					struct tag_block *block = (struct tag_block *)address;
 					long element_index;
 
-					/* (the elements, through every pass) */
-					for (element_index = 0;
+					/* (the elements, through every pass: none, when they
+					would do nothing in it) */
+					if (block->count > 0 && block_walk_idle(validation, field->definition))
+						element_index = block->count;
+					else
+						element_index = 0;
+					for (;
 						element_index < block->count && !validation->refused;
 						element_index++)
 					{
