@@ -19,7 +19,8 @@ CASES = ["outside-near", "outside-far", "outside-side", "crossing-kept",
          "walk-fallback", "walk-planes", "walk-facing", "walk-near-first", "set-tests", "set-tests-unloaded", "console-local", "walk-unit-forward",
          "source-fog-rejected", "source-fog-straddling", "debug-record", "dispose-empty", "mirror-far", "build-budget",
           "rejected-bucket-visits", "compact-allocation-failure", "overlay-truncation", "default-mask", "debug-letterbox",
-          "walk-profile", "missing-subcluster-warning", "debug-stale-data"]
+          "walk-profile", "missing-subcluster-warning", "debug-stale-data",
+          "image-kept", "image-goes", "image-finer-changed", "image-vertices-moved", "image-fewer-materials"]
 CONTROLS = {
     "text-under-letterbox": (("bounds.y0 = (render.camera.viewport_bounds.y1 - render.camera.viewport_bounds.y0) / 8 + 2;", "bounds.y0 = 0;"), "structure_culling_render_debug", "debug-letterbox"),
     "drop-default-bucket-facing": (("FLAG(_structure_culling_bucket_facing_bit)", "0"), "structure_culling_tests", "default-mask"),
@@ -28,7 +29,6 @@ CONTROLS = {
     "scan-rejected-bucket": (("if (bucket_reason && !structure_culling_debug_enabled)", "if (FALSE)"), "structure_culling_traverse", "rejected-bucket-visits"),
     "drop-build-budget": (("if (size >= STRUCTURE_CULLING_BUILD_BUDGET)", "if (FALSE)"), "structure_culling_structure_bsp_loaded", "build-budget"),
     "mirror-use-far": (("if (render.camera.z_near == 0.0f)", "if (FALSE)"), "structure_culling_traverse", "mirror-far"),
-    "free-null-allocation": (("if (structure_culling.allocation)", "if (TRUE)"), "structure_culling_dispose", "dispose-empty"),
     "record-drawn": (("surface_index, keep);", "surface_index, keep || !reason);"), "structure_culling_record", "debug-record"),
     "record-while-off": (("if (!structure_culling_debug_enabled)", "if (FALSE)"), "structure_culling_record", "debug-record"),
     "clear-while-off": (("if (structure_culling_debug_enabled)", "if (TRUE)"), "structure_culling_traverse", "debug-record"),
@@ -61,6 +61,12 @@ CONTROLS = {
     "skip-profile-enter": (("profile_enter((*section));", ""), "structure_culling_traverse", "walk-profile"),
     "skip-profile-exit": (("profile_exit((*section));", ""), "structure_culling_traverse", "walk-profile"),
     "draw-stale-counters": (("if (!structure_culling_data_matches(structure))", "if (FALSE)"), "structure_culling_render_debug", "debug-stale-data"),
+    "free-null-allocation": (("if (structure_culling.allocation && !structure_culling.kept)", "if (!structure_culling.kept)"), "structure_culling_dispose", "dispose-empty"),
+    "image-dispose-frees": (("if (structure_culling.allocation && !structure_culling.kept)", "if (structure_culling.allocation)"), "structure_culling_dispose", "image-kept"),
+    "image-goes-installed": (("memset(&structure_culling, 0, sizeof(structure_culling));", ""), "structure_culling_kept_dispose", "image-goes"),
+    "image-ignore-finer": (("kept->finer_buckets != (TEST_FLAG(structure_culling_tests, _structure_culling_finer_buckets_bit) != 0) ||", "FALSE ||"), "structure_culling_kept_matches", "image-finer-changed"),
+    "image-ignore-vertices": (("kept->data.materials[material_index].vertices != material->compressed_vertex_data.address ||", "FALSE ||"), "structure_culling_kept_matches", "image-vertices-moved"),
+    "image-ignore-material-count": (("return material_index == kept->data.material_count;", "return TRUE;"), "structure_culling_kept_matches", "image-fewer-materials"),
     "skip-missing-warning": (("if (!warned_about_missing_subclusters)", "if (FALSE && !warned_about_missing_subclusters)"), "structure_visibility_compute", "missing-subcluster-warning"),
 }
 # every quickselect gives up after one round, so the heapsort finishes each split
@@ -78,6 +84,7 @@ def generated(control=None, force_fallback=False):
              "structure_culling_split_swap", "structure_culling_split_sift",
              "structure_culling_split_heapsort", "structure_culling_split_halves", "structure_culling_split_range",
              "structure_culling_split", "structure_culling_gather_pairings",
+             "structure_culling_kept_matches", "structure_culling_kept_dispose",
              "structure_culling_dispose", "structure_culling_pairing_points", "structure_culling_bounds_add",
              "structure_culling_build_group", "structure_culling_build_lists", "structure_culling_structure_bsp_loaded"]
     names += ["structure_culling_order_clusters", "structure_culling_data_matches", "structure_culling_record",
@@ -111,7 +118,7 @@ def generated(control=None, force_fallback=False):
     for file, structs in dependencies:
         text = read(file)
         types += "\n" + "\n".join(structure(text, name) for name in structs)
-    for name in ["structure_culling_material", "structure_culling_bucket", "structure_culling_cluster", "structure_culling_data", "structure_culling_workspace"]:
+    for name in ["structure_culling_material", "structure_culling_bucket", "structure_culling_cluster", "structure_culling_data", "structure_culling_kept", "structure_culling_workspace"]:
         types += "\n" + structure(source, name)
     types += "\n" + enum_with(header, "_structure_culling_triangle_frustum_bit")
     types += "\n" + enum_with(source, "COMPRESSED_STRUCTURE_VERTEX_SIZE")

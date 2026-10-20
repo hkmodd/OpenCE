@@ -21,6 +21,7 @@ Six-plane rejection and conservative facing summaries for structure buckets.
 #include "render/render_debug.h"
 #include "render/render_debug_geometry.h"
 #include "structures/structure_visibility.h"
+#include "structure_bsp_images.h"
 #include <float.h>
 #include <limits.h>
 #include <stdint.h>
@@ -124,6 +125,16 @@ struct structure_culling_data
 	long triangle_count;
 	unsigned long build_milliseconds;
 	boolean from_subclusters;
+	/* the allocation is a bsp image's (structure_culling_kept) */
+	boolean kept;
+};
+
+/* the tables built for a bsp, kept with its image (structure_bsp_images.c) for when it is loaded again, and the
+bucket setting they were built with */
+struct structure_culling_kept
+{
+	struct structure_culling_data data;
+	boolean finer_buckets;
 };
 
 struct structure_culling_workspace
@@ -973,10 +984,57 @@ long structure_culling_gather_pairings(long const *list, long list_count, boolea
 	return count;
 }
 
+static boolean structure_culling_kept_matches(struct structure_culling_kept const *kept,
+	struct structure_bsp const *structure)
+{
+	long l;
+	long m;
+	long material_index = 0;
+
+	if (kept->finer_buckets != (TEST_FLAG(structure_culling_tests, _structure_culling_finer_buckets_bit) != 0) ||
+		kept->data.structure != structure || kept->data.surface_address != structure->surfaces.address ||
+		kept->data.surface_count != structure->surfaces.count)
+	{
+		return FALSE;
+	}
+	/* (the vertices a bsp's load gives its materials: a Custom Edition bsp's are allocated as it loads) */
+	for (l = 0; l < structure->lightmaps.count; ++l)
+	{
+		struct tag_block const *materials =
+			&TAG_BLOCK_GET_ELEMENT(&structure->lightmaps, l, struct structure_lightmap)->materials;
+
+		for (m = 0; m < materials->count; ++m, ++material_index)
+		{
+			struct structure_material const *material = TAG_BLOCK_GET_ELEMENT(materials, m, struct structure_material);
+
+			if (material_index >= kept->data.material_count ||
+				kept->data.materials[material_index].vertices != material->compressed_vertex_data.address ||
+				kept->data.materials[material_index].vertex_count != (material->compressed_vertex_data.address ?
+					MAX(material->compressed_vertex_data.size / COMPRESSED_STRUCTURE_VERTEX_SIZE, 0) : 0))
+			{
+				return FALSE;
+			}
+		}
+	}
+
+	return material_index == kept->data.material_count;
+}
+
+static void structure_culling_kept_dispose(void *data)
+{
+	struct structure_culling_kept *kept = data;
+
+	if (structure_culling.allocation == kept->data.allocation)
+	{
+		memset(&structure_culling, 0, sizeof(structure_culling));
+	}
+	free(kept->data.allocation);
+}
+
 void structure_culling_dispose(void)
 {
-	/* debug_free rejects NULL, including before the first bsp load */
-	if (structure_culling.allocation)
+	/* debug_free rejects NULL, including before the first bsp load; a bsp image's tables go with it */
+	if (structure_culling.allocation && !structure_culling.kept)
 	{
 		free(structure_culling.allocation);
 	}
@@ -1277,6 +1335,7 @@ void structure_culling_structure_bsp_loaded(void)
 {
 	unsigned long started = system_milliseconds();
 	struct structure_bsp *structure;
+	struct structure_culling_kept *kept;
 	struct structure_culling_workspace work;
 	long l;
 	long m;
@@ -1297,6 +1356,13 @@ void structure_culling_structure_bsp_loaded(void)
 	structure = global_structure_bsp_get();
 	if (!structure || !structure_bsp_port_verify(structure))
 	{
+		return;
+	}
+	/* a bsp loaded again as its image takes the tables built for it then */
+	kept = structure_bsp_image_attachment();
+	if (kept && structure_culling_kept_matches(kept, structure))
+	{
+		structure_culling = kept->data;
 		return;
 	}
 	for (l = 0; l < structure->lightmaps.count; ++l)
@@ -1443,4 +1509,12 @@ void structure_culling_structure_bsp_loaded(void)
 		structure_culling.bucket_count, structure_culling.from_subclusters ? "subclusters" : "surface lists",
 		structure_culling.split_count, structure_culling.surface_count, structure_culling.bytes,
 		structure_culling.build_milliseconds, structure_culling.disagree_count, structure_culling.triangle_count);
+	kept = structure_bsp_image_attach(sizeof(*kept), structure_culling_kept_dispose);
+	if (kept)
+	{
+		kept->data = structure_culling;
+		kept->data.kept = TRUE;
+		kept->finer_buckets = TEST_FLAG(structure_culling_tests, _structure_culling_finer_buckets_bit) != 0;
+		structure_culling.kept = TRUE;
+	}
 }
