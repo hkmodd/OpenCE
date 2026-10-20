@@ -1,6 +1,7 @@
 """The map validator's walks (port/linux/game/tag_validate.c), taken whole, over made-up schemas: the elements of a
 block that would do nothing in a pass are not entered, nor an element without blocks or data taken through the extents'
-pass, and that changes no correction, check or refusal."""
+pass, nor an element of enums and indices without a value to correct, and that changes no correction, message, check or
+refusal."""
 import sys
 from pathlib import Path
 
@@ -10,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from harness import CHECK_FAILED, build, constant, mutated, read, run, structure  # noqa: E402
 
 CASES = ["idle-elements-skipped", "values", "checks", "nested-checks", "structure-checks", "data-extents",
-         "structure-data-extents", "too-deep"]
+         "structure-data-extents", "too-deep", "indices", "own-indices"]
 
 # a fault in tag_validate.c, and the case that must catch it
 NEGATIVE_CONTROLS = {
@@ -35,6 +36,23 @@ NEGATIVE_CONTROLS = {
     "structures-not-passed-up": (("\t\tcase _tag_schema_struct:\n\t\tcase _tag_schema_block:\n\t\t\tinner",
                                   "\t\tcase _tag_schema_block:\n\t\t\tinner"), "structure-checks"),
     "deep-elements-skipped": (("validation->depth + walk->height <= MAXIMUM_VALIDATION_DEPTH &&", ""), "too-deep"),
+    "every-index-element-entered": (("if (!index_valid(value, nones[field_index], counts[field_index], "
+                                     "nones_allowed[field_index]))", "if (1)"), "indices"),
+    "index-elements-skipped": (("\t\t\t\t\t\t\tif (element_index == block->count)",
+                                "\t\t\t\t\t\t\tif (1)"), "indices"),
+    "index-levels-off-by-one": (("block_index_target(validation, field, (short)(validation->depth + 1))",
+                                 "block_index_target(validation, field, validation->depth)"), "indices"),
+    "empty-blocks-none-not-allowed": (("\t\t\tnones_allowed[field_index] = nones_allowed[field_index] || "
+                                       "!counts[field_index];\n", ""), "indices"),
+    "structure-indices-a-block-at-a-time": (("(field->target_level != TAG_SCHEMA_ROOT && field->target_level < 1)",
+                                             "(field->target_level != TAG_SCHEMA_ROOT && "
+                                             "field->target_level != TAG_SCHEMA_STRUCTURE && "
+                                             "field->target_level < 1)"), "own-indices"),
+    "level-0-indices-a-block-at-a-time": (("(field->target_level != TAG_SCHEMA_ROOT && field->target_level < 1)",
+                                           "(field->target_level != TAG_SCHEMA_ROOT && field->target_level < 0)"),
+                                          "own-indices"),
+    "indices-in-the-checks-walk": (("\t\tvalidation->pass == _pass_values &&\n", ""), "checks"),
+    "deep-indices-skipped": (("\t\tvalidation->depth < MAXIMUM_VALIDATION_DEPTH &&\n", ""), "too-deep"),
 }
 
 VALIDATOR = "port/linux/game/tag_validate.c"
