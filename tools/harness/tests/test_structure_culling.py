@@ -20,7 +20,8 @@ CASES = ["outside-near", "outside-far", "outside-side", "crossing-kept",
          "source-fog-rejected", "source-fog-straddling", "debug-record", "dispose-empty", "mirror-far", "build-budget",
           "rejected-bucket-visits", "compact-allocation-failure", "overlay-truncation", "default-mask", "debug-letterbox",
           "walk-profile", "missing-subcluster-warning", "debug-stale-data",
-          "image-kept", "image-goes", "image-finer-changed", "image-vertices-moved", "image-fewer-materials"]
+          "image-kept", "image-goes", "image-finer-changed", "image-vertices-moved", "image-fewer-materials",
+         "image-kept-built", "image-kept-refused"]
 CONTROLS = {
     "text-under-letterbox": (("bounds.y0 = (render.camera.viewport_bounds.y1 - render.camera.viewport_bounds.y0) / 8 + 2;", "bounds.y0 = 0;"), "structure_culling_render_debug", "debug-letterbox"),
     "drop-default-bucket-facing": (("FLAG(_structure_culling_bucket_facing_bit)", "0"), "structure_culling_tests", "default-mask"),
@@ -67,6 +68,9 @@ CONTROLS = {
     "image-ignore-finer": (("kept->finer_buckets != (TEST_FLAG(structure_culling_tests, _structure_culling_finer_buckets_bit) != 0) ||", "FALSE ||"), "structure_culling_kept_matches", "image-finer-changed"),
     "image-ignore-vertices": (("kept->data.materials[material_index].vertices != material->compressed_vertex_data.address ||", "FALSE ||"), "structure_culling_kept_matches", "image-vertices-moved"),
     "image-ignore-material-count": (("return material_index == kept->data.material_count;", "return TRUE;"), "structure_culling_kept_matches", "image-fewer-materials"),
+    "kept-reads-loaded-bsp": (("structure_culling_kept_structure ? structure_culling_kept_structure : global_structure_bsp_get()", "global_structure_bsp_get()"), "structure_culling_structure_bsp_loaded", "image-kept-built"),
+    "kept-not-restored": (("structure_culling = loaded;", ""), "structure_culling_structure_bsp_kept", "image-kept-built"),
+    "kept-not-disposed": (("structure_culling_dispose();\n\tstructure_culling = loaded;", "structure_culling = loaded;"), "structure_culling_structure_bsp_kept", "image-kept-refused"),
     "skip-missing-warning": (("if (!warned_about_missing_subclusters)", "if (FALSE && !warned_about_missing_subclusters)"), "structure_visibility_compute", "missing-subcluster-warning"),
 }
 # every quickselect gives up after one round, so the heapsort finishes each split
@@ -86,7 +90,8 @@ def generated(control=None, force_fallback=False):
              "structure_culling_split", "structure_culling_gather_pairings",
              "structure_culling_kept_matches", "structure_culling_kept_dispose",
              "structure_culling_dispose", "structure_culling_pairing_points", "structure_culling_bounds_add",
-             "structure_culling_build_group", "structure_culling_build_lists", "structure_culling_structure_bsp_loaded"]
+             "structure_culling_build_group", "structure_culling_build_lists", "structure_culling_structure_bsp_loaded",
+             "structure_culling_structure_bsp_kept"]
     names += ["structure_culling_order_clusters", "structure_culling_data_matches", "structure_culling_record",
               "structure_culling_traverse", "structure_culling_set_tests", "structure_culling_debug",
               "structure_culling_render_debug"]
@@ -125,7 +130,7 @@ def generated(control=None, force_fallback=False):
     default = re.search(r"static long structure_culling_tests\s*=[^;]+;", source).group(0)
     if control == "drop-default-bucket-facing":
         default = mutated(default, *CONTROLS[control][0])
-    types += "\nstatic struct structure_culling_data structure_culling;\n" + default + "\n"
+    types += "\nstatic struct structure_culling_data structure_culling;\nstatic struct structure_bsp *structure_culling_kept_structure;\n" + default + "\n"
     types += "static long structure_culling_submitted, structure_culling_outside, structure_culling_facing;\n"
     types += "static boolean structure_culling_debug_enabled;\nstatic unsigned long structure_culling_recorded[2][4096];\n"
     cameras = read("source/render/render_cameras.c")

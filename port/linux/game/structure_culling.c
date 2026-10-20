@@ -137,6 +137,10 @@ struct structure_culling_kept
 	boolean finer_buckets;
 };
 
+/* the bsp the tables are built for, when it is one just kept and not the loaded one
+(structure_culling_structure_bsp_kept) */
+static struct structure_bsp *structure_culling_kept_structure;
+
 struct structure_culling_workspace
 {
 	short *owners;
@@ -1031,6 +1035,20 @@ static void structure_culling_kept_dispose(void *data)
 	free(kept->data.allocation);
 }
 
+/* a bsp just read, checked and kept as its image in the map's loading screen (cache_files.c), not loaded: its
+tables are built from it and kept with it, and the loaded bsp's are left as they were */
+void structure_culling_structure_bsp_kept(struct structure_bsp *structure)
+{
+	struct structure_culling_data loaded = structure_culling;
+
+	memset(&structure_culling, 0, sizeof(structure_culling));
+	structure_culling_kept_structure = structure;
+	structure_culling_structure_bsp_loaded();
+	structure_culling_kept_structure = NULL;
+	structure_culling_dispose();
+	structure_culling = loaded;
+}
+
 void structure_culling_dispose(void)
 {
 	/* debug_free rejects NULL, including before the first bsp load; a bsp image's tables go with it */
@@ -1353,7 +1371,7 @@ void structure_culling_structure_bsp_loaded(void)
 	byte *allocation;
 
 	structure_culling_dispose();
-	structure = global_structure_bsp_get();
+	structure = structure_culling_kept_structure ? structure_culling_kept_structure : global_structure_bsp_get();
 	if (!structure || !structure_bsp_port_verify(structure))
 	{
 		return;
