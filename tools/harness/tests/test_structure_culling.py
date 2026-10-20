@@ -19,7 +19,7 @@ CASES = ["outside-near", "outside-far", "outside-side", "crossing-kept",
          "walk-fallback", "walk-planes", "walk-facing", "walk-near-first", "set-tests", "set-tests-unloaded", "console-local", "walk-unit-forward",
          "source-fog-rejected", "source-fog-straddling", "debug-record", "dispose-empty", "mirror-far", "build-budget",
           "rejected-bucket-visits", "compact-allocation-failure", "overlay-truncation", "default-mask", "debug-letterbox",
-          "walk-profile", "missing-subcluster-warning", "debug-stale-data",
+          "walk-profile", "missing-subcluster-warning", "debug-stale-data", "load-workers",
           "image-kept", "image-goes", "image-finer-changed", "image-vertices-moved", "image-fewer-materials",
          "image-kept-built", "image-kept-refused"]
 CONTROLS = {
@@ -50,7 +50,13 @@ CONTROLS = {
     "keep-invalid-vertices": (("if (from_surface_list && !testable)", "if (FALSE)"), "structure_culling_gather_pairings", "out-of-range-surfaces"),
     "use-owner-in-group": (("from_surface_list ? group_material : surface_materials[surface_index]", "surface_materials[surface_index]"), "structure_culling_gather_pairings", "group-material"),
     "drop-missing-owner": (("if (from_surface_list && !testable)", "if (material_index < 0 || (from_surface_list && !testable))"), "structure_culling_gather_pairings", "missing-owner"),
-    "scratch-total-capacity": (("size += largest_group_count * scratch_unit_size;", "size += capacity * scratch_unit_size;"), "structure_culling_structure_bsp_loaded", "load-small-group-scratch"),
+    "scratch-total-capacity": (("scratch_size = largest_group_count * scratch_unit_size;", "scratch_size = capacity * scratch_unit_size;"), "structure_culling_structure_bsp_loaded", "load-small-group-scratch"),
+    "drop-pairing-rebase": (("buckets[b].first_pairing += structure_culling.pairing_count;", "buckets[b].first_pairing += 0;"), "structure_culling_build_compact", "load-workers"),
+    "drop-split-sum": (("structure_culling.split_count += group->split_count;", ""), "structure_culling_build_compact", "load-workers"),
+    "drop-disagree-sum": (("structure_culling.disagree_count += group->disagree_count;", ""), "structure_culling_build_compact", "load-workers"),
+    "group-slot-overlap": (("group->slot = total;", "group->slot = total / 2;"), "structure_culling_build_lists", "load-workers"),
+    "no-worker-wait": (("\t\tworker_pool_end();", "\t\t;"), "structure_culling_structure_bsp_loaded", "load-workers"),
+
     "last-group-maximum": (("MAX(*maximum_group_count, count)", "count"), "structure_culling_build_lists", "load-small-group-scratch"),
     "sort-descending": (("distances[order[j - 1]] > distances[entry]", "distances[order[j - 1]] < distances[entry]"), "structure_culling_order_clusters", "cluster-order"),
     "drop-structure-check": (("structure_culling.structure == structure &&", "TRUE &&"), "structure_culling_data_matches", "stale-structure"),
@@ -90,8 +96,9 @@ def generated(control=None, force_fallback=False):
              "structure_culling_split", "structure_culling_gather_pairings",
              "structure_culling_kept_matches", "structure_culling_kept_dispose",
              "structure_culling_dispose", "structure_culling_pairing_points", "structure_culling_bounds_add",
-             "structure_culling_build_group", "structure_culling_build_lists", "structure_culling_structure_bsp_loaded",
-             "structure_culling_structure_bsp_kept"]
+             "structure_culling_build_group", "structure_culling_build_lists", "structure_culling_build_groups",
+             "structure_culling_build_job", "structure_culling_build_compact", "structure_culling_workspace_scratch",
+             "structure_culling_structure_bsp_loaded", "structure_culling_structure_bsp_kept"]
     names += ["structure_culling_order_clusters", "structure_culling_data_matches", "structure_culling_record",
               "structure_culling_traverse", "structure_culling_set_tests", "structure_culling_debug",
               "structure_culling_render_debug"]
@@ -123,20 +130,20 @@ def generated(control=None, force_fallback=False):
     for file, structs in dependencies:
         text = read(file)
         types += "\n" + "\n".join(structure(text, name) for name in structs)
-    for name in ["structure_culling_material", "structure_culling_bucket", "structure_culling_cluster", "structure_culling_data", "structure_culling_kept", "structure_culling_workspace"]:
+    for name in ["structure_culling_material", "structure_culling_bucket", "structure_culling_cluster", "structure_culling_data", "structure_culling_kept", "structure_culling_workspace", "structure_culling_group", "structure_culling_builder"]:
         types += "\n" + structure(source, name)
     types += "\n" + enum_with(header, "_structure_culling_triangle_frustum_bit")
     types += "\n" + enum_with(source, "COMPRESSED_STRUCTURE_VERTEX_SIZE")
     default = re.search(r"static long structure_culling_tests\s*=[^;]+;", source).group(0)
     if control == "drop-default-bucket-facing":
         default = mutated(default, *CONTROLS[control][0])
-    types += "\nstatic struct structure_culling_data structure_culling;\nstatic struct structure_bsp *structure_culling_kept_structure;\n" + default + "\n"
+    types += "\nstatic struct structure_culling_data structure_culling;\nstatic struct structure_bsp *structure_culling_kept_structure;\nstatic struct structure_culling_builder structure_culling_builder;\n" + default + "\n"
     types += "static long structure_culling_submitted, structure_culling_outside, structure_culling_facing;\n"
     types += "static boolean structure_culling_debug_enabled;\nstatic unsigned long structure_culling_recorded[2][4096];\n"
     cameras = read("source/render/render_cameras.c")
     types += "\n" + enum_with(cameras, "_render_frustum_point_flags_left_bit")
     sign = re.search(r"^#define STRUCTURE_CULLING_FRONT_SIGN .+$", source, re.M).group(0)
-    sign += "\n" + "\n".join(re.findall(r"^#define STRUCTURE_CULLING_(?:MAXIMUM_BUCKET_SURFACES|LOOSE_BUCKET_SIZE|CONE_SPLIT_CUTOFF|BUILD_BUDGET|MAXIMUM_DEBUG_TRIANGLES|MAXIMUM_SPLIT_ROUNDS) .+$", source, re.M))
+    sign += "\n" + "\n".join(re.findall(r"^#define STRUCTURE_CULLING_(?:MAXIMUM_BUCKET_SURFACES|LOOSE_BUCKET_SIZE|CONE_SPLIT_CUTOFF|BUILD_BUDGET|MAXIMUM_WORKSPACES|MAXIMUM_DEBUG_TRIANGLES|MAXIMUM_SPLIT_ROUNDS) .+$", source, re.M))
     math = read("source/math/real_math.h")
     helpers = "\n".join(inline(math, name) for name in ["vector_from_points3d", "dot_product3d", "cross_product3d", "magnitude_squared3d", "scale_vector3d", "plane3d_distance_to_point"])
     helpers += "\n" + function(cameras, "render_frustum_cube_visible")
