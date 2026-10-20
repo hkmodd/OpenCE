@@ -107,7 +107,8 @@ static struct structure_bsp *fixture_bsp_get(void) { CHECK(global_structure_bsp_
 #define environment_vertex_compressed_get_normal(vertex, out) (*(out)=((struct fixture_vertex const *)(vertex))->normal)
 #define _error_silent 0
 #define error(level, ...) (log_count++, snprintf(build_log,sizeof(build_log),__VA_ARGS__))
-static void *fixture_malloc(size_t size) { CHECK(size<0x10000000UL,"engine allocation limit"); ++fixture_malloc_calls; fixture_malloc_size=MAX(fixture_malloc_size,size); return allocation_fails || fixture_malloc_calls==fixture_fail_malloc_call ? NULL : malloc(size); }
+/* filled, so that what the build leaves unwritten is the same in every build compared */
+static void *fixture_malloc(size_t size) { void *data; CHECK(size<0x10000000UL,"engine allocation limit"); ++fixture_malloc_calls; fixture_malloc_size=MAX(fixture_malloc_size,size); data=allocation_fails || fixture_malloc_calls==fixture_fail_malloc_call ? NULL : malloc(size); if(data) memset(data,0xa5,size); return data; }
 static void *fixture_realloc(void *data, size_t size) { CHECK(FALSE,"engine realloc forbidden for culling cache"); return NULL; }
 static void fixture_free(void *data) { CHECK(data!=NULL,"engine debug_free rejects NULL"); ++fixture_free_calls; free(data); }
 /* the bsp image the fixture's bsp loaded as, if it has one (structure_bsp_images.c) */
@@ -128,6 +129,42 @@ static void *structure_bsp_image_attach(long size, void (*dispose)(void *data))
     fixture_image_dispose(); fixture_attachment=data; fixture_attachment_dispose=dispose;
     return data;
 }
+/* the worker pool: fixture_workers threads, whose jobs run when the game's thread begins them, when it waits for
+them (by then it has taken every group), or at begin, taking the odd groups while the game's thread takes the even */
+enum { WORKERS_AT_BEGIN, WORKERS_AT_END, WORKERS_ALTERNATE, NUMBER_OF_WORKER_MODES };
+static int fixture_workers, fixture_worker_mode;
+static long worker_begins, worker_ends, worker_groups, next_odd, next_even;
+static boolean in_worker;
+static void (*fixture_job)(void);
+static int worker_pool_start(int count) { CHECK(count==0,"the count started is asked, none started"); return fixture_workers; }
+static void fixture_run_workers(void) { int i; in_worker=TRUE; for(i=0;i<fixture_workers;++i) fixture_job(); in_worker=FALSE; }
+static void worker_pool_begin(void (*job)(void))
+{
+    CHECK(fixture_workers>0 && worker_begins==worker_ends,"a job begun only with workers, the last one waited for");
+    ++worker_begins; fixture_job=job; next_odd=next_even=0;
+    if(fixture_worker_mode!=WORKERS_AT_END) fixture_run_workers();
+}
+static void worker_pool_end(void)
+{
+    CHECK(worker_begins==worker_ends+1,"waited for once a job is begun");
+    ++worker_ends;
+    if(fixture_worker_mode==WORKERS_AT_END) fixture_run_workers();
+}
+static long fixture_fetch_add(long *value, long add)
+{
+    long claimed=*value;
+    *value+=add;
+    if(value==&structure_culling_builder.next_group) {
+        if(fixture_worker_mode==WORKERS_ALTERNATE && fixture_workers) {
+            long *next=in_worker ? &next_odd : &next_even;
+            claimed=2*(*next)++ + in_worker;
+            claimed=MIN(claimed,structure_culling_builder.group_count);
+        }
+        if(in_worker && claimed<structure_culling_builder.group_count) ++worker_groups;
+    }
+    return claimed;
+}
+#define __atomic_fetch_add(value, add, order) fixture_fetch_add(value, add)
 #define malloc fixture_malloc
 #define realloc fixture_realloc
 #define free fixture_free
@@ -291,6 +328,105 @@ static void random_buckets(void)
             check_verdict(points, count, &cone, camera, b, s);
         }
     }
+}
+
+/* five clusters of groups, subclusters or surface lists under lightmap headers: an empty cluster, an empty group,
+surfaces out of range, an untestable surface, both materials, a malformed header ending the last cluster */
+#define MANY_SURFACES 48
+static struct structure_surface many_surfaces[MANY_SURFACES];
+static struct fixture_vertex many_vertices[MANY_SURFACES*3];
+static struct structure_visibility_cluster many_clusters[5];
+static struct structure_visibility_subcluster many_subclusters[12];
+static long many_indices[256];
+static unsigned long long many_cluster_surfaces[5];
+static long many_groups_with_pairings;
+
+static void fixture_load_many(boolean subclusters)
+{
+    /* each cluster's list sizes, NONE ending them */
+    static long const sizes[5][4]={{30,0,9,NONE},{NONE},{40,5,NONE},{12,NONE},{1,20,3,NONE}};
+    long c, g, i, n=0, sub=0, next=0;
+    fixture_load(subclusters);
+    random_state=0x5eed1234;
+    for(i=0;i<MANY_SURFACES*3;++i) {
+        many_vertices[i].point=(real_point3d){random_real(-10,10),random_real(-10,10),random_real(-10,10)};
+        many_vertices[i].normal=unit((real_vector3d){random_real(-1,1),random_real(-1,1),random_real(-1,1)});
+    }
+    for(i=0;i<MANY_SURFACES;++i) { many_surfaces[i].vertex_indices[0]=(word)(3*i); many_surfaces[i].vertex_indices[1]=(word)(3*i+1); many_surfaces[i].vertex_indices[2]=(word)(3*i+2); }
+    many_surfaces[7].vertex_indices[2]=MANY_SURFACES*3;
+    fixture_bsp.surfaces=(struct tag_block){MANY_SURFACES,many_surfaces,0};
+    fixture_bsp.clusters=(struct tag_block){5,many_clusters,0};
+    for(i=0;i<2;++i) {
+        fixture_materials[i].compressed_vertex_data.size=MANY_SURFACES*3*sizeof(struct fixture_vertex);
+        fixture_materials[i].compressed_vertex_data.address=many_vertices;
+    }
+    fixture_materials[0].first_surface_index=0; fixture_materials[0].surface_count=30;
+    fixture_materials[1].first_surface_index=20; fixture_materials[1].surface_count=MANY_SURFACES-20;
+    memset(many_clusters,0,sizeof(many_clusters)); memset(many_cluster_surfaces,0,sizeof(many_cluster_surfaces));
+    many_groups_with_pairings=0;
+    for(c=0;c<5;++c) {
+        long first_index=n, first_sub=sub;
+        for(g=0;sizes[c][g]!=NONE;++g) {
+            boolean pairs=FALSE;
+            if(subclusters) {
+                many_subclusters[sub].world_bounds=(real_rectangle3d){-c-1.0f,c+1.0f,-2,2,-g-1.0f,g+1.0f};
+                many_subclusters[sub++].surface_indices=(struct tag_block){sizes[c][g],many_indices+n,0};
+            } else {
+                many_indices[n++]=0; many_indices[n++]=g%2; many_indices[n++]=sizes[c][g];
+            }
+            for(i=0;i<sizes[c][g];++i,++next) {
+                long surface=(next*7+3)%(MANY_SURFACES+4);
+                many_indices[n++]=surface;
+                if(surface<MANY_SURFACES) {
+                    many_cluster_surfaces[c]|=1ULL<<surface;
+                    pairs|=subclusters || surface!=7;
+                }
+            }
+            many_groups_with_pairings+=pairs;
+        }
+        if(subclusters) many_clusters[c].subclusters=(struct tag_block){sub-first_sub,many_subclusters+first_sub,0};
+        else {
+            if(c==4) { many_indices[n++]=5; many_indices[n++]=0; many_indices[n++]=1; many_indices[n++]=0; }
+            many_clusters[c].surface_indices=(struct tag_block){n-first_index,many_indices+first_index,0};
+        }
+    }
+    structure_culling_structure_bsp_loaded();
+}
+
+/* the buckets follow one another, cluster by cluster, and their pairings do; the counts are those of the pairings */
+static void check_many_tables(void)
+{
+    long c, b, k, buckets=0, pairings=0, triangles=0, disagree=0;
+    for(c=0;c<5;++c) {
+        struct structure_culling_cluster const *cluster=&structure_culling.clusters[c];
+        CHECK(cluster->first_bucket==buckets,"cluster %ld's buckets follow the cluster before's",c);
+        for(b=cluster->first_bucket;b<cluster->first_bucket+cluster->bucket_count;++b) {
+            struct structure_culling_bucket const *bucket=&structure_culling.buckets[b];
+            CHECK(bucket->first_pairing==pairings && bucket->pairing_count>0,"bucket %ld's pairings follow the bucket before's: %ld, %ld",b,bucket->first_pairing,pairings);
+            for(k=bucket->first_pairing;k<bucket->first_pairing+bucket->pairing_count;++k) {
+                struct structure_culling_pairing const *pairing=&structure_culling.pairings[k];
+                CHECK(pairing->surface_index>=0 && pairing->surface_index<MANY_SURFACES && (many_cluster_surfaces[c]>>pairing->surface_index&1),"pairing %ld from cluster %ld's lists",k,c);
+                if(pairing->testable && pairing->material_index==0) {
+                    real_point3d const *p0=&many_vertices[3*pairing->surface_index].point, *p1, *p2;
+                    real_vector3d mean={0,0,0}, normal;
+                    p1=&many_vertices[3*pairing->surface_index+1].point; p2=&many_vertices[3*pairing->surface_index+2].point;
+                    normal=cross((real_vector3d){p1->x-p0->x,p1->y-p0->y,p1->z-p0->z},(real_vector3d){p2->x-p0->x,p2->y-p0->y,p2->z-p0->z});
+                    mean.i=many_vertices[3*pairing->surface_index].normal.i+many_vertices[3*pairing->surface_index+1].normal.i+many_vertices[3*pairing->surface_index+2].normal.i;
+                    mean.j=many_vertices[3*pairing->surface_index].normal.j+many_vertices[3*pairing->surface_index+1].normal.j+many_vertices[3*pairing->surface_index+2].normal.j;
+                    mean.k=many_vertices[3*pairing->surface_index].normal.k+many_vertices[3*pairing->surface_index+1].normal.k+many_vertices[3*pairing->surface_index+2].normal.k;
+                    ++triangles;
+                    disagree+=STRUCTURE_CULLING_FRONT_SIGN*(normal.i*mean.i+normal.j*mean.j+normal.k*mean.k)<0;
+                }
+            }
+            pairings+=bucket->pairing_count;
+        }
+        buckets+=cluster->bucket_count;
+    }
+    CHECK(structure_culling.clusters[1].bucket_count==0,"the empty cluster has no buckets");
+    CHECK(buckets==structure_culling.bucket_count && pairings==structure_culling.pairing_count,"every bucket and pairing in a cluster");
+    CHECK(triangles>0 && triangles==structure_culling.triangle_count,"triangles counted: %ld, %ld",triangles,structure_culling.triangle_count);
+    CHECK(disagree>0 && disagree==structure_culling.disagree_count,"disagreeing triangles counted: %ld, %ld",disagree,structure_culling.disagree_count);
+    CHECK(structure_culling.split_count==structure_culling.bucket_count-many_groups_with_pairings && structure_culling.split_count>0,"splits counted: %ld",structure_culling.split_count);
 }
 
 int main(int argc, char **argv)
@@ -706,6 +842,38 @@ int main(int argc, char **argv)
         CHECK(structure_culling_tests==0 && !log_count && !structure_culling.allocation,"no bsp: the mask is kept for the next load"); return 0;
     }
     CASE("console-local") { CHECK(hs_expression_changes_no_game("(structure_culling 25)") && hs_expression_changes_no_game("(debug_structure_culling 1)"),"console switches change only local rendering"); return 0; }
+    CASE("load-workers")
+    {
+        long subclusters, mode;
+        for(subclusters=0;subclusters<2;++subclusters) {
+            static byte reference[65536];
+            long bytes, counts[5];
+            fixture_workers=0; worker_begins=worker_ends=0;
+            fixture_load_many(subclusters);
+            CHECK(structure_culling.allocation && structure_culling.bytes<=(long)sizeof(reference) && worker_begins==0,"built on the game's thread alone");
+            check_many_tables();
+            bytes=structure_culling.bytes; memcpy(reference,structure_culling.allocation,bytes);
+            counts[0]=structure_culling.bucket_count; counts[1]=structure_culling.pairing_count; counts[2]=structure_culling.split_count;
+            counts[3]=structure_culling.triangle_count; counts[4]=structure_culling.disagree_count;
+            for(mode=0;mode<=NUMBER_OF_WORKER_MODES;++mode) {
+                long calls;
+                fixture_workers=8; fixture_worker_mode=mode%NUMBER_OF_WORKER_MODES; worker_begins=worker_ends=worker_groups=0;
+                /* the last time, the workers' scratch is not to be had */
+                calls=fixture_malloc_calls;
+                fixture_fail_malloc_call=mode==NUMBER_OF_WORKER_MODES ? calls+4 : 0;
+                fixture_load_many(subclusters);
+                fixture_fail_malloc_call=0;
+                CHECK(structure_culling_builder.workspace_count==(mode==NUMBER_OF_WORKER_MODES ? 1 : 9),"a workspace for each thread with groups to take: %ld",structure_culling_builder.workspace_count);
+                CHECK(worker_begins==worker_ends && worker_begins==(mode!=NUMBER_OF_WORKER_MODES),"the job begun and waited for once: %ld, %ld",worker_begins,worker_ends);
+                CHECK((worker_groups>0)==(mode!=NUMBER_OF_WORKER_MODES && mode!=WORKERS_AT_END),"groups built on the workers: %ld",worker_groups);
+                CHECK(structure_culling.bytes==bytes && !memcmp(structure_culling.allocation,reference,bytes),"mode %ld builds the tables the game's thread alone builds",mode);
+                CHECK(counts[0]==structure_culling.bucket_count && counts[1]==structure_culling.pairing_count && counts[2]==structure_culling.split_count &&
+                    counts[3]==structure_culling.triangle_count && counts[4]==structure_culling.disagree_count,"mode %ld counts as the game's thread alone",mode);
+            }
+            fixture_workers=0;
+        }
+        structure_culling_dispose(); return 0;
+    }
     CASE("load-small-group-scratch")
     {
         long mode;
@@ -722,11 +890,13 @@ int main(int argc, char **argv)
                 }
                 fixture_clusters[0].subclusters=(struct tag_block){3,subclusters,0};
             } else fixture_clusters[0].surface_indices=(struct tag_block){16,groups,0};
-            CHECK(structure_culling_build_lists(&fixture_bsp,NULL,&maximum_group_count)==7,"count pass sums mixed group sizes");
+            long group_count=99;
+            CHECK(structure_culling_build_lists(&fixture_bsp,NULL,NULL,&maximum_group_count,&group_count)==7,"count pass sums mixed group sizes");
             CHECK(maximum_group_count==4,"recorded maximum must be four, got %ld",maximum_group_count);
+            CHECK(group_count==3,"three groups counted, got %ld",group_count);
             structure_culling_structure_bsp_loaded();
-            /* base 76, seven output slots at 80, four scratch slots at 128 */
-            CHECK(fixture_malloc_size==1148,"scratch must use largest group: %lu bytes, expected 1148",(unsigned long)fixture_malloc_size);
+            /* base 76, seven output slots at 80, three groups, four scratch slots at 128 */
+            CHECK(fixture_malloc_size==1148+3*sizeof(struct structure_culling_group),"scratch must use largest group: %lu bytes, expected %lu",(unsigned long)fixture_malloc_size,(unsigned long)(1148+3*sizeof(struct structure_culling_group)));
             CHECK(structure_culling.allocation && structure_culling.pairing_count==7,"all mixed-group pairings retained");
             structure_culling_dispose();
         }

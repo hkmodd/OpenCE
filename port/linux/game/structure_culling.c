@@ -37,6 +37,8 @@ Six-plane rejection and conservative facing summaries for structure buckets.
 #define STRUCTURE_CULLING_LOOSE_BUCKET_SIZE 8.0f
 #define STRUCTURE_CULLING_CONE_SPLIT_CUTOFF 0.5f
 #define STRUCTURE_CULLING_BUILD_BUDGET (64UL * 1024 * 1024)
+/* the game's thread and worker_pool.c's eight */
+#define STRUCTURE_CULLING_MAXIMUM_WORKSPACES 9
 #define STRUCTURE_CULLING_MAXIMUM_DEBUG_TRIANGLES 6144
 /* a map arranged against the median of three makes the quickselect quadratic; past this many rounds the rest is heapsorted */
 #define STRUCTURE_CULLING_MAXIMUM_SPLIT_ROUNDS 64
@@ -155,9 +157,40 @@ struct structure_culling_workspace
 	real_vector3d *normals;
 };
 
+/* a subcluster or surface list: built into the bucket and pairing slots from its slot (the list counts of the groups
+before it), as many as its list could fill, then moved down to follow the group before it */
+struct structure_culling_group
+{
+	long const *list;
+	real_rectangle3d const *bounds;
+	long list_count;
+	long slot;
+	long cluster_index;
+	long bucket_count;
+	long pairing_count;
+	long split_count;
+	long triangle_count;
+	long disagree_count;
+	short material_index;
+	boolean from_surface_list;
+};
+
+/* the groups the game's thread and the worker threads take in turn, each thread with a workspace of its own */
+struct structure_culling_builder
+{
+	struct structure_bsp *structure;
+	struct structure_culling_group *groups;
+	struct structure_culling_workspace *workspaces;
+	long group_count;
+	long workspace_count;
+	long next_group;
+	long next_workspace;
+};
+
 /* ---------- globals */
 
 static struct structure_culling_data structure_culling;
+static struct structure_culling_builder structure_culling_builder;
 static long structure_culling_tests = FLAG(_structure_culling_triangle_frustum_bit) |
 	FLAG(_structure_culling_bucket_facing_bit) | FLAG(_structure_culling_triangle_facing_bit) |
 	FLAG(_structure_culling_finer_buckets_bit) | FLAG(_structure_culling_near_first_bit);
@@ -571,9 +604,12 @@ static void structure_culling_cone_build_with_normals(struct structure_culling_c
 }
 
 static void structure_culling_build_group(struct structure_bsp *structure, struct structure_culling_workspace *work,
-	long const *list, long list_count, boolean from_surface_list, short group_material,
-	real_rectangle3d const *parent_bounds)
+	struct structure_culling_group *group)
 {
+	real_rectangle3d const *parent_bounds = group->bounds;
+	boolean from_surface_list = group->from_surface_list;
+	struct structure_culling_bucket *buckets = structure_culling.buckets + group->slot;
+	struct structure_culling_pairing *pairings = structure_culling.pairings + group->slot;
 	long count;
 	long i;
 	long j;
@@ -581,9 +617,9 @@ static void structure_culling_build_group(struct structure_bsp *structure, struc
 	long first;
 	long eligible_count = 0;
 
-	count = structure_culling_gather_pairings(list, list_count, from_surface_list, group_material,
-		structure->surfaces.count, work->owners, work->vertex_counts, (word const *)structure->surfaces.address,
-		work->pairings);
+	count = structure_culling_gather_pairings(group->list, group->list_count, from_surface_list,
+		group->material_index, structure->surfaces.count, work->owners, work->vertex_counts,
+		(word const *)structure->surfaces.address, work->pairings);
 	if (!count)
 	{
 		return;
@@ -643,10 +679,10 @@ static void structure_culling_build_group(struct structure_bsp *structure, struc
 				mean.j += normal.j;
 				mean.k += normal.k;
 			}
-			++structure_culling.triangle_count;
+			++group->triangle_count;
 			if (dot_product3d(&surface->normal, &mean) < 0.0f)
 			{
-				++structure_culling.disagree_count;
+				++group->disagree_count;
 			}
 		}
 	}
@@ -675,16 +711,16 @@ static void structure_culling_build_group(struct structure_bsp *structure, struc
 			bucket_count = 2;
 		}
 	}
-	structure_culling.split_count += bucket_count - 1;
+	group->split_count = bucket_count - 1;
 	first = 0;
 	for (i = 0; i < bucket_count; ++i)
 	{
-		struct structure_culling_bucket *bucket = &structure_culling.buckets[structure_culling.bucket_count++];
+		struct structure_culling_bucket *bucket = &buckets[group->bucket_count++];
 		boolean invalid = FALSE;
 		boolean have_bounds = FALSE;
 		long point_count = 0;
 
-		bucket->first_pairing = structure_culling.pairing_count;
+		bucket->first_pairing = group->pairing_count;
 		bucket->pairing_count = work->ends[i] - first;
 		bucket->facing_eligible = work->surfaces[first].facing_eligible;
 		bucket->source_bounds = from_surface_list ? NULL : parent_bounds;
@@ -693,7 +729,7 @@ static void structure_culling_build_group(struct structure_bsp *structure, struc
 			struct structure_culling_pairing pairing = work->pairings[work->surfaces[j].surface_index];
 			short v;
 
-			structure_culling.pairings[structure_culling.pairing_count++] = pairing;
+			pairings[group->pairing_count++] = pairing;
 			if (!pairing.testable)
 			{
 				invalid = TRUE;
@@ -727,8 +763,9 @@ static void structure_culling_build_group(struct structure_bsp *structure, struc
 	}
 }
 
-static long structure_culling_build_lists(
-	struct structure_bsp *structure, struct structure_culling_workspace *work, long *maximum_group_count)
+/* the groups' list counts summed, and the group count; with lightmap_first, lists the groups */
+static long structure_culling_build_lists(struct structure_bsp *structure, long const *lightmap_first,
+	struct structure_culling_group *groups, long *maximum_group_count, long *group_count)
 {
 	long c;
 	long s;
@@ -740,15 +777,12 @@ static long structure_culling_build_lists(
 	{
 		*maximum_group_count = 0;
 	}
+	*group_count = 0;
 	for (c = 0; c < structure->clusters.count; ++c)
 	{
 		struct structure_visibility_cluster *cluster =
 			TAG_BLOCK_GET_ELEMENT(&structure->clusters, c, struct structure_visibility_cluster);
 		long position = 0;
-		if (work)
-		{
-			structure_culling.clusters[c].first_bucket = structure_culling.bucket_count;
-		}
 		for (s = 0; subclusters ? s < cluster->subclusters.count : position < cluster->surface_indices.count; ++s)
 		{
 			long const *list;
@@ -782,27 +816,93 @@ static long structure_culling_build_lists(
 				position += 3;
 				count = MIN(MAX(header[2], 0), cluster->surface_indices.count - position);
 				list = header + 3;
-				if (work)
+				if (lightmap_first)
 				{
-					material_index = (short)(work->lightmap_first[header[0]] + header[1]);
+					material_index = (short)(lightmap_first[header[0]] + header[1]);
 				}
 				position += count;
 			}
-			if (count < 0 || total > LONG_MAX - count)
+			if (count < 0 || total > LONG_MAX - count || *group_count == LONG_MAX)
 			{
 				return NONE;
 			}
+			if (groups)
+			{
+				struct structure_culling_group *group = &groups[*group_count];
+				memset(group, 0, sizeof(*group));
+				group->list = list;
+				group->bounds = bounds;
+				group->list_count = count;
+				group->slot = total;
+				group->cluster_index = c;
+				group->material_index = material_index;
+				group->from_surface_list = !subclusters;
+			}
+			++*group_count;
 			total += count;
 			if (maximum_group_count)
 			{
 				*maximum_group_count = MAX(*maximum_group_count, count);
 			}
-			if (work)
-			{
-				structure_culling_build_group(structure, work, list, count, !subclusters, material_index, bounds);
-			}
 		}
-		if (work)
+	}
+	return total;
+}
+
+static void structure_culling_build_groups(struct structure_culling_workspace *work)
+{
+	long group_index;
+
+	while ((group_index = __atomic_fetch_add(&structure_culling_builder.next_group, 1, __ATOMIC_RELAXED)) <
+		structure_culling_builder.group_count)
+	{
+		structure_culling_build_group(
+			structure_culling_builder.structure, work, &structure_culling_builder.groups[group_index]);
+	}
+}
+
+/* a worker thread's part: a workspace of its own while one is left, then groups while one is left */
+static void structure_culling_build_job(void)
+{
+	long workspace_index = __atomic_fetch_add(&structure_culling_builder.next_workspace, 1, __ATOMIC_RELAXED);
+
+	if (workspace_index < structure_culling_builder.workspace_count)
+	{
+		structure_culling_build_groups(&structure_culling_builder.workspaces[workspace_index]);
+	}
+}
+
+/* moves each group's buckets and pairings down to follow the group before it, in the order the groups were listed
+(no group's slot is below the buckets or pairings of the groups before it), and gives each cluster its buckets and
+their bounds */
+static void structure_culling_build_compact(
+	struct structure_bsp *structure, struct structure_culling_group const *groups, long group_count)
+{
+	long c;
+	long group_index = 0;
+
+	for (c = 0; c < structure->clusters.count; ++c)
+	{
+		structure_culling.clusters[c].first_bucket = structure_culling.bucket_count;
+		for (; group_index < group_count && groups[group_index].cluster_index == c; ++group_index)
+		{
+			struct structure_culling_group const *group = &groups[group_index];
+			struct structure_culling_bucket *buckets = structure_culling.buckets + structure_culling.bucket_count;
+			long b;
+
+			memmove(buckets, structure_culling.buckets + group->slot, group->bucket_count * sizeof(*buckets));
+			for (b = 0; b < group->bucket_count; ++b)
+			{
+				buckets[b].first_pairing += structure_culling.pairing_count;
+			}
+			memmove(structure_culling.pairings + structure_culling.pairing_count,
+				structure_culling.pairings + group->slot, group->pairing_count * sizeof(*structure_culling.pairings));
+			structure_culling.bucket_count += group->bucket_count;
+			structure_culling.pairing_count += group->pairing_count;
+			structure_culling.split_count += group->split_count;
+			structure_culling.triangle_count += group->triangle_count;
+			structure_culling.disagree_count += group->disagree_count;
+		}
 		{
 			struct structure_culling_cluster *built = &structure_culling.clusters[c];
 			long b;
@@ -827,7 +927,25 @@ static long structure_culling_build_lists(
 			}
 		}
 	}
-	return total;
+}
+
+/* a workspace's scratch, room for the largest group, from cursor on; returns the end of it */
+static byte *structure_culling_workspace_scratch(
+	struct structure_culling_workspace *work, byte *cursor, long largest_group_count)
+{
+	work->surfaces = (struct structure_culling_split_surface *)cursor;
+	cursor += largest_group_count * sizeof(*work->surfaces);
+	work->pairings = (struct structure_culling_pairing *)cursor;
+	cursor += largest_group_count * sizeof(*work->pairings);
+	work->ends = (long *)cursor;
+	cursor += largest_group_count * sizeof(long);
+	work->points = (real_point3d *)cursor;
+	cursor += 3 * largest_group_count * sizeof(*work->points);
+	work->triangles = (real_point3d *)cursor;
+	cursor += 3 * largest_group_count * sizeof(*work->triangles);
+	work->normals = (real_vector3d *)cursor;
+	cursor += largest_group_count * sizeof(*work->normals);
+	return cursor;
 }
 
 /* ---------- public code */
@@ -1355,6 +1473,8 @@ void structure_culling_structure_bsp_loaded(void)
 	struct structure_bsp *structure;
 	struct structure_culling_kept *kept;
 	struct structure_culling_workspace work;
+	struct structure_culling_workspace workspaces[STRUCTURE_CULLING_MAXIMUM_WORKSPACES];
+	struct structure_culling_group *groups;
 	long l;
 	long m;
 	long i;
@@ -1362,13 +1482,17 @@ void structure_culling_structure_bsp_loaded(void)
 	long material_index = 0;
 	long capacity;
 	long largest_group_count;
+	long group_count;
+	long workspace_count = 1;
 	size_t base_size;
 	size_t unit_size;
 	size_t scratch_unit_size;
+	size_t scratch_size;
 	size_t size;
 	size_t final_size;
 	byte *cursor;
 	byte *allocation;
+	byte *extra_scratch = NULL;
 
 	structure_culling_dispose();
 	structure = structure_culling_kept_structure ? structure_culling_kept_structure : global_structure_bsp_get();
@@ -1393,7 +1517,7 @@ void structure_culling_structure_bsp_loaded(void)
 		}
 		material_count += count;
 	}
-	capacity = structure_culling_build_lists(structure, NULL, &largest_group_count);
+	capacity = structure_culling_build_lists(structure, NULL, NULL, &largest_group_count, &group_count);
 	if (capacity < 0)
 	{
 		return;
@@ -1409,11 +1533,17 @@ void structure_culling_structure_bsp_loaded(void)
 		return;
 	}
 	size = base_size + capacity * unit_size;
+	if ((size_t)group_count > (LONG_MAX - size) / sizeof(*groups))
+	{
+		return;
+	}
+	size += group_count * sizeof(*groups);
 	if ((size_t)largest_group_count > (LONG_MAX - size) / scratch_unit_size)
 	{
 		return;
 	}
-	size += largest_group_count * scratch_unit_size;
+	scratch_size = largest_group_count * scratch_unit_size;
+	size += scratch_size;
 	if (size >= STRUCTURE_CULLING_BUILD_BUDGET)
 	{
 		return;
@@ -1433,6 +1563,8 @@ void structure_culling_structure_bsp_loaded(void)
 	cursor += capacity * sizeof(*structure_culling.buckets);
 	structure_culling.pairings = (struct structure_culling_pairing *)cursor;
 	cursor += capacity * sizeof(*structure_culling.pairings);
+	groups = (struct structure_culling_group *)cursor;
+	cursor += group_count * sizeof(*groups);
 	work.vertex_counts = (long *)cursor;
 	cursor += material_count * sizeof(long);
 	work.lightmap_first = (long *)cursor;
@@ -1440,17 +1572,7 @@ void structure_culling_structure_bsp_loaded(void)
 	work.owners = (short *)cursor;
 	cursor += ((structure->surfaces.count + 1) & ~1) * sizeof(short);
 	/* the same parser bounds every build_group call by the counted maximum */
-	work.surfaces = (struct structure_culling_split_surface *)cursor;
-	cursor += largest_group_count * sizeof(*work.surfaces);
-	work.pairings = (struct structure_culling_pairing *)cursor;
-	cursor += largest_group_count * sizeof(*work.pairings);
-	work.ends = (long *)cursor;
-	cursor += largest_group_count * sizeof(long);
-	work.points = (real_point3d *)cursor;
-	cursor += 3 * largest_group_count * sizeof(*work.points);
-	work.triangles = (real_point3d *)cursor;
-	cursor += 3 * largest_group_count * sizeof(*work.triangles);
-	work.normals = (real_vector3d *)cursor;
+	structure_culling_workspace_scratch(&work, cursor, largest_group_count);
 	for (i = 0; i < structure->surfaces.count; ++i)
 	{
 		work.owners[i] = NONE;
@@ -1486,7 +1608,44 @@ void structure_culling_structure_bsp_loaded(void)
 		}
 	}
 	structure_culling.material_count = material_count;
-	structure_culling_build_lists(structure, &work, NULL);
+	structure_culling_build_lists(structure, work.lightmap_first, groups, NULL, &group_count);
+	/* a workspace for each worker thread that has groups to take, within the build's budget; with none, the game's
+	thread builds every group */
+	workspaces[0] = work;
+	if (scratch_size && group_count > 1)
+	{
+		long extra_count = MIN(worker_pool_start(0), MIN(group_count, STRUCTURE_CULLING_MAXIMUM_WORKSPACES) - 1);
+
+		/* their scratch counts against the budget too */
+		extra_count = (long)MIN((size_t)extra_count, (STRUCTURE_CULLING_BUILD_BUDGET - 1 - size) / scratch_size);
+		extra_scratch = extra_count ? malloc(extra_count * scratch_size) : NULL;
+		for (cursor = extra_scratch; extra_scratch && workspace_count <= extra_count; ++workspace_count)
+		{
+			workspaces[workspace_count] = work;
+			cursor = structure_culling_workspace_scratch(&workspaces[workspace_count], cursor, largest_group_count);
+		}
+	}
+	structure_culling_builder.structure = structure;
+	structure_culling_builder.groups = groups;
+	structure_culling_builder.workspaces = workspaces;
+	structure_culling_builder.group_count = group_count;
+	structure_culling_builder.workspace_count = workspace_count;
+	structure_culling_builder.next_group = 0;
+	structure_culling_builder.next_workspace = 1;
+	if (workspace_count > 1)
+	{
+		worker_pool_begin(structure_culling_build_job);
+	}
+	structure_culling_build_groups(&workspaces[0]);
+	if (workspace_count > 1)
+	{
+		worker_pool_end();
+	}
+	if (extra_scratch)
+	{
+		free(extra_scratch);
+	}
+	structure_culling_build_compact(structure, groups, group_count);
 	/* scratch and worst-case bucket slots share one allocation, then leave only the exact tables */
 	final_size = material_count * sizeof(*structure_culling.materials) +
 		structure->clusters.count * sizeof(*structure_culling.clusters) +
