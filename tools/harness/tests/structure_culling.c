@@ -661,6 +661,39 @@ int main(int argc, char **argv)
         CHECK(log_count==2 && structure_culling.material_count==1,"another material count rebuilds");
         fixture_image_dispose(); return 0;
     }
+    CASE("image-kept-built")
+    {
+        struct structure_culling_data owned;
+        long calls, frees;
+        fixture_load(TRUE); owned=structure_culling;
+        CHECK(owned.allocation && !owned.kept && !fixture_attachment && log_count==1,"the loaded bsp's tables built and owned");
+        /* another bsp kept as its image while this one is loaded: built from the bsp given, not the loaded one */
+        global_structure_bsp_index=NONE; fixture_image=TRUE; calls=fixture_malloc_calls; frees=fixture_free_calls;
+        structure_culling_structure_bsp_kept(&fixture_bsp);
+        CHECK(structure_culling.allocation==owned.allocation && structure_culling.pairing_count==owned.pairing_count &&
+            structure_culling.bucket_count==owned.bucket_count && !structure_culling.kept,"the loaded bsp's tables stay installed");
+        CHECK(log_count==2 && fixture_malloc_calls>calls && fixture_free_calls-frees==fixture_malloc_calls-calls-1,"the kept bsp's tables built, one allocation left");
+        frees=fixture_free_calls;
+        CHECK(fixture_attachment && ((struct structure_culling_kept *)fixture_attachment)->data.allocation!=owned.allocation &&
+            ((struct structure_culling_kept *)fixture_attachment)->data.kept,"kept with its image");
+        structure_culling_dispose(); CHECK(fixture_free_calls==frees+1,"the loaded bsp's tables freed");
+        global_structure_bsp_index=0; calls=fixture_malloc_calls; structure_culling_structure_bsp_loaded();
+        CHECK(fixture_malloc_calls==calls && log_count==2 && structure_culling.kept && structure_culling.pairing_count==owned.pairing_count &&
+            structure_culling_data_matches(&fixture_bsp),"loaded as its image, it takes the tables built then");
+        fixture_image_dispose(); CHECK(fixture_free_calls==frees+2 && !structure_culling.allocation,"the image's tables go with it"); return 0;
+    }
+    CASE("image-kept-refused")
+    {
+        long calls, frees;
+        void *loaded;
+        fixture_load(TRUE); loaded=structure_culling.allocation;
+        global_structure_bsp_index=NONE; calls=fixture_malloc_calls; frees=fixture_free_calls;
+        structure_culling_structure_bsp_kept(&fixture_bsp);
+        CHECK(!fixture_attachment && log_count==2 && fixture_malloc_calls>calls,"no image to keep them: built");
+        CHECK(fixture_free_calls-frees==fixture_malloc_calls-calls,"and freed");
+        CHECK(structure_culling.allocation==loaded && structure_culling_data_matches(&fixture_bsp),"the loaded bsp's tables stay installed");
+        structure_culling_dispose(); return 0;
+    }
     CASE("set-tests")
     {
         fixture_load(TRUE); structure_culling_set_tests(17);
