@@ -66,6 +66,9 @@ enum
 	/* the definitions whose walks are known (definition_walk_get: the
 	schemas have about 350) */
 	MAXIMUM_DEFINITION_WALKS = 1024,
+	/* the fields of a definition whose elements' values are checked a block
+	at a time (first_element_to_correct: a bsp's have up to 3) */
+	MAXIMUM_INDEX_FIELDS = 8,
 	/* the longest a tag's name is, with its terminator (Halo's tools' paths:
 	the game's buffers for them, game_state.c's, objects.c's, are this
 	size) */
@@ -109,6 +112,10 @@ enum
 	/* they (or their structures) have a block or data, whose extents
 	their first walk claims */
 	_definition_walk_extents_bit,
+	/* their fields, no more than MAXIMUM_INDEX_FIELDS, are checks, enums and
+	block indices whose blocks are the same for each element of a block
+	(the root's, or those of an element up): first_element_to_correct */
+	_definition_walk_indices_bit,
 };
 
 /* ---------- structures */
@@ -590,10 +597,11 @@ static long integer_none(
 	return size == 1 ? 0xFF : size == 2 ? 0xFFFF : NONE;
 }
 
-/* the block a block index indexes */
+/* the block a block index indexes, in an element depth deep */
 static struct tag_block const *block_index_target(
 	struct tag_validation *validation,
-	struct tag_schema_field const *field)
+	struct tag_schema_field const *field,
+	short depth)
 {
 	byte *base;
 
@@ -601,12 +609,23 @@ static struct tag_block const *block_index_target(
 		base = validation->frames[0].base;
 	else if (field->target_level == TAG_SCHEMA_STRUCTURE)
 		base = validation->structure;
-	else if (field->target_level >= 0 && field->target_level < validation->depth)
-		base = validation->frames[validation->depth - 1 - field->target_level].base;
+	else if (field->target_level >= 0 && field->target_level < depth)
+		base = validation->frames[depth - 1 - field->target_level].base;
 	else
 		return NULL;
 
 	return (struct tag_block const *)(base + field->target_offset);
+}
+
+/* whether an index (or an enum) of count values is one of them, or none
+where none may be */
+static boolean index_valid(
+	long value,
+	long none,
+	long count,
+	boolean none_allowed)
+{
+	return (value >= 0 && value < count && value != none) || (none_allowed && value == none);
 }
 
 static void validate_block_extent(
@@ -759,14 +778,14 @@ static void validate_value(
 		break;
 	case _tag_schema_block_index:
 	{
-		struct tag_block const *target = block_index_target(validation, field);
+		struct tag_block const *target = block_index_target(validation, field, validation->depth);
 		long value = integer_get(address, field->size, is_unsigned);
 		long none = integer_none(field->size, is_unsigned);
 		long count = target ? target->count : 0;
 
 		/* (an empty block's index is none, as below, whether or not it
 		may be otherwise) */
-		if ((value >= 0 && value < count && value != none) || ((none_allowed || !count) && value == none))
+		if (index_valid(value, none, count, none_allowed || !count))
 			break;
 		tag_validate_correct(validation, "is %ld, past its block's %ld: %s",
 			value, count, none_allowed || !count ? "none" : "0");
@@ -778,7 +797,7 @@ static void validate_value(
 		long value = integer_get(address, field->size, is_unsigned);
 		long none = integer_none(field->size, is_unsigned);
 
-		if ((value >= 0 && value < field->maximum && value != none) || (none_allowed && value == none))
+		if (index_valid(value, none, field->maximum, none_allowed))
 			break;
 		/* (a Custom Edition map's tools left some shorts big-endian, as tag
 		files store them: Hornet's Nest's assault rifle muzzle flash light
@@ -834,6 +853,8 @@ static struct definition_walk const *definition_walk_get(
 	struct tag_schema_field const *field;
 	short flags = 0;
 	short height = 1;
+	boolean indices = TRUE;
+	short field_count = 0;
 
 	for (probes = 0; probes < MAXIMUM_DEFINITION_WALKS; probes++)
 	{
@@ -854,6 +875,7 @@ static struct definition_walk const *definition_walk_get(
 	{
 		struct definition_walk const *inner;
 
+		field_count++;
 		switch (field->type)
 		{
 		case _tag_schema_check:
@@ -875,18 +897,33 @@ static struct definition_walk const *definition_walk_get(
 			{
 				height = MAX(height, inner->height);
 			}
+			indices = FALSE;
 			break;
 
 		case _tag_schema_data:
 		case _tag_schema_file_data:
 			flags |= FLAG(_definition_walk_first_bit) | FLAG(_definition_walk_extents_bit);
+			indices = FALSE;
 			break;
 
 		default:
+			/* (an index into a block of the element's own, or of its
+			structure's, is not one whose block is the same for each) */
+			if (field->type != _tag_schema_enum &&
+				(field->type != _tag_schema_block_index ||
+					(field->target_level != TAG_SCHEMA_ROOT && field->target_level < 1)))
+			{
+				indices = FALSE;
+			}
 			flags |= FLAG(_definition_walk_first_bit);
 			break;
 		}
 	}
+	/* (a structure's walk's is not its holder's: that has a structure) */
+	if (indices && field_count <= MAXIMUM_INDEX_FIELDS)
+		flags |= FLAG(_definition_walk_indices_bit);
+	else
+		flags &= ~FLAG(_definition_walk_indices_bit);
 	walk->flags = flags;
 	walk->height = MIN(height, MAXIMUM_VALIDATION_DEPTH + 1);
 
@@ -905,6 +942,74 @@ static boolean block_walk_idle(
 	return walk &&
 		validation->depth + walk->height <= MAXIMUM_VALIDATION_DEPTH &&
 		!TEST_FLAG(walk->flags, bit);
+}
+
+/* whether a block's elements' values (their definition's walk) are
+checked a block at a time in this pass (first_element_to_correct) */
+static boolean block_walk_indices(
+	struct tag_validation *validation,
+	struct definition_walk const *walk)
+{
+	return walk &&
+		validation->pass == _pass_values &&
+		validation->depth < MAXIMUM_VALIDATION_DEPTH &&
+		TEST_FLAG(walk->flags, _definition_walk_indices_bit);
+}
+
+/* the first of a block's elements from element_index (or the block's
+count) with a value validate_value would correct: their values are enums
+and indices into the same blocks for each (block_walk_indices), so the
+elements before it would do nothing in the values pass */
+static long first_element_to_correct(
+	struct tag_validation *validation,
+	struct tag_block const *block,
+	struct tag_schema_definition const *definition,
+	long element_index)
+{
+	long counts[MAXIMUM_INDEX_FIELDS];
+	long nones[MAXIMUM_INDEX_FIELDS];
+	boolean nones_allowed[MAXIMUM_INDEX_FIELDS];
+	struct tag_schema_field const *field;
+	short field_index;
+
+	/* (as validate_value finds them in an element a level deeper) */
+	for (field = definition->fields, field_index = 0; field->type != _tag_schema_terminator; field++, field_index++)
+	{
+		nones[field_index] = integer_none(field->size, TEST_FLAG(field->flags, _tag_schema_unsigned_bit));
+		nones_allowed[field_index] = TEST_FLAG(field->flags, _tag_schema_none_bit);
+		counts[field_index] = field->maximum;
+		if (field->type == _tag_schema_block_index)
+		{
+			struct tag_block const *target = block_index_target(validation, field, (short)(validation->depth + 1));
+
+			counts[field_index] = target ? target->count : 0;
+			nones_allowed[field_index] = nones_allowed[field_index] || !counts[field_index];
+		}
+	}
+	for (; element_index < block->count; element_index++)
+	{
+		byte const *base = (byte const *)block->address + element_index * definition->size;
+
+		for (field = definition->fields, field_index = 0;
+			field->type != _tag_schema_terminator;
+			field++, field_index++)
+		{
+			short index;
+
+			if (field->type == _tag_schema_check)
+				continue;
+			for (index = 0; index < field->count; index++)
+			{
+				long value = integer_get(base + field->offset + index * field->size, field->size,
+					TEST_FLAG(field->flags, _tag_schema_unsigned_bit));
+
+				if (!index_valid(value, nones[field_index], counts[field_index], nones_allowed[field_index]))
+					return element_index;
+			}
+		}
+	}
+
+	return block->count;
 }
 
 /* one pass over an element's fields (those of the structures in it too) */
@@ -943,19 +1048,31 @@ static void validate_fields(
 					struct tag_block *block = (struct tag_block *)address;
 					struct definition_walk const *walk = NULL;
 					long element_index = 0;
+					boolean indices = FALSE;
 
 					/* (the elements, through every pass: none, when they
-					would do nothing in it) */
+					would do nothing in it, and only those with a value to
+					correct, when their values are checked a block at a
+					time) */
 					if (block->count > 0)
 					{
 						walk = definition_walk_get(field->definition);
 						if (block_walk_idle(validation, walk))
 							element_index = block->count;
+						else
+							indices = block_walk_indices(validation, walk);
 					}
 					for (;
 						element_index < block->count && !validation->refused;
 						element_index++)
 					{
+						if (indices)
+						{
+							element_index = first_element_to_correct(validation, block, field->definition,
+								element_index);
+							if (element_index == block->count)
+								break;
+						}
 						validate_element(
 							validation,
 							(byte *)block->address + element_index * ((struct tag_schema_definition const *)field->definition)->size,
