@@ -1,5 +1,6 @@
 """The map validator's walks (port/linux/game/tag_validate.c), taken whole, over made-up schemas: the elements of a
-block that would do nothing in a pass are not entered, and that changes no correction, check or refusal."""
+block that would do nothing in a pass are not entered, nor an element without blocks or data taken through the extents'
+pass, and that changes no correction, check or refusal."""
 import sys
 from pathlib import Path
 
@@ -8,12 +9,24 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from harness import CHECK_FAILED, build, constant, mutated, read, run, structure  # noqa: E402
 
-CASES = ["idle-elements-skipped", "values", "checks", "nested-checks", "structure-checks", "too-deep"]
+CASES = ["idle-elements-skipped", "values", "checks", "nested-checks", "structure-checks", "data-extents",
+         "structure-data-extents", "too-deep"]
 
 # a fault in tag_validate.c, and the case that must catch it
 NEGATIVE_CONTROLS = {
-    "every-element-walked": (("if (block->count > 0 && block_walk_idle(validation, field->definition))",
-                              "if (0)"), "idle-elements-skipped"),
+    "every-element-walked": (("if (block_walk_idle(validation, walk))", "if (0)"), "idle-elements-skipped"),
+    "every-element-through-extents": (("if (!walk || TEST_FLAG(walk->flags, _definition_walk_extents_bit))",
+                                       "if (1)"), "values"),
+    "blocks-without-extents": (("flags |= FLAG(_definition_walk_first_bit) | FLAG(_definition_walk_extents_bit);\n"
+                                "\t\t\t\theight", "flags |= FLAG(_definition_walk_first_bit);\n\t\t\t\theight"),
+                               "nested-checks"),
+    "data-without-extents": (("\t\tcase _tag_schema_file_data:\n\t\t\tflags |= FLAG(_definition_walk_first_bit) | "
+                              "FLAG(_definition_walk_extents_bit);",
+                              "\t\tcase _tag_schema_file_data:\n\t\t\tflags |= FLAG(_definition_walk_first_bit);"),
+                             "data-extents"),
+    "structures-extents-not-passed-up": (("\t\t\tflags |= inner->flags;\n",
+                                          "\t\t\tflags |= inner->flags & ~FLAG(_definition_walk_extents_bit);\n"),
+                                         "structure-data-extents"),
     "checks-not-passed-up": (("\t\t\tflags |= inner->flags;\n", ""), "nested-checks"),
     "checks-bit-in-both-walks": (("bit = validation->pass == _pass_checks ? _definition_walk_checks_bit : "
                                   "_definition_walk_first_bit;", "bit = _definition_walk_checks_bit;"), "values"),
@@ -62,9 +75,11 @@ def sources(validator=None):
     text = validator if validator is not None else read(VALIDATOR)
     for line in ('#include "cseries.h"\n', '#include "cache/physical_memory_map.h"\n'):
         text = mutated(text, line, "")
-    # (the elements it enters, counted)
+    # (the elements it enters, and those it takes through the extents' pass, counted)
     text = mutated(text, "\tframe = &validation->frames[validation->depth++];",
                    "\tharness_entered++;\n\tframe = &validation->frames[validation->depth++];")
+    text = mutated(text, "validation->pass = _pass_extents;",
+                   "harness_extents++;\n\t\t\tvalidation->pass = _pass_extents;")
     schema = mutated(read("port/linux/game/tag_schema.h"), '#include "tag_files/tag_groups.h"\n', "")
     return (("game_types.inc", game_types()), ("tag_schema.h", schema), ("chain.inc", chain()),
             ("under_test.inc", text))
