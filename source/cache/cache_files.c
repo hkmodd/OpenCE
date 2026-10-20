@@ -133,6 +133,8 @@ symbols in this file:
 #include "texture_cache.h"
 #include "interface/ui_widget.h"
 #include "scenario/scenario_definitions.h"
+#include "scenario/scenario.h" /* port: MAXIMUM_STRUCTURE_BSPS_PER_SCENARIO */
+#include "structure_bsp_images.h" /* port: port/linux/game/structure_bsp_images.c */
 #include "sound/sound_manager.h"
 #include "tag_schema.h"
 #include "custom_edition_cache.h" /* port: port/linux/game/custom_edition_cache.c */
@@ -258,12 +260,17 @@ static boolean cache_file_structure_bsp_reference_verify(
 	struct scenario_structure_bsp_reference *reference);
 static boolean cache_file_structure_bsp_tag_valid(
 	struct scenario_structure_bsp_reference const *reference);
+static void cache_file_structure_bsps_keep(
+	void);
 
 /* ---------- globals */
 
 static struct cache_file_globals cache_file_globals = { 0 };
 /* port: the name the map loaded last was loaded by (scenario_tags_load) */
 static char cache_file_loaded_name[64];
+/* port: the map's bsps are being read and kept, not loaded
+(cache_file_structure_bsps_keep) */
+static boolean cache_file_structure_bsps_keeping;
 extern struct cache_file_tag_instance *global_tag_instances;
 /* port: global_tag_instances' count. The menus add their tags to a copy of
 the table (port/linux/game/menu_tags.c); the map's tag header keeps its own,
@@ -546,6 +553,30 @@ static boolean cache_file_structure_bsp_reference_verify(
 	return TRUE;
 }
 
+/* port: reads and checks each of the map's bsps where it loads, keeping it as
+it is then (scenario_structure_bsp_load), in the map's first bsp load */
+static void cache_file_structure_bsps_keep(
+	void)
+{
+	struct scenario *scenario = tag_get(SCENARIO_TAG, cache_file_globals.tag_header->scenario_tag_index);
+	long reference_index;
+
+	structure_bsp_images_keep_begun();
+	cache_file_structure_bsps_keeping = TRUE;
+	for (reference_index = 0;
+		reference_index < MIN(scenario->structure_bsp_references.count, MAXIMUM_STRUCTURE_BSPS_PER_SCENARIO);
+		reference_index++)
+	{
+		scenario_structure_bsp_load(TAG_BLOCK_GET_ELEMENT(
+			&scenario->structure_bsp_references,
+			reference_index,
+			struct scenario_structure_bsp_reference));
+	}
+	cache_file_structure_bsps_keeping = FALSE;
+
+	return;
+}
+
 /* ---------- public code */
 
 char const *cache_files_map_directory(
@@ -625,6 +656,9 @@ void scenario_tags_unload(
 		menu_tags_unloaded();
 	}
 	cache_file_close();
+	/* port: the map's bsps kept as they were read and checked go with its
+	tags (port/linux/game/structure_bsp_images.c) */
+	structure_bsp_images_dispose();
 	/* port: a Halo Custom Edition map has no Xbox vertex or index buffers
 	(port/linux/game/custom_edition_cache.c) */
 	if (custom_edition_cache_tags_loaded())
@@ -1226,6 +1260,8 @@ long scenario_tags_load(
 
 	stripped_scenario_name = tag_name_strip_path(scenario_name);
 	result = NONE;
+	/* port: (no bsps kept from a map before) */
+	structure_bsp_images_dispose();
 	/* port: the map being loaded, by its name (cache_file_loaded_map_name) */
 	csstrncpy(cache_file_loaded_name, stripped_scenario_name, sizeof(cache_file_loaded_name) - 1);
 	cache_file_loaded_name[sizeof(cache_file_loaded_name) - 1] = 0;
@@ -1405,6 +1441,19 @@ boolean scenario_structure_bsp_load(
 	byte *tag_cache_base_address;
 	/* port: the bsp's header, once read and checked */
 	struct cache_file_structure_bsp_header *structure_bsp_header;
+	/* port: the bytes the read writes (cache_file_read reads whole sectors;
+	a Custom Edition map's bsp is served as it is), and whether they were
+	copied back as they were read and checked before */
+	long image_size;
+	boolean restored;
+
+	/* port: the map's first bsp load reads and checks every bsp of the map,
+	and keeps them as they are then, in its loading screen: a bsp loaded
+	again is copied back (port/linux/game/structure_bsp_images.c) */
+	if (!structure_bsp_images_kept())
+	{
+		cache_file_structure_bsps_keep();
+	}
 
 	/* port: the tag data's size was checked as the map loaded
 	(cache_file_header_verify); the bsp's reference is the map's, and is
@@ -1441,16 +1490,27 @@ boolean scenario_structure_bsp_load(
 			0xCD,
 			0x01600000 - cache_file_globals.header.tag_data_size);
 	}
+	image_size = custom_edition_cache_tags_loaded() ?
+		reference->file_size :
+		(reference->file_size + CACHE_FILE_SECTOR_SIZE - 1) & ~(CACHE_FILE_SECTOR_SIZE - 1);
+	restored = structure_bsp_image_restore(
+		reference->structure_bsp.index,
+		reference->file_offset,
+		image_size,
+		reference->base_address);
 	{
-		boolean read_complete;
+		boolean read_complete = restored;
 
-		cache_file_read(
-			NONE,
-			reference->file_offset,
-			reference->file_size,
-			reference->base_address,
-			&read_complete,
-			TRUE);
+		if (!restored)
+		{
+			cache_file_read(
+				NONE,
+				reference->file_offset,
+				reference->file_size,
+				reference->base_address,
+				&read_complete,
+				TRUE);
+		}
 		while (!read_complete)
 		{
 			SwitchToThread();
@@ -1496,11 +1556,24 @@ boolean scenario_structure_bsp_load(
 	}
 
 	/* port: and checked against its schema, as the map's tags were
-	(port/linux/game/tag_validate.c; a Custom Edition map's too) */
-	if (!tag_validate_structure_bsp(
-		reference->structure_bsp.index,
-		reference->base_address,
-		reference->file_size))
+	(port/linux/game/tag_validate.c; a Custom Edition map's too), and kept as
+	it is then; or copied back as it was */
+	if (!restored)
+	{
+		if (!tag_validate_structure_bsp(
+			reference->structure_bsp.index,
+			reference->base_address,
+			reference->file_size))
+		{
+			return FALSE;
+		}
+		structure_bsp_image_keep(
+			reference->structure_bsp.index,
+			reference->file_offset,
+			image_size,
+			reference->base_address);
+	}
+	if (cache_file_structure_bsps_keeping)
 	{
 		return FALSE;
 	}
