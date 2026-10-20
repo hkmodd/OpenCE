@@ -23,6 +23,7 @@ Six-plane rejection and conservative facing summaries for structure buckets.
 #include "structures/structure_visibility.h"
 #include <float.h>
 #include <limits.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -36,6 +37,8 @@ Six-plane rejection and conservative facing summaries for structure buckets.
 #define STRUCTURE_CULLING_CONE_SPLIT_CUTOFF 0.5f
 #define STRUCTURE_CULLING_BUILD_BUDGET (64UL * 1024 * 1024)
 #define STRUCTURE_CULLING_MAXIMUM_DEBUG_TRIANGLES 6144
+/* a map arranged against the median of three makes the quickselect quadratic; past this many rounds the rest is heapsorted */
+#define STRUCTURE_CULLING_MAXIMUM_SPLIT_ROUNDS 64
 
 enum
 {
@@ -132,11 +135,13 @@ struct structure_culling_workspace
 	struct structure_culling_pairing *pairings;
 	long *ends;
 	real_point3d *points;
+	/* each pairing's corners and front normal, by ordinal, kept from the split for the buckets */
+	real_point3d *triangles;
+	real_vector3d *normals;
 };
 
 /* ---------- globals */
 
-static short structure_culling_split_axis;
 static struct structure_culling_data structure_culling;
 static long structure_culling_tests = FLAG(_structure_culling_triangle_frustum_bit) |
 	FLAG(_structure_culling_bucket_facing_bit) | FLAG(_structure_culling_triangle_facing_bit) |
@@ -172,14 +177,124 @@ static short structure_culling_split_class(struct structure_culling_split_surfac
 	return axis * 2 + (normal[axis] < 0.0f);
 }
 
-static int structure_culling_split_compare(void const *a, void const *b)
+/* a centroid along an axis as an integer in the floats' order, every bit pattern (NaN too) in one place */
+static uint32_t structure_culling_split_key(struct structure_culling_split_surface const *surface, short axis)
 {
-	struct structure_culling_split_surface const *left = a;
-	struct structure_culling_split_surface const *right = b;
-	real x = (&left->centroid.x)[structure_culling_split_axis];
-	real y = (&right->centroid.x)[structure_culling_split_axis];
+	uint32_t bits;
 
-	return (x > y) - (x < y);
+	memcpy(&bits, &surface->centroid.x + axis, sizeof(bits));
+	return bits & 0x80000000UL ? ~bits : bits | 0x80000000UL;
+}
+
+/* the ordinal breaks ties, so the halves are the same on every platform */
+static boolean structure_culling_split_before(struct structure_culling_split_surface const *a,
+	struct structure_culling_split_surface const *b, short axis)
+{
+	uint32_t a_key = structure_culling_split_key(a, axis);
+	uint32_t b_key = structure_culling_split_key(b, axis);
+
+	return a_key < b_key || (a_key == b_key && a->surface_index < b->surface_index);
+}
+
+static void structure_culling_split_swap(struct structure_culling_split_surface *a,
+	struct structure_culling_split_surface *b)
+{
+	struct structure_culling_split_surface swap = *a;
+
+	*a = *b;
+	*b = swap;
+}
+
+static void structure_culling_split_sift(struct structure_culling_split_surface *surfaces, long root, long count,
+	short axis)
+{
+	long child;
+
+	while ((child = 2 * root + 1) < count)
+	{
+		if (child + 1 < count && structure_culling_split_before(&surfaces[child], &surfaces[child + 1], axis))
+		{
+			++child;
+		}
+		if (!structure_culling_split_before(&surfaces[root], &surfaces[child], axis))
+		{
+			return;
+		}
+		structure_culling_split_swap(&surfaces[root], &surfaces[child]);
+		root = child;
+	}
+}
+
+static void structure_culling_split_heapsort(struct structure_culling_split_surface *surfaces, long count, short axis)
+{
+	long i;
+
+	for (i = count / 2 - 1; i >= 0; --i)
+	{
+		structure_culling_split_sift(surfaces, i, count, axis);
+	}
+	for (i = count - 1; i > 0; --i)
+	{
+		structure_culling_split_swap(&surfaces[0], &surfaces[i]);
+		structure_culling_split_sift(surfaces, 0, i, axis);
+	}
+}
+
+/* moves the count/2 surfaces lowest along the axis in front of the others: the halves decide the buckets, not
+their order, so a quickselect does what sorting did */
+static void structure_culling_split_halves(struct structure_culling_split_surface *surfaces, long count, short axis)
+{
+	long low = 0;
+	long high = count - 1;
+	long nth = count / 2;
+	long round = 0;
+
+	while (low < high)
+	{
+		long middle = low + (high - low) / 2;
+		long store = low;
+		long i;
+
+		if (++round > STRUCTURE_CULLING_MAXIMUM_SPLIT_ROUNDS)
+		{
+			structure_culling_split_heapsort(surfaces + low, high - low + 1, axis);
+			return;
+		}
+
+		/* the median of three is the pivot, kept at high */
+		if (structure_culling_split_before(&surfaces[middle], &surfaces[low], axis))
+		{
+			structure_culling_split_swap(&surfaces[middle], &surfaces[low]);
+		}
+		if (structure_culling_split_before(&surfaces[high], &surfaces[low], axis))
+		{
+			structure_culling_split_swap(&surfaces[high], &surfaces[low]);
+		}
+		if (structure_culling_split_before(&surfaces[middle], &surfaces[high], axis))
+		{
+			structure_culling_split_swap(&surfaces[middle], &surfaces[high]);
+		}
+		for (i = low; i < high; ++i)
+		{
+			if (structure_culling_split_before(&surfaces[i], &surfaces[high], axis))
+			{
+				structure_culling_split_swap(&surfaces[i], &surfaces[store++]);
+			}
+		}
+		structure_culling_split_swap(&surfaces[high], &surfaces[store]);
+		if (store == nth)
+		{
+			return;
+		}
+		if (store < nth)
+		{
+			low = store + 1;
+		}
+		else
+		{
+			high = store - 1;
+		}
+	}
 }
 
 static void structure_culling_split_range(struct structure_culling_split_surface *surfaces, long first, long count,
@@ -276,8 +391,7 @@ static void structure_culling_split_range(struct structure_culling_split_surface
 	if (count > STRUCTURE_CULLING_MAXIMUM_BUCKET_SURFACES ||
 		(count > 8 && (&high.x)[axis] - (&low.x)[axis] > STRUCTURE_CULLING_LOOSE_BUCKET_SIZE))
 	{
-		structure_culling_split_axis = axis;
-		qsort(surfaces + first, count, sizeof(*surfaces), structure_culling_split_compare);
+		structure_culling_split_halves(surfaces + first, count, axis);
 		structure_culling_split_range(surfaces, first, count / 2, ends, bucket_count, FALSE);
 		structure_culling_split_range(surfaces, first + count / 2, count - count / 2, ends, bucket_count, FALSE);
 		return;
@@ -340,6 +454,107 @@ static void structure_culling_bounds_add(real_rectangle3d *bounds, real_point3d 
 	bounds->z1 = MAX(bounds->z1, point->z);
 }
 
+/* a triangle's unit front normal, or FALSE when it has none; normals, when given, hold them already (zero for
+none) */
+static boolean structure_culling_cone_normal(real_point3d const *points, real_vector3d const *normals,
+	long triangle_index, real_vector3d *normal)
+{
+	real_point3d const *point = &points[triangle_index * 3];
+	real_vector3d edge0;
+	real_vector3d edge1;
+	real squared;
+
+	if (normals)
+	{
+		*normal = normals[triangle_index];
+		return normal->i != 0.0f || normal->j != 0.0f || normal->k != 0.0f;
+	}
+	vector_from_points3d(point, point + 1, &edge0);
+	vector_from_points3d(point, point + 2, &edge1);
+	cross_product3d(&edge0, &edge1, normal);
+	squared = magnitude_squared3d(normal);
+	if (!(squared > 1.0e-20f && squared <= FLT_MAX))
+	{
+		return FALSE;
+	}
+	scale_vector3d(normal, STRUCTURE_CULLING_FRONT_SIGN / square_root(squared), normal);
+	return TRUE;
+}
+
+static void structure_culling_cone_build_with_normals(struct structure_culling_cone *cone, long triangle_count,
+	real_point3d const *points, real_vector3d const *normals)
+{
+	real_point3d low;
+	real_point3d high;
+	real_vector3d sum = {0, 0, 0};
+	real squared;
+	real maximum_squared = 0.0f;
+	long point_index;
+	long triangle_index;
+
+	cone->center.x = cone->center.y = cone->center.z = 0.0f;
+	cone->axis = sum;
+	cone->radius = 0.0f;
+	cone->cutoff = -1.0f;
+	if (triangle_count <= 0)
+	{
+		return;
+	}
+	low = high = points[0];
+	for (point_index = 0; point_index < triangle_count * 3; ++point_index)
+	{
+		real_point3d const *point = &points[point_index];
+
+		low.x = MIN(low.x, point->x);
+		low.y = MIN(low.y, point->y);
+		low.z = MIN(low.z, point->z);
+		high.x = MAX(high.x, point->x);
+		high.y = MAX(high.y, point->y);
+		high.z = MAX(high.z, point->z);
+	}
+	cone->center.x = (low.x + high.x) * 0.5f;
+	cone->center.y = (low.y + high.y) * 0.5f;
+	cone->center.z = (low.z + high.z) * 0.5f;
+	for (point_index = 0; point_index < triangle_count * 3; ++point_index)
+	{
+		real_vector3d offset;
+
+		vector_from_points3d(&cone->center, &points[point_index], &offset);
+		squared = magnitude_squared3d(&offset);
+		maximum_squared = MAX(maximum_squared, squared);
+	}
+	cone->radius = square_root(maximum_squared);
+	/* unit normals keep large triangles from dominating the mean direction */
+	for (triangle_index = 0; triangle_index < triangle_count; ++triangle_index)
+	{
+		real_vector3d normal;
+
+		if (!structure_culling_cone_normal(points, normals, triangle_index, &normal))
+		{
+			return;
+		}
+		sum.i += normal.i;
+		sum.j += normal.j;
+		sum.k += normal.k;
+	}
+	squared = magnitude_squared3d(&sum);
+	if (!(squared > 1.0e-20f && squared <= FLT_MAX))
+	{
+		return;
+	}
+	scale_vector3d(&sum, 1.0f / square_root(squared), &cone->axis);
+	cone->cutoff = 1.0f;
+	for (triangle_index = 0; triangle_index < triangle_count; ++triangle_index)
+	{
+		real_vector3d normal;
+		real cutoff;
+
+		structure_culling_cone_normal(points, normals, triangle_index, &normal);
+		cutoff = dot_product3d(&cone->axis, &normal);
+		cone->cutoff = MIN(cone->cutoff, cutoff);
+	}
+}
+
 static void structure_culling_build_group(struct structure_bsp *structure, struct structure_culling_workspace *work,
 	long const *list, long list_count, boolean from_surface_list, short group_material,
 	real_rectangle3d const *parent_bounds)
@@ -362,6 +577,7 @@ static void structure_culling_build_group(struct structure_bsp *structure, struc
 	{
 		struct structure_culling_pairing const *pairing = &work->pairings[i];
 		struct structure_culling_split_surface *surface = &work->surfaces[i];
+		real_point3d *points = work->triangles + i * 3;
 		real_vector3d edge0;
 		real_vector3d edge1;
 		real squared;
@@ -376,14 +592,13 @@ static void structure_culling_build_group(struct structure_bsp *structure, struc
 		{
 			continue;
 		}
-		structure_culling_pairing_points(structure, pairing, work->points);
+		structure_culling_pairing_points(structure, pairing, points);
 		for (j = 0; j < 3; ++j)
 		{
-			(&surface->centroid.x)[j] =
-				((&work->points[0].x)[j] + (&work->points[1].x)[j] + (&work->points[2].x)[j]) / 3.0f;
+			(&surface->centroid.x)[j] = ((&points[0].x)[j] + (&points[1].x)[j] + (&points[2].x)[j]) / 3.0f;
 		}
-		vector_from_points3d(work->points, work->points + 1, &edge0);
-		vector_from_points3d(work->points, work->points + 2, &edge1);
+		vector_from_points3d(points, points + 1, &edge0);
+		vector_from_points3d(points, points + 2, &edge1);
 		cross_product3d(&edge0, &edge1, &surface->normal);
 		squared = magnitude_squared3d(&surface->normal);
 		if (squared > 1.0e-20f && squared <= FLT_MAX)
@@ -469,7 +684,10 @@ static void structure_culling_build_group(struct structure_bsp *structure, struc
 				invalid = TRUE;
 				continue;
 			}
-			structure_culling_pairing_points(structure, &pairing, work->points + point_count);
+			/* a testable pairing's normal is zero only when its triangle is degenerate */
+			work->normals[point_count / 3] = work->surfaces[j].normal;
+			memcpy(work->points + point_count, work->triangles + work->surfaces[j].surface_index * 3,
+				3 * sizeof(*work->points));
 			for (v = 0; v < 3; ++v)
 			{
 				real_point3d const *point = &work->points[point_count++];
@@ -483,7 +701,7 @@ static void structure_culling_build_group(struct structure_bsp *structure, struc
 				structure_culling_bounds_add(&bucket->bounds, point);
 			}
 		}
-		structure_culling_cone_build(&bucket->cone, point_count / 3, work->points);
+		structure_culling_cone_build_with_normals(&bucket->cone, point_count / 3, work->points, work->normals);
 		if (invalid)
 		{
 			/* an untestable subcluster pairing keeps the original subcluster's visibility */
@@ -639,89 +857,7 @@ boolean structure_culling_triangle_faces_away(
 
 void structure_culling_cone_build(struct structure_culling_cone *cone, long triangle_count, real_point3d const *points)
 {
-	real_point3d low;
-	real_point3d high;
-	real_vector3d sum = {0, 0, 0};
-	real squared;
-	real maximum_squared = 0.0f;
-	long point_index;
-	long triangle_index;
-
-	cone->center.x = cone->center.y = cone->center.z = 0.0f;
-	cone->axis = sum;
-	cone->radius = 0.0f;
-	cone->cutoff = -1.0f;
-	if (triangle_count <= 0)
-	{
-		return;
-	}
-	low = high = points[0];
-	for (point_index = 0; point_index < triangle_count * 3; ++point_index)
-	{
-		real_point3d const *point = &points[point_index];
-
-		low.x = MIN(low.x, point->x);
-		low.y = MIN(low.y, point->y);
-		low.z = MIN(low.z, point->z);
-		high.x = MAX(high.x, point->x);
-		high.y = MAX(high.y, point->y);
-		high.z = MAX(high.z, point->z);
-	}
-	cone->center.x = (low.x + high.x) * 0.5f;
-	cone->center.y = (low.y + high.y) * 0.5f;
-	cone->center.z = (low.z + high.z) * 0.5f;
-	for (point_index = 0; point_index < triangle_count * 3; ++point_index)
-	{
-		real_vector3d offset;
-
-		vector_from_points3d(&cone->center, &points[point_index], &offset);
-		squared = magnitude_squared3d(&offset);
-		maximum_squared = MAX(maximum_squared, squared);
-	}
-	cone->radius = square_root(maximum_squared);
-	/* unit normals keep large triangles from dominating the mean direction */
-	for (triangle_index = 0; triangle_index < triangle_count; ++triangle_index)
-	{
-		real_point3d const *point = &points[triangle_index * 3];
-		real_vector3d edge0;
-		real_vector3d edge1;
-		real_vector3d normal;
-
-		vector_from_points3d(point, point + 1, &edge0);
-		vector_from_points3d(point, point + 2, &edge1);
-		cross_product3d(&edge0, &edge1, &normal);
-		squared = magnitude_squared3d(&normal);
-		if (!(squared > 1.0e-20f && squared <= FLT_MAX))
-		{
-			return;
-		}
-		scale_vector3d(&normal, STRUCTURE_CULLING_FRONT_SIGN / square_root(squared), &normal);
-		sum.i += normal.i;
-		sum.j += normal.j;
-		sum.k += normal.k;
-	}
-	squared = magnitude_squared3d(&sum);
-	if (!(squared > 1.0e-20f && squared <= FLT_MAX))
-	{
-		return;
-	}
-	scale_vector3d(&sum, 1.0f / square_root(squared), &cone->axis);
-	cone->cutoff = 1.0f;
-	for (triangle_index = 0; triangle_index < triangle_count; ++triangle_index)
-	{
-		real_point3d const *point = &points[triangle_index * 3];
-		real_vector3d edge0;
-		real_vector3d edge1;
-		real_vector3d normal;
-		real cutoff;
-
-		vector_from_points3d(point, point + 1, &edge0);
-		vector_from_points3d(point, point + 2, &edge1);
-		cross_product3d(&edge0, &edge1, &normal);
-		scale_vector3d(&normal, STRUCTURE_CULLING_FRONT_SIGN / square_root(magnitude_squared3d(&normal)), &normal);
-		cutoff = dot_product3d(&cone->axis, &normal);
-		cone->cutoff = MIN(cone->cutoff, cutoff);
-	}
+	structure_culling_cone_build_with_normals(cone, triangle_count, points, NULL);
 }
 
 short structure_culling_cone_facing(struct structure_culling_cone const *cone, real_point3d const *camera)
@@ -1183,7 +1319,7 @@ void structure_culling_structure_bsp_loaded(void)
 		structure->lightmaps.count * sizeof(long) + ((structure->surfaces.count + 1) & ~1) * sizeof(short);
 	unit_size = sizeof(struct structure_culling_bucket) + sizeof(struct structure_culling_pairing);
 	scratch_unit_size = sizeof(struct structure_culling_split_surface) + sizeof(struct structure_culling_pairing) +
-		sizeof(long) + 3 * sizeof(real_point3d);
+		sizeof(long) + 6 * sizeof(real_point3d) + sizeof(real_vector3d);
 	if (base_size >= LONG_MAX || (size_t)capacity > (LONG_MAX - base_size) / unit_size)
 	{
 		return;
@@ -1227,6 +1363,10 @@ void structure_culling_structure_bsp_loaded(void)
 	work.ends = (long *)cursor;
 	cursor += largest_group_count * sizeof(long);
 	work.points = (real_point3d *)cursor;
+	cursor += 3 * largest_group_count * sizeof(*work.points);
+	work.triangles = (real_point3d *)cursor;
+	cursor += 3 * largest_group_count * sizeof(*work.triangles);
+	work.normals = (real_vector3d *)cursor;
 	for (i = 0; i < structure->surfaces.count; ++i)
 	{
 		work.owners[i] = NONE;

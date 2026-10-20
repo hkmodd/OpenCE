@@ -12,7 +12,7 @@ CASES = ["outside-near", "outside-far", "outside-side", "crossing-kept",
          "facing-away", "facing-toward", "edge-on-kept", "degenerate-kept",
          "cone-never-more-aggressive", "cone-culls-something", "cone-camera-inside",
          "cone-wide-no-verdict", "box-outside", "box-partly", "box-inside",
-         "split-partition", "split-limits", "split-room", "split-loose",
+         "split-partition", "split-ties", "split-halves", "split-heapsort", "split-limits", "split-room", "split-loose",
          "out-of-range-surfaces", "group-material", "missing-owner",
          "load-subclusters", "load-surface-lists", "load-lifetime", "load-allocation-failure",
          "load-small-group-scratch", "cluster-order", "cluster-order-per-call", "stale-structure",
@@ -40,6 +40,11 @@ CONTROLS = {
     "box-four-planes": (("plane_index < 6; ++plane_index", "plane_index < 4; ++plane_index"), "structure_culling_box_test", "box-outside"),
     "mix-eligibility": (("if (eligible_count && eligible_count < count)", "if (FALSE && eligible_count && eligible_count < count)"), "structure_culling_split_range", "split-limits"),
     "drop-split-tail": (("ends[(*bucket_count)++] = first + count;", "ends[(*bucket_count)++] = first + count - 1;"), "structure_culling_split_range", "split-partition"),
+    "ties-by-key-only": (("(a_key == b_key && a->surface_index < b->surface_index)", "FALSE"), "structure_culling_split_before", "split-ties"),
+    "key-ignores-sign": (("return bits & 0x80000000UL ? ~bits : bits | 0x80000000UL;", "return bits;"), "structure_culling_split_key", "split-halves"),
+    "halves-at-third": (("long nth = count / 2;", "long nth = count / 3;"), "structure_culling_split_halves", "split-halves"),
+    "sift-inverted": (("if (!structure_culling_split_before(&surfaces[root], &surfaces[child], axis))", "if (structure_culling_split_before(&surfaces[root], &surfaces[child], axis))"), "structure_culling_split_sift", "split-heapsort"),
+    "fallback-short-window": (("structure_culling_split_heapsort(surfaces + low, high - low + 1, axis);", "structure_culling_split_heapsort(surfaces + low, high - low, axis);"), "structure_culling_split_halves", "split-halves"),
     "skip-facing-split": (("if (allow_facing && cutoff < STRUCTURE_CULLING_CONE_SPLIT_CUTOFF)", "if (FALSE)"), "structure_culling_split_range", "split-room"),
     "keep-invalid-vertices": (("if (from_surface_list && !testable)", "if (FALSE)"), "structure_culling_gather_pairings", "out-of-range-surfaces"),
     "use-owner-in-group": (("from_surface_list ? group_material : surface_materials[surface_index]", "surface_materials[surface_index]"), "structure_culling_gather_pairings", "group-material"),
@@ -58,14 +63,20 @@ CONTROLS = {
     "draw-stale-counters": (("if (!structure_culling_data_matches(structure))", "if (FALSE)"), "structure_culling_render_debug", "debug-stale-data"),
     "skip-missing-warning": (("if (!warned_about_missing_subclusters)", "if (FALSE && !warned_about_missing_subclusters)"), "structure_visibility_compute", "missing-subcluster-warning"),
 }
+# every quickselect gives up after one round, so the heapsort finishes each split
+FORCED_FALLBACK = ("if (++round > STRUCTURE_CULLING_MAXIMUM_SPLIT_ROUNDS)", "if (++round > 1)")
+FALLBACK_CASES = ["split-partition", "split-ties", "split-halves", "split-limits", "split-room", "split-loose", "load-subclusters"]
 
 
-def generated(control=None):
+def generated(control=None, force_fallback=False):
     path = Path(__file__).resolve().parents[3] / "port/linux/game/structure_culling.c"
     source = path.read_text() if path.exists() else ""
     names = ["structure_culling_triangle_outside", "structure_culling_triangle_faces_away",
+             "structure_culling_cone_normal", "structure_culling_cone_build_with_normals",
              "structure_culling_cone_build", "structure_culling_cone_facing", "structure_culling_box_test",
-             "structure_culling_split_class", "structure_culling_split_compare", "structure_culling_split_range",
+             "structure_culling_split_class", "structure_culling_split_key", "structure_culling_split_before",
+             "structure_culling_split_swap", "structure_culling_split_sift",
+             "structure_culling_split_heapsort", "structure_culling_split_halves", "structure_culling_split_range",
              "structure_culling_split", "structure_culling_gather_pairings",
              "structure_culling_dispose", "structure_culling_pairing_points", "structure_culling_bounds_add",
              "structure_culling_build_group", "structure_culling_build_lists", "structure_culling_structure_bsp_loaded"]
@@ -83,6 +94,8 @@ def generated(control=None):
             parts[name] = mutated(parts[name], "if (plane3d_distance_to_point", "outside_points[0] |= plane3d_distance_to_point(&planes[plane_index], point0) > 0.0f;\n\t\toutside_points[1] |= plane3d_distance_to_point(&planes[plane_index], point1) > 0.0f;\n\t\toutside_points[2] |= plane3d_distance_to_point(&planes[plane_index], point2) > 0.0f;\n\t\tif (plane3d_distance_to_point")
         else:
             parts[name] = mutated(parts[name], before, after)
+    if force_fallback or control == "fallback-short-window":
+        parts["structure_culling_split_halves"] = mutated(parts["structure_culling_split_halves"], *FORCED_FALLBACK)
     header = read("port/linux/game/structure_culling.h")
     types = structure(header, "structure_culling_cone") + "\n" + enum_with(header, "_structure_culling_facing_away")
     types += "\n" + structure(header, "structure_culling_split_surface") + "\n" + structure(header, "structure_culling_pairing")
@@ -111,8 +124,7 @@ def generated(control=None):
     cameras = read("source/render/render_cameras.c")
     types += "\n" + enum_with(cameras, "_render_frustum_point_flags_left_bit")
     sign = re.search(r"^#define STRUCTURE_CULLING_FRONT_SIGN .+$", source, re.M).group(0)
-    sign += "\n" + "\n".join(re.findall(r"^#define STRUCTURE_CULLING_(?:MAXIMUM_BUCKET_SURFACES|LOOSE_BUCKET_SIZE|CONE_SPLIT_CUTOFF|BUILD_BUDGET|MAXIMUM_DEBUG_TRIANGLES) .+$", source, re.M))
-    sign += "\nstatic short structure_culling_split_axis;\n"
+    sign += "\n" + "\n".join(re.findall(r"^#define STRUCTURE_CULLING_(?:MAXIMUM_BUCKET_SURFACES|LOOSE_BUCKET_SIZE|CONE_SPLIT_CUTOFF|BUILD_BUDGET|MAXIMUM_DEBUG_TRIANGLES|MAXIMUM_SPLIT_ROUNDS) .+$", source, re.M))
     math = read("source/math/real_math.h")
     helpers = "\n".join(inline(math, name) for name in ["vector_from_points3d", "dot_product3d", "cross_product3d", "magnitude_squared3d", "scale_vector3d", "plane3d_distance_to_point"])
     helpers += "\n" + function(cameras, "render_frustum_cube_visible")
@@ -132,6 +144,12 @@ static void fixture_visibility_surface_walk(struct structure_bsp *structure)
 @pytest.mark.parametrize("case", CASES)
 def test_case(case):
     status, output = run(build("structure_culling", generated()), case)
+    assert status == 0, output
+
+
+@pytest.mark.parametrize("case", FALLBACK_CASES)
+def test_forced_fallback(case):
+    status, output = run(build("structure_culling", generated(force_fallback=True)), case)
     assert status == 0, output
 
 
