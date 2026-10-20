@@ -559,12 +559,20 @@ void game_time_update(
 			{
 				long final_local_time;
 				long maximum_possible_server_time;
+				long local_updates; /* port */
 
 				final_local_time = game_time_globals->local_time + ticks_elapsed;
 				switch (game_connection())
 				{
 				case _game_connection_local:
-					update_client_local_ticks(ticks_elapsed);
+					/* port: the updates of the ticks this frame may run, and no
+					more: a tick begun ahead of its time had its update made
+					then (display.tick_slices), and an update made twice would
+					give every tick after it the input of the tick before */
+					local_updates = game_time_globals->server_time + ticks_elapsed -
+						update_client_get_maximum_possible_server_time();
+					if (local_updates > 0)
+						update_client_local_ticks((short)MIN(local_updates, ticks_elapsed));
 					break;
 				case _game_connection_network_server:
 					network_game_server_update_ticks(global_network_game_server_get(), (short)ticks_elapsed);
@@ -629,6 +637,13 @@ void game_time_update(
 				!game_time_globals->paused && tick_slices_lead() > 0.0 &&
 				1.f / ticks_per_second - game_time_globals->leftover_dt < tick_slices_lead() + time_delta_sec)
 			{
+				/* (in a local game its update is made now, from the input
+				as it is: it takes it as it begins) */
+				if (game_connection() == _game_connection_local &&
+					update_client_get_maximum_possible_server_time() <= game_time_globals->server_time)
+				{
+					update_client_local_ticks(1);
+				}
 				tick_slices_tick_ahead();
 			}
 		}
