@@ -114,7 +114,7 @@ void memory_watch_protect(unsigned long address, unsigned long size)
 			DWORD previous;
 
 			lock_pages();
-			if (!page_protected[page])
+			if (page_protected[page] != 1)
 			{
 				page_protected[page] = 1;
 				VirtualProtect((void *)(PLATFORM_CONTIGUOUS_BASE + page * WATCH_PAGE_SIZE), WATCH_PAGE_SIZE,
