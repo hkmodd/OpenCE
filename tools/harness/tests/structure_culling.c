@@ -63,7 +63,7 @@ static boolean structures_use_pvs_for_vs;
 static struct structure_bsp fixture_bsp;
 static struct shader fixture_shader;
 static boolean verify_ok=TRUE, allocation_fails;
-static long log_count, fixture_malloc_calls, fixture_fail_malloc_call;
+static long log_count, fixture_malloc_calls, fixture_fail_malloc_call, fixture_free_calls;
 static size_t fixture_malloc_size;
 static char build_log[512];
 static long debug_triangles, debug_strings;
@@ -109,7 +109,25 @@ static struct structure_bsp *fixture_bsp_get(void) { CHECK(global_structure_bsp_
 #define error(level, ...) (log_count++, snprintf(build_log,sizeof(build_log),__VA_ARGS__))
 static void *fixture_malloc(size_t size) { CHECK(size<0x10000000UL,"engine allocation limit"); ++fixture_malloc_calls; fixture_malloc_size=MAX(fixture_malloc_size,size); return allocation_fails || fixture_malloc_calls==fixture_fail_malloc_call ? NULL : malloc(size); }
 static void *fixture_realloc(void *data, size_t size) { CHECK(FALSE,"engine realloc forbidden for culling cache"); return NULL; }
-static void fixture_free(void *data) { CHECK(data!=NULL,"engine debug_free rejects NULL"); free(data); }
+static void fixture_free(void *data) { CHECK(data!=NULL,"engine debug_free rejects NULL"); ++fixture_free_calls; free(data); }
+/* the bsp image the fixture's bsp loaded as, if it has one (structure_bsp_images.c) */
+static boolean fixture_image;
+static void *fixture_attachment;
+static void (*fixture_attachment_dispose)(void *data);
+static void *structure_bsp_image_attachment(void) { return fixture_image ? fixture_attachment : NULL; }
+static void fixture_image_dispose(void)
+{
+    if(fixture_attachment) { fixture_attachment_dispose(fixture_attachment); free(fixture_attachment); }
+    fixture_attachment=NULL; fixture_attachment_dispose=NULL;
+}
+static void *structure_bsp_image_attach(long size, void (*dispose)(void *data))
+{
+    void *data;
+    if(!fixture_image || size<=0) return NULL;
+    data=calloc(1,(size_t)size); CHECK(data!=NULL,"attachment");
+    fixture_image_dispose(); fixture_attachment=data; fixture_attachment_dispose=dispose;
+    return data;
+}
 #define malloc fixture_malloc
 #define realloc fixture_realloc
 #define free fixture_free
@@ -593,6 +611,55 @@ int main(int argc, char **argv)
         CHECK(render.environment_surface_count==MAXIMUM_RENDERED_ENVIRONMENT_SURFACES,"submission cap");
         structure_culling_set_tests(9); render.environment_surface_count=MAXIMUM_RENDERED_ENVIRONMENT_SURFACES-1; render.environment_surface_flags[0]=0;
         CHECK(structure_culling_traverse(&fixture_bsp) && render.environment_surface_flags[0]==1,"mask without near-first preserves order"); return 0;
+    }
+    CASE("image-kept")
+    {
+        long calls, frees, pairings;
+        fixture_image=TRUE; fixture_load(TRUE); pairings=structure_culling.pairing_count;
+        CHECK(structure_culling.kept && fixture_attachment && log_count==1 && pairings>0,"tables kept with the bsp's image");
+        CHECK(((struct structure_culling_kept *)fixture_attachment)->data.allocation==structure_culling.allocation,"the image keeps the installed tables");
+        frees=fixture_free_calls; structure_culling_dispose();
+        CHECK(fixture_free_calls==frees,"dispose leaves the image's tables");
+        calls=fixture_malloc_calls; structure_culling_structure_bsp_loaded();
+        CHECK(fixture_malloc_calls==calls && log_count==1,"loaded again takes the kept tables, not a build");
+        CHECK(structure_culling_data_matches(&fixture_bsp) && structure_culling.pairing_count==pairings && structure_culling.kept,"kept tables installed");
+        fixture_image=FALSE; structure_culling_structure_bsp_loaded();
+        CHECK(log_count==2 && !structure_culling.kept && fixture_malloc_calls>calls,"no image: built and owned");
+        CHECK(fixture_attachment && ((struct structure_culling_kept *)fixture_attachment)->data.allocation!=structure_culling.allocation,"the image's tables stay its own");
+        frees=fixture_free_calls; structure_culling_dispose();
+        CHECK(fixture_free_calls==frees+1 && !structure_culling.allocation,"owned tables freed");
+        fixture_image_dispose(); CHECK(fixture_free_calls==frees+2,"the image's tables go with it"); return 0;
+    }
+    CASE("image-goes")
+    {
+        fixture_image=TRUE; fixture_load(TRUE); fixture_image_dispose();
+        CHECK(!structure_culling.allocation && !structure_culling.structure && !structure_culling.kept,"the image going takes its installed tables");
+        structure_culling_dispose(); return 0;
+    }
+    CASE("image-finer-changed")
+    {
+        long frees;
+        fixture_image=TRUE; fixture_load(TRUE); frees=fixture_free_calls;
+        structure_culling_set_tests(structure_culling_tests ^ FLAG(_structure_culling_finer_buckets_bit));
+        CHECK(log_count==2 && structure_culling.kept,"other buckets rebuild, kept in place of the old");
+        CHECK(fixture_free_calls==frees+2 && ((struct structure_culling_kept *)fixture_attachment)->data.allocation==structure_culling.allocation,"the old tables went");
+        fixture_image_dispose(); return 0;
+    }
+    CASE("image-vertices-moved")
+    {
+        static struct fixture_vertex moved[3];
+        fixture_image=TRUE; fixture_load(TRUE); structure_culling_dispose();
+        memcpy(moved,fixture_vertices,sizeof(moved)); fixture_materials[1].compressed_vertex_data.address=moved;
+        structure_culling_structure_bsp_loaded();
+        CHECK(log_count==2 && structure_culling.materials[1].vertices==(byte const *)moved,"vertices allocated again rebuild");
+        fixture_image_dispose(); return 0;
+    }
+    CASE("image-fewer-materials")
+    {
+        fixture_image=TRUE; fixture_load(TRUE); structure_culling_dispose();
+        fixture_lightmaps[0].materials.count=1; structure_culling_structure_bsp_loaded();
+        CHECK(log_count==2 && structure_culling.material_count==1,"another material count rebuilds");
+        fixture_image_dispose(); return 0;
     }
     CASE("set-tests")
     {
