@@ -11,6 +11,7 @@ typedef byte boolean;
 #include <math.h>
 #include <float.h>
 #include <limits.h>
+#include <stdint.h>
 #include <ctype.h>
 #define NUMBEROF(array) (sizeof(array)/sizeof((array)[0]))
 #define csstrcmp strcmp
@@ -182,6 +183,32 @@ static real random_real(real low, real high)
 {
     random_state = random_state * 1664525u + 1013904223u;
     return low + (high - low) * (real)(random_state >> 8) / 16777216.0f;
+}
+
+/* lower along x, the lower ordinal on a tie: the order the halves are chosen in */
+static boolean split_ordered(struct structure_culling_split_surface const *a, struct structure_culling_split_surface const *b)
+{
+    return a->centroid.x < b->centroid.x || (a->centroid.x == b->centroid.x && a->surface_index < b->surface_index);
+}
+
+/* surfaces with distinct ordinals, centroids on a few shared x values so the median falls in ties */
+static void split_fill(struct structure_culling_split_surface *surfaces, long count)
+{
+    static real const values[5] = {-1.5f, -.25f, .5f, 2, 7};
+    long i;
+    for (i=0;i<count;++i) { surfaces[i].surface_index=i; surfaces[i].normal=(real_vector3d){0,0,1}; surfaces[i].facing_eligible=TRUE; }
+    for (i=count-1;i>0;--i) { long j=(long)random_real(0,(real)i+.999f); long swap=surfaces[i].surface_index; surfaces[i].surface_index=surfaces[j].surface_index; surfaces[j].surface_index=swap; }
+    for (i=0;i<count;++i) surfaces[i].centroid=(real_point3d){i%3 ? values[(long)random_real(0,4.999f)] : random_real(-8,8),0,0};
+}
+
+/* every surface's ordinal appears once and the first half comes before the second */
+static boolean split_halves_hold(struct structure_culling_split_surface const *surfaces, long count, long half)
+{
+    long seen[512] = {0};
+    long j, m;
+    for (j=0;j<count;++j) { if (surfaces[j].surface_index<0 || surfaces[j].surface_index>=count || seen[surfaces[j].surface_index]++) return FALSE; }
+    for (j=0;j<half;++j) for (m=half;m<count;++m) if (!split_ordered(&surfaces[j],&surfaces[m])) return FALSE;
+    return TRUE;
 }
 
 static real_vector3d unit(real_vector3d v)
@@ -598,8 +625,8 @@ int main(int argc, char **argv)
             CHECK(structure_culling_build_lists(&fixture_bsp,NULL,&maximum_group_count)==7,"count pass sums mixed group sizes");
             CHECK(maximum_group_count==4,"recorded maximum must be four, got %ld",maximum_group_count);
             structure_culling_structure_bsp_loaded();
-            /* base 76, seven output slots at 80, four scratch slots at 80 */
-            CHECK(fixture_malloc_size==956,"scratch must use largest group: %lu bytes, expected 956",(unsigned long)fixture_malloc_size);
+            /* base 76, seven output slots at 80, four scratch slots at 128 */
+            CHECK(fixture_malloc_size==1148,"scratch must use largest group: %lu bytes, expected 1148",(unsigned long)fixture_malloc_size);
             CHECK(structure_culling.allocation && structure_culling.pairing_count==7,"all mixed-group pairings retained");
             structure_culling_dispose();
         }
@@ -670,6 +697,42 @@ int main(int argc, char **argv)
         for(i=0;i<count;++i) CHECK(ends[i]>(i ? ends[i-1] : 0),"nonempty bucket");
         for(j=0;j<1000;++j) { CHECK(surfaces[j].surface_index>=0 && surfaces[j].surface_index<1000,"invented index"); ++seen[surfaces[j].surface_index]; }
         for(j=0;j<1000;++j) CHECK(seen[j]==1,"partition index %ld appears %ld times",j,seen[j]);
+        return 0;
+    }
+    CASE("split-ties")
+    {
+        struct structure_culling_split_surface surfaces[128];
+        long ends[128], count;
+        split_fill(surfaces,128);
+        for(i=0;i<128;++i) surfaces[i].centroid.x=(real)((surfaces[i].surface_index*5)%3);
+        count=structure_culling_split(surfaces,128,ends,128);
+        CHECK(count==2 && ends[0]==64,"two halves of a tight homogeneous group, got %ld",count);
+        CHECK(split_halves_hold(surfaces,128,64),"the median tie went by ordinal, the same on every C library");
+        return 0;
+    }
+    CASE("split-halves")
+    {
+        struct structure_culling_split_surface surfaces[300];
+        long trial, count;
+        for(trial=0;trial<300;++trial) {
+            count=1+trial%37+(trial%5 ? 0 : 260);
+            split_fill(surfaces,count);
+            structure_culling_split_halves(surfaces,count,0);
+            CHECK(split_halves_hold(surfaces,count,count/2),"halves of %ld surfaces",count);
+        }
+        return 0;
+    }
+    CASE("split-heapsort")
+    {
+        struct structure_culling_split_surface surfaces[300];
+        long trial, count, j;
+        for(trial=0;trial<100;++trial) {
+            count=1+trial*3;
+            split_fill(surfaces,count);
+            structure_culling_split_heapsort(surfaces,count,0);
+            for(j=1;j<count;++j) CHECK(split_ordered(&surfaces[j-1],&surfaces[j]),"heapsort order at %ld of %ld",j,count);
+            CHECK(split_halves_hold(surfaces,count,count/2),"heapsort kept every surface");
+        }
         return 0;
     }
     CASE("split-limits")
