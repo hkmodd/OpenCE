@@ -106,6 +106,9 @@ enum
 	_definition_walk_first_bit,
 	/* they or an element in their blocks have a check */
 	_definition_walk_checks_bit,
+	/* they (or their structures) have a block or data, whose extents
+	their first walk claims */
+	_definition_walk_extents_bit,
 };
 
 /* ---------- structures */
@@ -247,7 +250,8 @@ static struct definition_walk definition_walks[MAXIMUM_DEFINITION_WALKS];
 /* ---------- prototypes */
 
 static void validate_element(struct tag_validation *validation, byte *base,
-	struct tag_schema_definition const *definition, char const *field_name, long element_index);
+	struct tag_schema_definition const *definition, struct definition_walk const *walk, char const *field_name,
+	long element_index);
 static void validate_fields(struct tag_validation *validation, byte *base,
 	struct tag_schema_definition const *definition);
 
@@ -843,7 +847,8 @@ static struct definition_walk const *definition_walk_get(
 		return NULL;
 
 	walk->definition = definition;
-	walk->flags = FLAG(_definition_walk_first_bit) | FLAG(_definition_walk_checks_bit);
+	walk->flags = FLAG(_definition_walk_first_bit) | FLAG(_definition_walk_checks_bit) |
+		FLAG(_definition_walk_extents_bit);
 	walk->height = MAXIMUM_VALIDATION_DEPTH + 1;
 	for (field = definition->fields; field->type != _tag_schema_terminator; field++)
 	{
@@ -863,13 +868,18 @@ static struct definition_walk const *definition_walk_get(
 			flags |= inner->flags;
 			if (field->type == _tag_schema_block)
 			{
-				flags |= FLAG(_definition_walk_first_bit);
+				flags |= FLAG(_definition_walk_first_bit) | FLAG(_definition_walk_extents_bit);
 				height = MAX(height, inner->height + 1);
 			}
 			else
 			{
 				height = MAX(height, inner->height);
 			}
+			break;
+
+		case _tag_schema_data:
+		case _tag_schema_file_data:
+			flags |= FLAG(_definition_walk_first_bit) | FLAG(_definition_walk_extents_bit);
 			break;
 
 		default:
@@ -883,14 +893,13 @@ static struct definition_walk const *definition_walk_get(
 	return walk;
 }
 
-/* whether walking a block's elements of a definition in this pass would
-do nothing: none of their fields does anything in it, and none of them
-(or of their blocks' elements) is too deep (validate_element) */
+/* whether walking a block's elements (their definition's walk) in this
+pass would do nothing: none of their fields does anything in it, and none
+of them (or of their blocks' elements) is too deep (validate_element) */
 static boolean block_walk_idle(
 	struct tag_validation *validation,
-	struct tag_schema_definition const *definition)
+	struct definition_walk const *walk)
 {
-	struct definition_walk const *walk = definition_walk_get(definition);
 	short bit = validation->pass == _pass_checks ? _definition_walk_checks_bit : _definition_walk_first_bit;
 
 	return walk &&
@@ -932,14 +941,17 @@ static void validate_fields(
 				else
 				{
 					struct tag_block *block = (struct tag_block *)address;
-					long element_index;
+					struct definition_walk const *walk = NULL;
+					long element_index = 0;
 
 					/* (the elements, through every pass: none, when they
 					would do nothing in it) */
-					if (block->count > 0 && block_walk_idle(validation, field->definition))
-						element_index = block->count;
-					else
-						element_index = 0;
+					if (block->count > 0)
+					{
+						walk = definition_walk_get(field->definition);
+						if (block_walk_idle(validation, walk))
+							element_index = block->count;
+					}
 					for (;
 						element_index < block->count && !validation->refused;
 						element_index++)
@@ -948,6 +960,7 @@ static void validate_fields(
 							validation,
 							(byte *)block->address + element_index * ((struct tag_schema_definition const *)field->definition)->size,
 							field->definition,
+							walk,
 							field->name,
 							element_index);
 					}
@@ -984,11 +997,13 @@ static void validate_fields(
 /* an element, and the elements of its blocks: in the first walk, its
 extents then its values then its blocks' elements (so that an index's
 block is checked before the index); in the checks' walk, its checks then
-its blocks' elements */
+its blocks' elements. An element whose definition's walk (if known) has
+no extents is not taken through the extents' pass */
 static void validate_element(
 	struct tag_validation *validation,
 	byte *base,
 	struct tag_schema_definition const *definition,
+	struct definition_walk const *walk,
 	char const *field_name,
 	long element_index)
 {
@@ -1013,8 +1028,11 @@ static void validate_element(
 	}
 	else
 	{
-		validation->pass = _pass_extents;
-		validate_fields(validation, base, definition);
+		if (!walk || TEST_FLAG(walk->flags, _definition_walk_extents_bit))
+		{
+			validation->pass = _pass_extents;
+			validate_fields(validation, base, definition);
+		}
 		if (!validation->refused)
 		{
 			validation->pass = _pass_values;
@@ -1041,7 +1059,7 @@ static void validate_tag(
 	validation->structure = root;
 	validation->field_name = NULL;
 	validation->pass = pass;
-	validate_element(validation, root, definition, NULL, NONE);
+	validate_element(validation, root, definition, NULL, NULL, NONE);
 
 	return;
 }
