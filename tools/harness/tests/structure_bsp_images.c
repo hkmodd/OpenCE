@@ -8,9 +8,13 @@ The bsp images module taken whole from the port (its budget scaled to four pages
 
 static long outstanding;
 static boolean allocation_fails;
-static void *fixture_malloc(size_t size) { if(allocation_fails) return NULL; ++outstanding; return malloc(size); }
-static void *fixture_calloc(size_t count, size_t size) { if(allocation_fails) return NULL; ++outstanding; return calloc(count,size); }
-static void fixture_free(void *data) { CHECK(data!=NULL,"free of NULL"); --outstanding; free(data); }
+/* the game's malloc and free (cseries.h: debug_malloc, which fills what it gives, and debug_free, which reads the
+header it put before it); calloc is the C library's, and what it gives cannot go to the game's free */
+union fixture_header { unsigned long signature; double alignment[2]; };
+#define FIXTURE_SIGNATURE 0x6D616C6CUL
+static void *fixture_malloc(size_t size) { union fixture_header *header; if(allocation_fails) return NULL; header=malloc(sizeof(*header)+size); if(!header) return NULL; header->signature=FIXTURE_SIGNATURE; memset(header+1,0xCA,size); ++outstanding; return header+1; }
+static void *fixture_calloc(size_t count, size_t size) { CHECK(FALSE,"the C library's calloc: the game's free cannot take it"); return NULL; }
+static void fixture_free(void *data) { union fixture_header *header=(union fixture_header *)data-1; CHECK(data!=NULL,"free of NULL"); CHECK(header->signature==FIXTURE_SIGNATURE,"free of what the game's malloc did not give"); header->signature=0; --outstanding; free(header); }
 #define malloc fixture_malloc
 #define calloc fixture_calloc
 #define free fixture_free

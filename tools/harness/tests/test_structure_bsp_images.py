@@ -19,6 +19,8 @@ CONTROLS = {
     "refused-keeps-current": (("structure_bsp_images.current = NONE;\n\tif (size <= 0", "if (size <= 0"), "attach-follows-load"),
     "detach-without-dispose": (("image->attachment_dispose(image->attachment);", ""), "attach"),
     "dispose-keeps-bytes": (("free(image->bytes);", ""), "dispose"),
+    "attach-calloc": (("data = malloc((size_t)size);", "data = calloc(1, (size_t)size);"), "attach"),
+    "attach-not-zeroed": (("memset(data, 0, (size_t)size);", ""), "attach"),
 }
 
 

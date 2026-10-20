@@ -197,11 +197,13 @@ void *structure_bsp_image_attach(
 	{
 		return NULL;
 	}
-	data = calloc(1, (size_t)size);
+	/* the game's malloc (cseries.h), which its free takes: not the C library's calloc */
+	data = malloc((size_t)size);
 	if (!data)
 	{
 		return NULL;
 	}
+	memset(data, 0, (size_t)size);
 	image = &structure_bsp_images.images[structure_bsp_images.current];
 	structure_bsp_image_detach(image);
 	image->attachment = data;
