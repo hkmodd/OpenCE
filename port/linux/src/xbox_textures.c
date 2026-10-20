@@ -1187,6 +1187,10 @@ is due */
 static unsigned long texture_sweep_frames[TEXTURE_SWEEP_COUNT];
 static unsigned long texture_sweep_count = 0;
 static Uint64 texture_next_sweep = 0;
+/* the texture names made and not yet given (texture_name) */
+#define TEXTURE_NAME_BLOCK 256
+static GLuint texture_names[TEXTURE_NAME_BLOCK];
+static unsigned long texture_name_count = 0;
 
 /* (every bit of the three mixed into the top ones: textures are aligned,
 and few sizes and formats are common) */
@@ -1366,6 +1370,21 @@ static GLuint texture_entry_result(struct texture_entry *entry, GLenum *target,
 	return entry->texture;
 }
 
+/* A new texture's name, from a block made at once. glGenTextures waits for
+the driver to catch up with what it has been given, the uploads of the
+textures before it: the first frames after a map has loaded make dozens of
+textures, and a name made for each took up to 20 ms of a frame. The names
+are given in the order they were made. */
+static GLuint texture_name(void)
+{
+	if (!texture_name_count)
+	{
+		glGenTextures(TEXTURE_NAME_BLOCK, texture_names);
+		texture_name_count = TEXTURE_NAME_BLOCK;
+	}
+	return texture_names[TEXTURE_NAME_BLOCK - texture_name_count--];
+}
+
 GLuint xgpu_texture_get(const DWORD *resource, const D3DCOLOR *palette, GLenum *target,
 	struct xgpu_texture_description *description)
 {
@@ -1467,7 +1486,7 @@ GLuint xgpu_texture_get(const DWORD *resource, const D3DCOLOR *palette, GLenum *
 		}
 		entry->generation = 0;
 		entry->override = -1;
-		glGenTextures(1, &entry->texture);
+		entry->texture = texture_name();
 		entry->next = *bucket;
 		*bucket = entry;
 	}
