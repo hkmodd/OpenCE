@@ -243,6 +243,11 @@ typedef char verify_cache_file_header_size[
 
 /* ---------- prototypes */
 
+/* port: makes writable at once the pages of the size bytes at address that
+the renderer copied from and watches for writes, as each write to one would
+(port/linux/src/memory_watch.c): a fill of many such pages takes no fault
+for each */
+void memory_watch_prepare_write(void *address, unsigned long size);
 static struct cache_file_tag_instance *cache_get_tag_instance(
 	long tag_index);
 static struct cache_file_tag_instance *cache_empty_tag_instance(
@@ -1289,6 +1294,9 @@ long scenario_tags_load(
 		tag_cache_base_address = physical_memory_get_tag_cache_base_address();
 		if (cache_file_header_verify(&cache_file_globals.header, scenario_name, TRUE))
 		{
+			/* port: the pages the renderer copied from are made writable
+			before the fill, rather than one at a time as each is written */
+			memory_watch_prepare_write(tag_cache_base_address, 0x01600000);
 			csmemset(tag_cache_base_address, 0xCD, 0x01600000);
 			cache_file_read(
 				NONE,
@@ -1453,6 +1461,11 @@ boolean scenario_structure_bsp_load(
 	tag_cache_base_address = physical_memory_get_tag_cache_base_address();
 	if (!custom_edition_cache_tags_loaded())
 	{
+		/* port: as the map's load does, the pages the renderer copied from
+		(the last bsp's vertices) are made writable before the fill */
+		memory_watch_prepare_write(
+			tag_cache_base_address + cache_file_globals.header.tag_data_size,
+			0x01600000 - cache_file_globals.header.tag_data_size);
 		csmemset(
 			tag_cache_base_address + cache_file_globals.header.tag_data_size,
 			0xCD,
