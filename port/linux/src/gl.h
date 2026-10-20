@@ -189,6 +189,8 @@ context has the extension, never required (gl_functions.c). On ES 3.0 and
 	X(glTexSubImage2D) \
 	X(glCompressedTexImage2D) \
 	X(glCompressedTexImage3D) \
+	X(glCompressedTexSubImage2D) \
+	X(glTexStorage2D) \
 	X(glTexParameteri) \
 	X(glTexParameteriv) \
 	X(glTexParameterf) \
@@ -446,6 +448,8 @@ pointers, sees the declarations without these aliases */
 #define glTexSubImage2D halo_glTexSubImage2D
 #define glCompressedTexImage2D halo_glCompressedTexImage2D
 #define glCompressedTexImage3D halo_glCompressedTexImage3D
+#define glCompressedTexSubImage2D halo_glCompressedTexSubImage2D
+#define glTexStorage2D halo_glTexStorage2D
 #define glTexParameteri halo_glTexParameteri
 #define glTexParameteriv halo_glTexParameteriv
 #define glTexParameterf halo_glTexParameterf
