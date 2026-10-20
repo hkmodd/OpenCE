@@ -81,6 +81,7 @@ long structure_culling_gather_pairings(long const *list, long list_count, boolea
 	short group_material, long surface_count, short const *surface_materials, long const *material_vertex_counts,
 	word const *surface_vertex_indices, struct structure_culling_pairing *pairings);
 void structure_culling_structure_bsp_loaded(void);
+void structure_culling_structure_bsp_kept(struct structure_bsp *structure);
 void structure_culling_dispose(void);
 void structure_culling_order_clusters(short *order, real const *distances, short count);
 boolean structure_culling_traverse(struct structure_bsp *structure);

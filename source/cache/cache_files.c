@@ -135,6 +135,7 @@ symbols in this file:
 #include "scenario/scenario_definitions.h"
 #include "scenario/scenario.h" /* port: MAXIMUM_STRUCTURE_BSPS_PER_SCENARIO */
 #include "structure_bsp_images.h" /* port: port/linux/game/structure_bsp_images.c */
+#include "structure_culling.h" /* port: port/linux/game/structure_culling.c */
 #include "sound/sound_manager.h"
 #include "tag_schema.h"
 #include "custom_edition_cache.h" /* port: port/linux/game/custom_edition_cache.c */
@@ -1575,6 +1576,10 @@ boolean scenario_structure_bsp_load(
 	}
 	if (cache_file_structure_bsps_keeping)
 	{
+		/* port: and an Xbox map's bsp's culling buckets built, kept with it
+		(a Custom Edition bsp's vertices are allocated as it loads) */
+		if (!restored && !custom_edition_cache_tags_loaded())
+			structure_culling_structure_bsp_kept(structure_bsp_header->base_address);
 		return FALSE;
 	}
 	/* port: a Halo Custom Edition bsp has no Xbox vertex buffers: its
