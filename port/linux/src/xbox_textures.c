@@ -960,13 +960,16 @@ void halo_custom_edition_texels_forget(void)
 }
 
 static void upload(GLuint texture, GLenum target, const struct xgpu_texture_description *description,
-	const unsigned char *base, const D3DCOLOR *palette, unsigned char channel_order)
+	const unsigned char *base, const D3DCOLOR *palette, unsigned char channel_order, BOOL *storage)
 {
 	struct format_information information = format_information(description->format);
 	unsigned long face_count = description->cube_map ? 6 : 1;
 	unsigned long face_size = xgpu_texture_face_size(description);
 	unsigned long largest = description->width * description->height * description->depth;
 	BOOL decode_compressed = FALSE;
+#ifndef HALO_GLES
+	BOOL replace = FALSE;
+#endif
 	unsigned long *converted;
 	unsigned char *astc = NULL;
 	unsigned long face, level;
@@ -1038,6 +1041,33 @@ static void upload(GLuint texture, GLenum target, const struct xgpu_texture_desc
 		glTexParameteri(target, GL_TEXTURE_SWIZZLE_A, channels[3]);
 	}
 #endif
+#ifndef HALO_GLES
+	/* a 2D texture's levels are given their storage once, by glTexStorage2D,
+	and each upload replaces their texels: defined level by level on every
+	upload, the 342 textures of b30's first frames took 21 to 24 ms to upload,
+	and 17 ms this way. (A texture is never described again: its entry is
+	found by its format and size. One with more levels than its size has is
+	uploaded as before, since glTexStorage2D refuses it.) */
+	if (target == GL_TEXTURE_2D && description->levels >= 1)
+	{
+		unsigned long side = description->width > description->height ? description->width : description->height;
+		unsigned long levels = 1;
+
+		while (side >>= 1)
+			levels++;
+		if (description->levels <= levels)
+		{
+			if (!*storage)
+			{
+				glTexStorage2D(GL_TEXTURE_2D, (GLsizei)description->levels,
+					description->compressed ? compressed_format(information.kind) : GL_RGBA8,
+					(GLsizei)description->width, (GLsizei)description->height);
+				*storage = TRUE;
+			}
+			replace = TRUE;
+		}
+	}
+#endif
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 	glTexParameteri(target, GL_TEXTURE_BASE_LEVEL, 0);
 	glTexParameteri(target, GL_TEXTURE_MAX_LEVEL, (GLint)description->levels - 1);
@@ -1065,6 +1095,11 @@ static void upload(GLuint texture, GLenum target, const struct xgpu_texture_desc
 				if (target == GL_TEXTURE_3D)
 					glCompressedTexImage3D(image_target, (GLint)level, compressed_format(information.kind), width, height, depth, 0,
 						(GLsizei)level_bytes(description, level), source);
+#ifndef HALO_GLES
+				else if (replace)
+					glCompressedTexSubImage2D(image_target, (GLint)level, 0, 0, width, height, compressed_format(information.kind),
+						(GLsizei)level_bytes(description, level), source);
+#endif
 				else
 					glCompressedTexImage2D(image_target, (GLint)level, compressed_format(information.kind), width, height, 0,
 						(GLsizei)level_bytes(description, level), source);
@@ -1117,6 +1152,10 @@ static void upload(GLuint texture, GLenum target, const struct xgpu_texture_desc
 #endif
 				if (target == GL_TEXTURE_3D)
 					glTexImage3D(image_target, (GLint)level, GL_RGBA8, width, height, depth, 0, GL_BGRA, GL_UNSIGNED_BYTE, converted);
+#ifndef HALO_GLES
+				else if (replace)
+					glTexSubImage2D(image_target, (GLint)level, 0, 0, width, height, GL_BGRA, GL_UNSIGNED_BYTE, converted);
+#endif
 				else
 					glTexImage2D(image_target, (GLint)level, GL_RGBA8, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, converted);
 			}
@@ -1137,6 +1176,8 @@ struct texture_entry
 	GLuint texture;
 	GLenum target;
 	struct xgpu_texture_description description;
+	/* its levels have their storage (upload) */
+	BOOL storage;
 	unsigned long address, size;
 	unsigned long generation;
 	unsigned long last_used_frame;
@@ -1565,7 +1606,7 @@ GLuint xgpu_texture_get(const DWORD *resource, const D3DCOLOR *palette, GLenum *
 					ones * 100 / entry->size, zeros * 100 / entry->size);
 			}
 			upload(entry->texture, entry->target, &entry->description, (const unsigned char *)entry->address, palette,
-				custom_edition_texels_order(entry->address));
+				custom_edition_texels_order(entry->address), &entry->storage);
 			xgpu_statistics_texture_upload(entry->size);
 		}
 	}
