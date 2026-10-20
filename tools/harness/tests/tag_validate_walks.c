@@ -3,8 +3,8 @@ TAG_VALIDATE_WALKS.C
 
 The validator (port/linux/game/tag_validate.c), taken whole, walking made-up
 schemas over tags laid out in a buffer: which blocks' elements its passes
-enter, and that skipping the others changes nothing (corrections, checks,
-refusals).
+enter, which elements it takes through the extents' pass, and that skipping
+the others changes nothing (corrections, checks, refusals).
 */
 
 #define boolean harness_boolean
@@ -20,9 +20,10 @@ typedef byte boolean;
 
 #include "game_types.inc"
 
-/* the elements the validator enters (validate_element), the checks it
-calls, and its messages */
+/* the elements the validator enters (validate_element), those it takes
+through the extents' pass, the checks it calls, and its messages */
 static long harness_entered;
+static long harness_extents;
 static long harness_checks;
 static char harness_last_message[512];
 
@@ -82,6 +83,19 @@ static struct tag_schema_field const holder_fields[] = {
 static struct tag_schema_definition const holder_definition = TAG_SCHEMA_DEFINITION(holder, struct holder_element,
 	holder_fields);
 
+/* an element with data (of at most 16 bytes) */
+struct data_element { struct tag_data data; };
+static struct tag_schema_field const data_fields[] = { TAG_SCHEMA_DATA(struct data_element, data, 16), TAG_SCHEMA_END };
+static struct tag_schema_definition const data_definition = TAG_SCHEMA_DEFINITION(data, struct data_element,
+	data_fields);
+
+/* an element whose structure has data */
+struct data_holder_element { struct data_element held; };
+static struct tag_schema_field const data_holder_fields[] = {
+	TAG_SCHEMA_STRUCT(struct data_holder_element, held, data_definition), TAG_SCHEMA_END };
+static struct tag_schema_definition const data_holder_definition = TAG_SCHEMA_DEFINITION(data_holder,
+	struct data_holder_element, data_holder_fields);
+
 /* a root of one block */
 struct root { struct tag_block block; };
 #define ROOT_DEFINITION(name, element_definition) \
@@ -93,6 +107,8 @@ ROOT_DEFINITION(enum_root, enum_definition);
 ROOT_DEFINITION(checked_root, checked_definition);
 ROOT_DEFINITION(outer_root, outer_definition);
 ROOT_DEFINITION(holder_root, holder_definition);
+ROOT_DEFINITION(data_root, data_definition);
+ROOT_DEFINITION(data_holder_root, data_holder_definition);
 
 /* blocks nested as deep as the validator goes: the root's block and each
 element's are a chain of DEPTH_CHAIN_LENGTH (chain.inc), the last of empty
@@ -165,6 +181,42 @@ int main(int argc, char **argv)
 		CHECK(harness_entered == 2, "%ld elements entered for 1000 that do nothing", harness_entered);
 		return 0;
 	}
+	/* (data of too many bytes, cut in every element) */
+	CASE("data-extents")
+	{
+		struct root *root = tags_new(sizeof(*root));
+		struct data_element *elements = block_new(&root->block, 3, &data_definition);
+		long index;
+
+		for (index = 0; index < 3; index++)
+		{
+			elements[index].data.size = 100;
+			elements[index].data.address = tags_new(100);
+		}
+		CHECK(walk(root, &data_root, &corrections), "refused: %s", harness_last_message);
+		CHECK(corrections == 3, "%ld corrections for 3 data of 100 bytes", corrections);
+		for (index = 0; index < 3; index++)
+			CHECK(elements[index].data.size == 16, "element %ld has %ld bytes", index, elements[index].data.size);
+		CHECK(harness_extents == 1 + 3, "%ld elements through the extents' pass", harness_extents);
+		return 0;
+	}
+	/* (data in an element's structure) */
+	CASE("structure-data-extents")
+	{
+		struct root *root = tags_new(sizeof(*root));
+		struct data_holder_element *elements = block_new(&root->block, 3, &data_holder_definition);
+		long index;
+
+		for (index = 0; index < 3; index++)
+		{
+			elements[index].held.data.size = 100;
+			elements[index].held.data.address = tags_new(100);
+		}
+		CHECK(walk(root, &data_holder_root, &corrections), "refused: %s", harness_last_message);
+		CHECK(corrections == 3, "%ld corrections for 3 data of 100 bytes", corrections);
+		CHECK(harness_extents == 1 + 3, "%ld elements through the extents' pass", harness_extents);
+		return 0;
+	}
 	/* (values are corrected in every element) */
 	CASE("values")
 	{
@@ -178,8 +230,11 @@ int main(int argc, char **argv)
 		CHECK(corrections == 5, "%ld corrections for 5 enums past their values", corrections);
 		for (index = 0; index < 5; index++)
 			CHECK(elements[index].kind == 0, "element %ld is %d", index, elements[index].kind);
-		/* (and not entered in the checks' walk, which has nothing to do in them) */
+		/* (and not entered in the checks' walk, which has nothing to do in them,
+		nor taken through the extents' pass, which has nothing to do in them
+		either) */
 		CHECK(harness_entered == 1 + 5 + 1, "%ld elements entered", harness_entered);
+		CHECK(harness_extents == 1, "%ld elements through the extents' pass", harness_extents);
 		return 0;
 	}
 	/* (checks are called on every element, which the first walk need not enter) */
@@ -204,6 +259,9 @@ int main(int argc, char **argv)
 			block_new(&outer[index].inner, 2, &checked_definition);
 		CHECK(walk(root, &outer_root, &corrections), "refused: %s", harness_last_message);
 		CHECK(harness_checks == 6, "%ld checks for 6 elements", harness_checks);
+		/* (the root and the elements with a block: those of the blocks, with
+		none, are not taken through the extents' pass) */
+		CHECK(harness_extents == 1 + 3, "%ld elements through the extents' pass", harness_extents);
 		return 0;
 	}
 	/* (a check in an element's structure) */
