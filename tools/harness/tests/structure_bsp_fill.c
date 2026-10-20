@@ -91,6 +91,13 @@ static short cache_file_read(long tag_index, long offset, long size, void *buffe
 #define system_milliseconds() 0
 #define sound_render_time() 0
 #define sound_idle() ((void)0)
+/* no bsp kept as its image: each is read (structure_bsp_images.c) */
+static boolean cache_file_structure_bsps_keeping;
+#define structure_bsp_images_kept() TRUE
+#define cache_file_structure_bsps_keep() ((void)0)
+static boolean structure_bsp_image_restore(long tag_index, long file_offset, long size, void *address) { return FALSE; }
+static void structure_bsp_image_keep(long tag_index, long file_offset, long size, void const *address) { }
+#define structure_culling_structure_bsp_kept(structure) ((void)0)
 
 #include "under_test.inc"
 
