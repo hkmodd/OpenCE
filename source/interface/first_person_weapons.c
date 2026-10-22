@@ -705,6 +705,33 @@ boolean first_person_weapon_idle(
 		first_person_weapon->firing_push_back==0.0f;
 }
 
+/* port: the matrices the weapon was last posed with, and as many as its
+first-person animations have (none while it is not drawn): the headset
+mirrors them for the left hand (port/linux/game/vr_view.c) */
+struct real_matrix4x3 *first_person_weapon_get_node_matrices(
+	short local_player_index,
+	short *node_count)
+{
+	struct first_person_weapon *first_person_weapon= first_person_weapon_get(local_player_index);
+	struct weapon_datum *weapon= first_person_weapon->visible && first_person_weapon->weapon_index!=NONE ?
+		weapon_try_and_get(first_person_weapon->weapon_index) : NULL;
+
+	*node_count= 0;
+	if (weapon)
+	{
+		struct weapon_definition *weapon_definition= weapon_definition_get(weapon->definition_index);
+
+		if (weapon_definition->weapon.interface_definition.first_person_animations.index!=NONE)
+		{
+			struct animation_graph *animation_graph= animation_graph_definition_get(
+				weapon_definition->weapon.interface_definition.first_person_animations.index);
+
+			*node_count= (short)MIN(animation_graph->nodes.count, MAXIMUM_NODES_PER_ANIMATION);
+		}
+	}
+	return first_person_weapon->node_matrices;
+}
+
 void first_person_weapon_center_flashlight(
 	long unit_index,
 	real_point3d *position,

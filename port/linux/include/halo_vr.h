@@ -157,8 +157,12 @@ void vr_render_frustum_bounds(union real_rectangle2d *bounds);
 /* render_window: the first-person weapon posed once a frame, from a camera
 behind the aiming hand (or the head between the eyes) */
 void vr_render_weapon_camera(struct render_camera *camera);
-/* render_window: the weapon posed, where its model's barrel is */
+/* render_window: the weapon posed, where its model's barrel is; held in
+the left hand, its model mirrored */
 void vr_render_weapon_posed(void);
+/* the first-person weapon's drawing begins (TRUE) or ends: a mirrored one's
+triangles' winding is turned over (viewmodel_projection_begin, view_fov.c) */
+void vr_render_weapon_drawing(int drawing);
 /* render_window: the HUD's pass starts on a clear ground */
 void vr_render_hud_begin(void);
 /* a new map: the heading is taken again from the game's facing
@@ -204,6 +208,7 @@ int vr_render_zoom_hidden(void);
 #define vr_render_frustum_bounds(bounds) ((void)0)
 #define vr_render_weapon_camera(camera) ((void)0)
 #define vr_render_weapon_posed() ((void)0)
+#define vr_render_weapon_drawing(drawing) ((void)0)
 #define vr_render_hud_begin() ((void)0)
 #define vr_view_reset() ((void)0)
 #define vr_player_control_facing(local_player_index) ((void)0)

@@ -53,16 +53,59 @@ struct vr_pad
 	short thumb[4];
 };
 
+/* what a controller's button does in the game (vr.bindings): an action of
+the keys' (controls.<action>), as the standard preset's pad button for it */
+enum
+{
+	VR_BIND_NONE,
+	VR_BIND_FIRE,
+	VR_BIND_THROW_GRENADE,
+	VR_BIND_JUMP,
+	VR_BIND_ACTION,
+	VR_BIND_MELEE,
+	VR_BIND_SWITCH_WEAPON,
+	VR_BIND_SWITCH_GRENADE,
+	VR_BIND_FLASHLIGHT,
+	VR_BIND_CROUCH,
+	VR_BIND_ZOOM,
+	VR_BIND_SCOREBOARD,
+	VR_BIND_COUNT
+};
+
+/* the buttons bound, of each hand: the trigger, the grip, the lower and
+upper face buttons and the stick's click; and the hands, the one that aims
+(main) and the other (off) */
+enum
+{
+	VR_CONTROL_TRIGGER,
+	VR_CONTROL_GRIP,
+	VR_CONTROL_LOWER,
+	VR_CONTROL_UPPER,
+	VR_CONTROL_CLICK,
+	VR_CONTROL_COUNT
+};
+
+enum
+{
+	VR_ROLE_MAIN,
+	VR_ROLE_OFF,
+	VR_ROLE_COUNT
+};
+
 struct vr_input_settings
 {
-	/* the left hand aims and fires, and the right moves */
+	/* the left hand aims and fires, and the right moves (until the hands
+	swap the weapon) */
 	int left_handed;
+	/* each hand's buttons' actions (vr_input_bindings_parse) */
+	unsigned char bindings[VR_ROLE_COUNT][VR_CONTROL_COUNT];
 	/* the main hand's stick turns by this a push (radians), or, at 0,
 	smoothly at turn_rate (radians a second) */
 	float snap_angle;
 	float turn_rate;
 	/* the hands' and head's motions: a punch is a melee attack, the off
-	hand's grip at the head the flashlight, the head lowered a crouch */
+	hand's grip at the head its action (the flashlight), with the palms
+	together it swaps the hands, the head lowered a crouch */
 	int gestures;
 	/* the head's yaw from the aiming hand's (radians to the left): the off
 	stick moves where the head faces, the game's facing being the hand's */
@@ -71,6 +114,12 @@ struct vr_input_settings
 
 struct vr_input
 {
+	/* the left hand aims: the setting's (as it was last read), until the
+	hands swap the weapon; and how many times they have */
+	int left_handed;
+	int setting_left_handed;
+	int left_handed_valid;
+	unsigned long swaps;
 	/* each hand's buttons in the last frame */
 	unsigned long held[VR_HAND_COUNT];
 	/* the menu button: how long it has been held, and whether that was long
@@ -83,10 +132,11 @@ struct vr_input
 	/* this frame's turn, radians to the left */
 	float turn;
 	/* the main hand's last position (a punch's speed), the melee's press
-	and the time until another, the flashlight's press, in seconds */
+	and the time until another, the press of the off grip's action at the
+	head, in seconds */
 	float main_position[3];
 	int main_position_valid;
-	float melee_seconds, melee_wait, flashlight_seconds;
+	float melee_seconds, melee_wait, tap_seconds;
 	/* the main grip was pressed at a shoulder: weapons, not a melee */
 	int holster;
 	/* the head's height standing (the highest since the runtime last
@@ -106,6 +156,13 @@ struct vr_input
 seconds since the last frame */
 void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struct vr_input_settings const *settings,
 	int menus, float seconds, struct vr_pad *pad);
+
+/* each hand's buttons' actions: the defaults (the table of vr_input.c), with
+each item of `text` in place of its default ("main.lower=action
+off.click=none": the hand, the button, the action, separated by spaces,
+commas or semicolons); the count of items not understood, which are left
+out */
+int vr_input_bindings_parse(char const *text, unsigned char bindings[VR_ROLE_COUNT][VR_CONTROL_COUNT]);
 
 /* the weapon held with both hands: the off hand's grip held near the main
 hand, ahead of it and away from the head; the orientation (-z from the main
@@ -127,6 +184,8 @@ int vr_input_gamepad(struct vr_pad *pad, int menus);
 /* xinput_sdl.c's XInputSetState: the first controller's rumble, each
 motor's speed 0 to 1, felt in the hand on its side */
 void vr_input_rumble(float left, float right);
+/* vr_view.c: the left hand aims (vr.left_handed, or the hands swapped) */
+int vr_input_left_handed(void);
 /* vr_view.c: the turn the stick made this frame (radians to the left),
 taken */
 float vr_input_turn(void);

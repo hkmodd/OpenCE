@@ -262,7 +262,8 @@ static const struct config_setting config_settings[] =
 		"That panel's width in metres (0.2 to 100)." },
 	{ "vr.left_handed", _config_boolean, "false", "HALO_VR_LEFT_HANDED", _environment_set_is_true, _platform_desktop,
 		"With display.vr, the left controller aims and fires and the right\n"
-		"moves: the controllers' buttons swap hands." },
+		"moves: the controllers' buttons swap hands, and the weapon, mirrored,\n"
+		"is held in the left." },
 	{ "vr.aim", _config_string, "\"hand\"", "HALO_VR_AIM", _environment_value, _platform_desktop,
 		"With display.vr, what aims on foot: \"hand\", the aiming controller\n"
 		"(the weapon held in it, the crosshair where its shot lands), or\n"
@@ -275,8 +276,16 @@ static const struct config_setting config_settings[] =
 		"With snap_turn 0, the stick's turn at full push, in degrees a second." },
 	{ "vr.gestures", _config_boolean, "true", "HALO_VR_GESTURES", _environment_value, _platform_desktop,
 		"The hands' and head's motions: a punch is a melee attack, the other\n"
-		"hand's grip at the head the flashlight (else the grip alone), the\n"
-		"head lowered a crouch." },
+		"hand's grip at the head its action, the flashlight (else the grip\n"
+		"alone), and with the palms together it takes the weapon into that\n"
+		"hand; the aiming hand's grip at a shoulder switches weapons; the head\n"
+		"lowered crouches." },
+	{ "vr.bindings", _config_string, "\"\"", "HALO_VR_BINDINGS", _environment_value, _platform_desktop,
+		"With display.vr, controller buttons bound to other actions than their\n"
+		"own, as \"main.lower=action off.click=none\": the hand (main, the one\n"
+		"that aims, or off), the button (trigger, grip, lower, upper, click) and\n"
+		"the action (fire, throw_grenade, jump, action, melee, switch_weapon,\n"
+		"switch_grenade, flashlight, crouch, zoom, scoreboard, none)." },
 #endif
 
 	{ "audio.enabled", _config_boolean, "true", "HALO_NO_AUDIO", _environment_set_is_false, _platform_all,

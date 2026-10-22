@@ -1,6 +1,7 @@
 """The headset's controllers as the game's controller (port/linux/src/vr_input.c): the buttons in the game and the
-menus, for either hand, the menu button's short and long presses, the stick's snap and smooth turns, the punch, the
-flashlight at the head and the crouch, and where a hand's ray meets a panel."""
+menus, for either hand, their bindings (vr.bindings), the menu button's short and long presses, the stick's snap and
+smooth turns, the punch, the off grip's tap at the head, the crouch, the hands' swap, and where a hand's ray meets a
+panel."""
 import sys
 from pathlib import Path
 
@@ -9,12 +10,12 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from harness import CHECK_FAILED, build, mutated, read, run
 
-CASES = ["gameplay", "move", "menus", "menu-button", "turn", "gestures", "hands", "ray"]
+CASES = ["gameplay", "move", "menus", "menu-button", "turn", "gestures", "hands", "ray", "bindings", "swap"]
 CONTROLS = {
-    "left-handed-ignored": (("int main_index = settings->left_handed ? VR_HAND_LEFT : VR_HAND_RIGHT;",
-                             "int main_index = VR_HAND_RIGHT;"), "gameplay"),
-    "grenade-on-fire": (("pad->analog[VR_PAD_LEFT_TRIGGER] = (unsigned char)(off_hand->trigger",
-                         "pad->analog[VR_PAD_LEFT_TRIGGER] = (unsigned char)(main_hand->trigger"), "gameplay"),
+    "left-handed-ignored": (("main_index = input->left_handed ? VR_HAND_LEFT : VR_HAND_RIGHT;",
+                             "main_index = VR_HAND_RIGHT;"), "gameplay"),
+    "grenade-on-fire": (("vr_bind_hand(pad, off_hand, settings->bindings[VR_ROLE_OFF],",
+                         "vr_bind_hand(pad, main_hand, settings->bindings[VR_ROLE_OFF],"), "gameplay"),
     "move-turned-back": (("off_hand->stick[0] * cosine - off_hand->stick[1] * sine",
                           "off_hand->stick[0] * cosine + off_hand->stick[1] * sine"), "move"),
     "clicks-on-any-hand": (("if (hand == input->pointer_hand)\n\t\t\t\t\tinput->clicks++;",
@@ -27,9 +28,19 @@ CONTROLS = {
     "punch-any-way": (("along > VR_PUNCH_ALONG * speed", "along > -speed"), "gestures"),
     "crouch-no-hysteresis": (("input->crouched = height < input->standing - VR_CROUCH_RISE;",
                               "input->crouched = height < input->standing - VR_CROUCH_DEPTH;"), "gestures"),
-    "holster-ignored": (("vr_press(pad, input->holster ? VR_PAD_Y : VR_PAD_B,", "vr_press(pad, VR_PAD_B,"), "hands"),
+    "holster-ignored": (("input->holster ? VR_BIND_SWITCH_WEAPON :", "0 ? VR_BIND_SWITCH_WEAPON :"), "hands"),
     "two-hands-backwards": (("z[axis] = main_hand->grip.position[axis] - off_hand->grip.position[axis];",
                              "z[axis] = off_hand->grip.position[axis] - main_hand->grip.position[axis];"), "hands"),
+    "bindings-ignored": (("vr_bind(pad, bindings[VR_CONTROL_LOWER],",
+                          "vr_bind(pad, vr_default_bindings[VR_ROLE_MAIN][VR_CONTROL_LOWER],"), "bindings"),
+    "bad-items-uncounted": (("\t\t\tbad++;\n", "\t\t\t;\n"), "bindings"),
+    "trigger-pull-ignored": (("trigger == VR_BIND_FIRE || trigger == VR_BIND_THROW_GRENADE ? hand->trigger :",
+                              "0 ? hand->trigger :"), "bindings"),
+    "swap-while-held": (("off_pressed = off_hand->buttons & ~input->held[off_index];",
+                         "off_pressed = off_hand->buttons;"), "swap"),
+    "swap-apart": (("vr_distance(off_hand->grip.position, main_hand->grip.position) < VR_SWAP_REACH",
+                    "vr_distance(off_hand->grip.position, main_hand->grip.position) < 1.0f"), "swap"),
+    "swap-kept-past-setting": (("input->setting_left_handed != settings->left_handed)", "0)"), "swap"),
     "ray-upside-down": (("*v = 0.5f - y / height;", "*v = 0.5f + y / height;"), "ray"),
     "ray-panel-not-turned": (("vr_rotate(inverse, relative, origin);", "memcpy(origin, relative, sizeof(origin));"),
                              "ray"),

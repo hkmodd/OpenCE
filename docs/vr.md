@@ -72,12 +72,18 @@ be served later with `XR_KHR_D3D11_enable` and `WGL_NV_DX_interop2`.
   only while the session is focused, the trigger and grip with hysteresis.
 - `vr_input.c` turns them into the first Xbox controller's state, so the
   game, the menus and the player's button preset take them as a pad's: a
-  layout of the VR conversions' (the table in the README), mirrored for
-  the left-handed, with the gestures (a punch, the off grip at the head,
-  the head lowered, the main grip at a shoulder) as presses of the same
-  buttons. The menu button is Start, or Back held a second. It is a
-  function of the frame and its own state, tested in the harness
-  (`tools/harness/tests/test_vr_input.py`).
+  layout of the VR conversions' (the table in the README), each button of
+  the aiming (main) hand and the other (off) bound to an action
+  (`vr.bindings` binds them otherwise), the action pressing the standard
+  preset's button for it; mirrored for the left-handed; with the gestures
+  (a punch, the off grip at the head, the head lowered, the main grip at a
+  shoulder) as presses of the same buttons. The palms together with the
+  off grip pressed swap the hands until `vr.left_handed` is changed
+  (astromaddie's gesture). The menu button is Start, or Back held a
+  second. It is a function of the frame and its own state, tested in the
+  harness (`tools/harness/tests/test_vr_input.py`). Rebinding is the
+  setting's, not the runtime's: actions bound by each runtime's own tool
+  (SteamVR's has one, Oculus's none) would not follow a swap of hands.
 - The main hand's stick turns the heading by snaps or smoothly; it never
   reaches the game's right stick.
 - The hand aims on foot (`vr.aim`): the facing is the aim pose's (or, with
@@ -92,6 +98,13 @@ be served later with `XR_KHR_D3D11_enable` and `WGL_NV_DX_interop2`.
   and eased over frames: the camera is turned so that the barrel lies along
   the aim (the stock models' already do), and the muzzle is where the shot
   starts. Until then a fixed offset from the grip stands in.
+- In the left hand the posed model, arms and all, is mirrored across the
+  weapon camera's upright plane (astromaddie's way), so that the right
+  hand's model is the left's; the camera, the muzzle and the scope take the
+  right hand's offsets mirrored, and while the first-person weapon is drawn
+  (`viewmodel_projection_begin` to its end) its triangles' winding is
+  turned over (`halo_vr_mirror_winding`). The barrel is learnt from the
+  model before it is mirrored.
 - With no other machine in the game (whose players would see the shot from
   the facing alone), `unit_adjust_projectile_ray` starts the shot at that
   muzzle, unless a wall is between it and the eye, and `aim_assist.c` aims
@@ -123,8 +136,8 @@ check of the flat picture:
 2. The controllers, the gun held in the hand, the floating crosshair, the
    picture-in-picture scope, the gestures (melee, flashlight, crouch,
    holsters, two hands), haptics, the menus' pointer and the immersive
-   menus (this one).
-3. Swapping hands, rebinding.
+   menus.
+3. Swapping hands, rebinding (with 2, this branch).
 4. Vehicles steered by the stick, immersive cinematics (moistman's: the
    camera anchored at each cut, with a blink), and the camera kept right
    across seats, checkpoints and loads.

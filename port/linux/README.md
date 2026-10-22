@@ -452,10 +452,11 @@ the setting for one start of the game. It has priority over the file.
 | `vr.screen_distance` | `2.0` | `HALO_VR_SCREEN_DISTANCE` | With `display.vr`, how far the panel of the menus, loading screens and cinematics is, in metres, from `0.5` to `100`, before where the headset faced when the runtime last recentred it. |
 | `vr.screen_width` | `2.4` | `HALO_VR_SCREEN_WIDTH` | With `display.vr`, that panel's width in metres, from `0.2` to `100`. |
 | `vr.aim` | `"hand"` | `HALO_VR_AIM` | With `display.vr`, what aims on foot: `"hand"`, the aiming controller (the weapon held in it, the crosshair where its shot lands), or `"head"`. In a vehicle's seat the head aims. |
-| `vr.left_handed` | `false` | `HALO_VR_LEFT_HANDED` | With `display.vr`, the left controller aims and fires and the right moves: the controllers' buttons swap hands. |
+| `vr.left_handed` | `false` | `HALO_VR_LEFT_HANDED` | With `display.vr`, the left controller aims and fires and the right moves: the controllers' buttons swap hands, and the weapon, mirrored, is held in the left. |
 | `vr.snap_turn` | `30.0` | `HALO_VR_SNAP_TURN` | With `display.vr`, how far a push of the aiming hand's stick turns, in degrees; `0` turns smoothly instead. |
 | `vr.smooth_turn_speed` | `120.0` | `HALO_VR_SMOOTH_TURN_SPEED` | With `vr.snap_turn` `0`, the stick's turn at full push, in degrees a second. |
-| `vr.gestures` | `true` | `HALO_VR_GESTURES` | With `display.vr`, a punch is a melee attack, the other hand's grip at the head is the flashlight (`false`: the grip alone) and lowering the head crouches. |
+| `vr.gestures` | `true` | `HALO_VR_GESTURES` | With `display.vr`, a punch is a melee attack, the other hand's grip at the head does its action, the flashlight (`false`: the grip alone), and with the palms together takes the weapon into that hand, the aiming hand's grip at a shoulder switches weapons, and lowering the head crouches. |
+| `vr.bindings` | `""` | `HALO_VR_BINDINGS` | With `display.vr`, controller buttons bound to other actions than those in "VR": items such as `"main.lower=action off.click=none"`, each a hand (`main`, the one that aims, or `off`), a button (`trigger`, `grip`, `lower`, `upper`, `click`) and an action (`fire`, `throw_grenade`, `jump`, `action`, `melee`, `switch_weapon`, `switch_grenade`, `flashlight`, `crouch`, `zoom`, `scoreboard`, `none`), separated by spaces or commas. An item not understood is left out (and logged). |
 | `audio.enabled` | `true` | `HALO_NO_AUDIO=1` sets `false` | `false`: no audio device. The sound continues without output. |
 | `audio.volume` | `1.0` | `HALO_VOLUME` | The master volume. |
 | `audio.music_volume` | `1.0` | `HALO_MUSIC_VOLUME` | The music's volume, of the master volume. |
@@ -709,7 +710,9 @@ screen, with the cause in the log.
   | | | menu | pause; held a second, the scores |
 
   They press the gamepad's buttons for those actions in the standard
-  preset, so a player's own preset applies to them too. Index's A and B, and
+  preset, so a player's own preset applies to them too; `vr.bindings` binds
+  them to other actions. With the palms together, the other hand's grip
+  takes the weapon into that hand (`vr.gestures`). Index's A and B, and
   Vive's and Windows Mixed Reality's trackpads, stand in for the face
   buttons. The game's rumble is felt in the hands. In the menus either
   hand's lower button is A and its upper B, either stick moves about them,
@@ -1541,7 +1544,7 @@ Other changes:
 | `objects/object_lights.c` | Glows the port lights itself (`shield_glow.c`): dynamic lights attached to an object's node, colored and sized each frame by their maker, drawn with a light definition the map has. |
 | `main/main.c`, `render/render.c`, `render/render_sky.c`, `effects/weather_particle_systems.c`, `objects/widgets/glow.c`, `game/player_control.c` | In a headset (`display.vr`, `game/vr_view.c`): a frame waits for the headset's and takes its time from it; the player's window is drawn as two eyes and a HUD, each with its own frustum; the HUD is drawn alone, the eyes without it; the sky's animation, the weather and the glows move on once a frame, not once for each eye; the head or the aiming controller sets the player's facing, without aim assist. |
 | `units/units.c`, `items/weapons.c`, `game/aim_assist.c` | In a headset, with no other machine in the game, the shot of a player whose controller aims starts at the muzzle of the weapon in the hand and goes along the aim: not from the eye, nor turned to where the eye's ray meets the world (`game/vr_view.c`). |
-| `interface/first_person_weapons.c` | In a headset, the weapon in the aiming controller stays as the hand holds it: no walking bob, sway or idle posing, and zoomed it stays in the hand (the zoom is in a scope on it); whether it is idle, when its barrel's place is read (`game/vr_view.c`). |
+| `interface/first_person_weapons.c` | In a headset, the weapon in the aiming controller stays as the hand holds it: no walking bob, sway or idle posing, and zoomed it stays in the hand (the zoom is in a scope on it); whether it is idle, when its barrel's place is read, and its node matrices, mirrored for the left hand (`game/vr_view.c`). |
 | `interface/hud_messaging.c`, `interface/hud_weapon.c` | In a headset, the prompts show the controllers' buttons, and with a scope on the weapon in the hand the HUD leaves out the zoomed view's crosshair, mask and meters (`game/vr_view.c`). |
 | `render/render_objects.c`, `interface/first_person_weapons.c`, `rasterizer/xbox/rasterizer_xbox_plasma_energy.c`, `items/projectiles.c` | An overshield as `overshield_effect.c` draws it (`display.overshield_effect`): in its own color, its intensity full, its energy slower, faded above the height it has risen to; a hit on it plays the projectile's effect for an Elite's energy shield in place of its own (only the effect: the projectile's response is its own). |
 | `render/render_objects.c`, `interface/first_person_weapons.c`, `rasterizer/xbox/rasterizer_xbox_plasma_energy.c` | A local player's shield plasma is drawn in the chosen armor color (`display.shield_color`, `shield_color.c`), on the body and on the first-person arms. |

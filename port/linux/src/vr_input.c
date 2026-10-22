@@ -5,7 +5,7 @@ The headset's controllers as the game's controller (display.vr,
 port/linux/include/vr_input.h).
 
 The buttons. In the game, for the right-handed (vr.left_handed swaps the
-hands):
+hands), unless vr.bindings binds them otherwise:
 	right trigger    fire                left trigger     grenade
 	right A          jump                left X           switch grenades
 	right B          action, reload      left Y           switch weapons
@@ -13,8 +13,8 @@ hands):
 	right stick      turn                left stick       move
 	right click      zoom                left click       crouch
 	menu             pause (Start); held a second, the scores (Back)
-each the Xbox button the game's standard preset gives that action, so the
-player's own preset applies to them as to a pad. In the menus either hand's
+each action pressing the Xbox button the game's standard preset gives it,
+so the player's own preset applies to them as to a pad. In the menus either hand's
 lower face button is A and its upper is B, either stick moves about them,
 and a hand points at the panel and its trigger clicks (the hand whose
 trigger was pressed last points). Index's A and B and Vive's and Windows
@@ -23,11 +23,13 @@ Mixed Reality's trackpads stand in for the face buttons
 
 The gestures (vr.gestures). The main hand punched forward, faster than
 VR_PUNCH_SPEED, is a melee attack; its grip at a shoulder (a holster)
-switches weapons, not a melee; the off hand's grip is the flashlight only at
-the head, and elsewhere near the weapon holds it with both hands
-(vr_two_handed: the weapon then points from the main hand to the off); and
-the head lowered VR_CROUCH_DEPTH below its standing height (the highest
-since the runtime last recentred) crouches.
+switches weapons, not its action; the off hand's grip does its action (the
+flashlight) only at the head, with the palms together takes the weapon
+into that hand (the hands swap: an idea of astromaddie's VR port), and
+elsewhere near the weapon holds it with both hands (vr_two_handed: the
+weapon then points from the main hand to the off); and the head lowered
+VR_CROUCH_DEPTH below its standing height (the highest since the runtime
+last recentred) crouches.
 
 The turn. The main hand's stick turns the heading (vr_view.c) by
 vr.snap_turn degrees a push, or smoothly at vr.smooth_turn_speed with
@@ -72,9 +74,119 @@ the head's yaw, and how near the main hand's grip must be */
 #define VR_SHOULDER_REACH 0.2f
 /* the off hand holds the weapon within this of the main hand */
 #define VR_TWO_HANDED_REACH 0.6f
+/* the hands this near (their grips, metres) swap the weapon */
+#define VR_SWAP_REACH 0.15f
 /* the head this far below standing crouches, and back above this rises */
 #define VR_CROUCH_DEPTH 0.30f
 #define VR_CROUCH_RISE 0.25f
+
+static char const *const vr_binding_names[VR_BIND_COUNT] =
+{
+	"none", "fire", "throw_grenade", "jump", "action", "melee", "switch_weapon", "switch_grenade", "flashlight",
+	"crouch", "zoom", "scoreboard"
+};
+static char const *const vr_control_names[VR_CONTROL_COUNT] = { "trigger", "grip", "lower", "upper", "click" };
+static char const *const vr_role_names[VR_ROLE_COUNT] = { "main", "off" };
+static unsigned char const vr_default_bindings[VR_ROLE_COUNT][VR_CONTROL_COUNT] =
+{
+	{ VR_BIND_FIRE, VR_BIND_MELEE, VR_BIND_JUMP, VR_BIND_ACTION, VR_BIND_ZOOM },
+	{ VR_BIND_THROW_GRENADE, VR_BIND_FLASHLIGHT, VR_BIND_SWITCH_GRENADE, VR_BIND_SWITCH_WEAPON, VR_BIND_CROUCH }
+};
+
+/* the pad's button each action presses (the standard preset's): an analog
+button, or with VR_PAD_DIGITAL a digital one */
+#define VR_PAD_DIGITAL 0x100
+static unsigned short const vr_binding_pad[VR_BIND_COUNT] =
+{
+	0, VR_PAD_RIGHT_TRIGGER, VR_PAD_LEFT_TRIGGER, VR_PAD_A, VR_PAD_X, VR_PAD_B, VR_PAD_Y, VR_PAD_BLACK, VR_PAD_WHITE,
+	VR_PAD_DIGITAL | VR_PAD_LEFT_THUMB, VR_PAD_DIGITAL | VR_PAD_RIGHT_THUMB, VR_PAD_DIGITAL | VR_PAD_BACK
+};
+
+/* the name of `names` that is the text from `at` to `end`, or -1 */
+static int vr_name_at(char const *at, char const *end, char const *const *names, int count)
+{
+	int index;
+
+	for (index = 0; index < count; index++)
+	{
+		size_t length = strlen(names[index]);
+
+		if ((size_t)(end - at) == length && !strncmp(at, names[index], length))
+			return index;
+	}
+	return -1;
+}
+
+int vr_input_bindings_parse(char const *text, unsigned char bindings[VR_ROLE_COUNT][VR_CONTROL_COUNT])
+{
+	int bad = 0;
+
+	memcpy(bindings, vr_default_bindings, sizeof(vr_default_bindings));
+	while (text && *text)
+	{
+		char const *item, *end, *dot, *equals;
+		int role, control, action;
+
+		while (*text == ' ' || *text == ',' || *text == ';' || *text == '\t')
+			text++;
+		if (!*text)
+			break;
+		item = text;
+		while (*text && *text != ' ' && *text != ',' && *text != ';' && *text != '\t')
+			text++;
+		end = text;
+		for (dot = item; dot < end && *dot != '.'; dot++)
+			;
+		for (equals = dot; equals < end && *equals != '='; equals++)
+			;
+		role = dot < end ? vr_name_at(item, dot, vr_role_names, VR_ROLE_COUNT) : -1;
+		control = equals < end ? vr_name_at(dot + 1, equals, vr_control_names, VR_CONTROL_COUNT) : -1;
+		action = equals < end ? vr_name_at(equals + 1, end, vr_binding_names, VR_BIND_COUNT) : -1;
+		if (role < 0 || control < 0 || action < 0)
+		{
+			bad++;
+			continue;
+		}
+		bindings[role][control] = (unsigned char)action;
+	}
+	return bad;
+}
+
+/* an action pressed, by `value` (0 to 1: a trigger's pull for an analog
+button) */
+static void vr_bind(struct vr_pad *pad, int action, float value)
+{
+	unsigned short target;
+	unsigned char amount;
+
+	if (action <= VR_BIND_NONE || action >= VR_BIND_COUNT || !(value > 0.0f))
+		return;
+	target = vr_binding_pad[action];
+	if (target & VR_PAD_DIGITAL)
+	{
+		pad->buttons |= (unsigned short)(target & ~VR_PAD_DIGITAL);
+		return;
+	}
+	amount = (unsigned char)((value > 1.0f ? 1.0f : value) * 255.0f + 0.5f);
+	if (amount > pad->analog[target])
+		pad->analog[target] = amount;
+}
+
+/* a hand's bound buttons pressed: the trigger by its pull when it fires or
+throws, otherwise each pressed or not; `grip` is the grip's action (the
+gestures may change it) */
+static void vr_bind_hand(struct vr_pad *pad, struct vr_hand const *hand, unsigned char const bindings[VR_CONTROL_COUNT],
+	int grip)
+{
+	int trigger = bindings[VR_CONTROL_TRIGGER];
+
+	vr_bind(pad, trigger, trigger == VR_BIND_FIRE || trigger == VR_BIND_THROW_GRENADE ? hand->trigger :
+		(hand->buttons & VR_BUTTON_TRIGGER) ? 1.0f : 0.0f);
+	vr_bind(pad, grip, (hand->buttons & VR_BUTTON_GRIP) ? 1.0f : 0.0f);
+	vr_bind(pad, bindings[VR_CONTROL_LOWER], (hand->buttons & VR_BUTTON_LOWER) ? 1.0f : 0.0f);
+	vr_bind(pad, bindings[VR_CONTROL_UPPER], (hand->buttons & VR_BUTTON_UPPER) ? 1.0f : 0.0f);
+	vr_bind(pad, bindings[VR_CONTROL_CLICK], (hand->buttons & VR_BUTTON_STICK) ? 1.0f : 0.0f);
+}
 
 static short vr_thumb(float value)
 {
@@ -216,12 +328,23 @@ static int vr_crouching(struct vr_input *input, struct vr_frame const *frame)
 void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struct vr_input_settings const *settings,
 	int menus, float seconds, struct vr_pad *pad)
 {
-	int main_index = settings->left_handed ? VR_HAND_LEFT : VR_HAND_RIGHT;
-	int off_index = main_index == VR_HAND_LEFT ? VR_HAND_RIGHT : VR_HAND_LEFT;
-	struct vr_hand const *main_hand = &frame->hand[main_index], *off_hand = &frame->hand[off_index];
-	unsigned long off_pressed = off_hand->buttons & ~input->held[off_index];
-	int menu_held, hand;
+	int main_index, off_index, menu_held, hand;
+	struct vr_hand const *main_hand, *off_hand;
+	unsigned long off_pressed;
 
+	/* (the setting's hand, from when it changes; until then the hands may
+	have swapped) */
+	if (!input->left_handed_valid || input->setting_left_handed != settings->left_handed)
+	{
+		input->left_handed = settings->left_handed != 0;
+		input->setting_left_handed = settings->left_handed;
+		input->left_handed_valid = 1;
+	}
+	main_index = input->left_handed ? VR_HAND_LEFT : VR_HAND_RIGHT;
+	off_index = main_index == VR_HAND_LEFT ? VR_HAND_RIGHT : VR_HAND_LEFT;
+	main_hand = &frame->hand[main_index];
+	off_hand = &frame->hand[off_index];
+	off_pressed = off_hand->buttons & ~input->held[off_index];
 	memset(pad, 0, sizeof(*pad));
 	input->turn = 0.0f;
 	if (!(seconds > 0.0f && seconds < 1.0f))
@@ -278,26 +401,20 @@ void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struc
 			}
 		}
 		input->snapped = 0;
-		input->melee_seconds = input->flashlight_seconds = 0.0f;
+		input->melee_seconds = input->tap_seconds = 0.0f;
 	}
 	else
 	{
-		pad->analog[VR_PAD_RIGHT_TRIGGER] = (unsigned char)(main_hand->trigger * 255.0f + 0.5f);
-		pad->analog[VR_PAD_LEFT_TRIGGER] = (unsigned char)(off_hand->trigger * 255.0f + 0.5f);
-		vr_press(pad, VR_PAD_A, (main_hand->buttons & VR_BUTTON_LOWER) != 0);
-		vr_press(pad, VR_PAD_X, (main_hand->buttons & VR_BUTTON_UPPER) != 0);
 		/* (the grip at a shoulder draws the other weapon from its holster) */
 		if ((main_hand->buttons & VR_BUTTON_GRIP) && settings->gestures && vr_at_shoulder(frame, main_hand))
 			input->holster = 1;
 		if (!(main_hand->buttons & VR_BUTTON_GRIP))
 			input->holster = 0;
-		vr_press(pad, input->holster ? VR_PAD_Y : VR_PAD_B, (main_hand->buttons & VR_BUTTON_GRIP) != 0);
-		vr_press(pad, VR_PAD_BLACK, (off_hand->buttons & VR_BUTTON_LOWER) != 0);
-		vr_press(pad, VR_PAD_Y, (off_hand->buttons & VR_BUTTON_UPPER) != 0);
-		if (main_hand->buttons & VR_BUTTON_STICK)
-			pad->buttons |= VR_PAD_RIGHT_THUMB;
-		if (off_hand->buttons & VR_BUTTON_STICK)
-			pad->buttons |= VR_PAD_LEFT_THUMB;
+		vr_bind_hand(pad, main_hand, settings->bindings[VR_ROLE_MAIN],
+			input->holster ? VR_BIND_SWITCH_WEAPON : settings->bindings[VR_ROLE_MAIN][VR_CONTROL_GRIP]);
+		/* (with the gestures the off grip's action is at the head alone) */
+		vr_bind_hand(pad, off_hand, settings->bindings[VR_ROLE_OFF],
+			settings->gestures ? VR_BIND_NONE : settings->bindings[VR_ROLE_OFF][VR_CONTROL_GRIP]);
 		{
 			float cosine = cosf(settings->move_turn), sine = sinf(settings->move_turn);
 
@@ -314,30 +431,41 @@ void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struc
 				input->melee_seconds = VR_PRESS_SECONDS;
 				input->melee_wait = VR_PUNCH_WAIT;
 			}
-			/* (the flashlight toggles on a press: a tap at the head) */
-			if ((off_pressed & VR_BUTTON_GRIP) && off_hand->tracked &&
-				vr_distance(off_hand->grip.position, frame->head.position) < VR_HEAD_REACH)
+			/* (the off grip's action on a press at the head, a tap: the
+			flashlight toggles; with the palms together, the main grip let
+			go, the hands swap) */
+			if ((off_pressed & VR_BUTTON_GRIP) && off_hand->tracked)
 			{
-				input->flashlight_seconds = VR_PRESS_SECONDS;
+				if (vr_distance(off_hand->grip.position, frame->head.position) < VR_HEAD_REACH)
+				{
+					input->tap_seconds = VR_PRESS_SECONDS;
+				}
+				else if (main_hand->tracked && !(main_hand->buttons & VR_BUTTON_GRIP) &&
+					vr_distance(off_hand->grip.position, main_hand->grip.position) < VR_SWAP_REACH)
+				{
+					input->left_handed = !input->left_handed;
+					input->swaps++;
+					input->main_position_valid = 0;
+					input->holster = 0;
+				}
 			}
 			if (vr_crouching(input, frame))
-				pad->buttons |= VR_PAD_LEFT_THUMB;
+				vr_bind(pad, VR_BIND_CROUCH, 1.0f);
 		}
 		else
 		{
-			vr_press(pad, VR_PAD_WHITE, (off_hand->buttons & VR_BUTTON_GRIP) != 0);
 			input->main_position_valid = 0;
 			input->standing_valid = 0;
 		}
 		if (input->melee_seconds > 0.0f)
 		{
-			vr_press(pad, VR_PAD_B, 1);
+			vr_bind(pad, VR_BIND_MELEE, 1.0f);
 			input->melee_seconds -= seconds;
 		}
-		if (input->flashlight_seconds > 0.0f)
+		if (input->tap_seconds > 0.0f)
 		{
-			vr_press(pad, VR_PAD_WHITE, 1);
-			input->flashlight_seconds -= seconds;
+			vr_bind(pad, settings->bindings[VR_ROLE_OFF][VR_CONTROL_GRIP], 1.0f);
+			input->tap_seconds -= seconds;
 		}
 	}
 	input->menus = menus;
@@ -458,12 +586,29 @@ static struct vr_input vr_input_state;
 static float vr_input_move_turn;
 /* a menu is up, with controllers or without */
 static int vr_input_menus_up;
+/* vr.bindings, as it was last read */
+static unsigned char vr_input_bindings[VR_ROLE_COUNT][VR_CONTROL_COUNT];
+static unsigned long vr_input_bindings_read_at;
+static int vr_input_bindings_valid;
+static unsigned long vr_input_swaps;
+
+void platform_log(char const *format, ...);
 
 static void vr_input_settings_read(struct vr_input_settings *settings)
 {
 	double snap = config_real("vr.snap_turn");
 	double rate = config_real("vr.smooth_turn_speed");
 
+	if (!vr_input_bindings_valid || vr_input_bindings_read_at != config_changes())
+	{
+		int bad = vr_input_bindings_parse(config_string("vr.bindings"), vr_input_bindings);
+
+		if (bad)
+			platform_log("vr: vr.bindings: %d items not understood, left out", bad);
+		vr_input_bindings_read_at = config_changes();
+		vr_input_bindings_valid = 1;
+	}
+	memcpy(settings->bindings, vr_input_bindings, sizeof(vr_input_bindings));
 	settings->left_handed = config_boolean("vr.left_handed");
 	settings->snap_angle = snap > 0.0 && snap <= 180.0 ? (float)(snap * 0.017453292519943) : 0.0f;
 	settings->turn_rate = (float)((rate > 0.0 && rate <= 720.0 ? rate : 120.0) * 0.017453292519943);
@@ -485,7 +630,20 @@ int vr_input_gamepad(struct vr_pad *pad, int menus)
 	vr_input_settings_read(&settings);
 	vr_input_update(&vr_input_state, frame, &settings, menus != 0,
 		frame->display_period > 0.0f ? frame->display_period : 1.0f / 90.0f, pad);
+	/* (the hands swapped the weapon: felt in both) */
+	if (vr_input_state.swaps != vr_input_swaps)
+	{
+		vr_input_swaps = vr_input_state.swaps;
+		vr_haptic(VR_HAND_LEFT, 0.5f, 0.06f);
+		vr_haptic(VR_HAND_RIGHT, 0.5f, 0.06f);
+		platform_log("vr: the weapon changes to the %s hand", vr_input_state.left_handed ? "left" : "right");
+	}
 	return 1;
+}
+
+int vr_input_left_handed(void)
+{
+	return vr_input_state.left_handed_valid ? vr_input_state.left_handed : config_boolean("vr.left_handed");
 }
 
 /* (the game sets the motors every frame: each pulse lasts a little longer,

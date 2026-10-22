@@ -77,6 +77,7 @@ void platform_log(char const *format, ...);
 /* d3d8_gl.c: the back buffer cleared to nothing (the HUD's ground), and
 the back buffer's picture into an eye's image */
 void halo_vr_clear_transparent(void);
+void halo_vr_mirror_winding(int mirrored);
 void halo_vr_resolve_eye(int eye);
 /* ... and a rectangle of it (the screen's coordinates) into the scope's */
 void halo_vr_resolve_scope(short x0, short y0, short x1, short y1);
@@ -165,7 +166,6 @@ static void vr_settings_read(
 		return;
 	vr_view.settings_read_at = config_changes();
 	vr_view.settings_valid = TRUE;
-	vr_view.main_hand = config_boolean("vr.left_handed") ? VR_HAND_LEFT : VR_HAND_RIGHT;
 	vr_view.aim_with_hand = strcmp(config_string("vr.aim"), "head") != 0;
 }
 
@@ -180,6 +180,7 @@ static struct vr_hand const *vr_aiming_hand(
 	struct unit_datum *unit;
 
 	vr_settings_read();
+	vr_view.main_hand = vr_input_left_handed() ? VR_HAND_LEFT : VR_HAND_RIGHT;
 	hand = &frame->hand[vr_view.main_hand];
 	if (!vr_view.aim_with_hand || !frame->controllers || !hand->tracked)
 		return NULL;
@@ -215,6 +216,17 @@ static long vr_held_weapon(
 	return unit_inventory_get_weapon(vr_view.unit_index, unit->unit.current_weapon_index);
 }
 
+/* an offset (LOCAL metres, right, up and back) on the side of the hand
+that aims: the right hand's mirrored for the left */
+static void vr_weapon_side(
+	float const right[3],
+	float side[3])
+{
+	side[0] = vr_view.main_hand == VR_HAND_LEFT ? -right[0] : right[0];
+	side[1] = right[1];
+	side[2] = right[2];
+}
+
 /* what is learnt of a weapon's type's model, or NULL */
 static struct vr_weapon_fit *vr_weapon_fit(
 	long weapon_index)
@@ -235,7 +247,8 @@ static struct vr_weapon_fit *vr_weapon_fit(
 
 /* the weapon as the hand holds it (LOCAL space): `model`, the aim turned so
 that the first-person model's barrel lies along the aim, and the muzzle's
-offset from the grip (vr_weapon_muzzle, until the model's is learnt) */
+offset from the grip (vr_weapon_muzzle, until the model's is learnt); in
+the left hand, the model mirrored */
 static void vr_weapon_in_hand(
 	float const aim[4],
 	float model[4],
@@ -243,7 +256,7 @@ static void vr_weapon_in_hand(
 {
 	static float const local_forward[3] = { 0.0f, 0.0f, -1.0f };
 	struct vr_weapon_fit const *fit = vr_weapon_fit(vr_held_weapon());
-	float turn[4], from_grip[3];
+	float turn[4], forward[3], fit_muzzle[3], grip[3], from_grip[3];
 	int axis;
 
 	if (!fit)
@@ -252,12 +265,15 @@ static void vr_weapon_in_hand(
 		vr_rotate(aim, vr_weapon_muzzle, muzzle);
 		return;
 	}
-	vr_quaternion_between(fit->forward, local_forward, turn);
+	vr_weapon_side(fit->forward, forward);
+	vr_weapon_side(fit->muzzle, fit_muzzle);
+	vr_weapon_side(vr_weapon_grip, grip);
+	vr_quaternion_between(forward, local_forward, turn);
 	vr_quaternion_multiply(aim, turn, model);
 	/* (the camera is VR_WEAPON_GRIP behind the grip, the muzzle where it
 	holds it) */
 	for (axis = 0; axis < 3; axis++)
-		from_grip[axis] = fit->muzzle[axis] - vr_weapon_grip[axis];
+		from_grip[axis] = fit_muzzle[axis] - grip[axis];
 	vr_rotate(model, from_grip, muzzle);
 }
 
@@ -441,7 +457,8 @@ static boolean vr_scope_window(
 	window->rasterizer_camera = camera;
 	window->render_camera = camera;
 
-	vr_rotate(aim.orientation, vr_scope_offset, along);
+	vr_weapon_side(vr_scope_offset, offset);
+	vr_rotate(aim.orientation, offset, along);
 	for (axis = 0; axis < 3; axis++)
 		place.position[axis] = hand->grip.position[axis] + along[axis];
 	memcpy(place.orientation, aim.orientation, sizeof(place.orientation));
@@ -507,14 +524,15 @@ short vr_render_windows(
 	{
 		struct vr_hand const *hand = &frame->hand[vr_view.main_hand];
 		struct vr_pose aim = hand->aim, model;
-		float grip[3], along[3];
+		float side[3], grip[3], along[3];
 		struct render_camera muzzle = player.rasterizer_camera;
 		int axis;
 
 		vr_hand_aim(frame, hand, aim.orientation);
 		model = aim;
 		vr_weapon_in_hand(aim.orientation, model.orientation, along);
-		vr_rotate(model.orientation, vr_weapon_grip, grip);
+		vr_weapon_side(vr_weapon_grip, side);
+		vr_rotate(model.orientation, side, grip);
 		for (axis = 0; axis < 3; axis++)
 			offset[axis] = head[axis] + hand->grip.position[axis] - grip[axis] - frame->head.position[axis];
 		vr_view.weapon_camera = player.rasterizer_camera;
@@ -583,7 +601,8 @@ void vr_render_weapon_camera(
 	camera->up = pose->up;
 }
 
-void vr_render_weapon_posed(
+/* where the model's barrel is, from its pose before it is mirrored */
+static void vr_weapon_learn(
 	void)
 {
 	struct render_camera const *camera = &vr_view.weapon_camera;
@@ -594,8 +613,6 @@ void vr_render_weapon_posed(
 	long weapon_index;
 	int axis;
 
-	if (!vr_view.stereo || !vr_view.weapon_in_hand || render.local_player_index == NONE)
-		return;
 	weapon_index = vr_held_weapon();
 	if (weapon_index == NONE || !first_person_weapon_idle(render.local_player_index) ||
 		first_person_weapon_get_marker_by_name(weapon_index, "primary trigger", &marker, 1) < 1)
@@ -644,6 +661,71 @@ void vr_render_weapon_posed(
 		fit->forward[2] * fit->forward[2]);
 	for (axis = 0; axis < 3; axis++)
 		fit->forward[axis] /= length;
+}
+
+/* the model, the arms' too, mirrored across the weapon camera's upright
+plane (the camera's left its normal): the right hand's held in the left
+(astromaddie's way); markers on it, its muzzle's and flashlight's, follow */
+static void vr_weapon_mirror(
+	void)
+{
+	struct render_camera const *camera = &vr_view.weapon_camera;
+	real_matrix4x3 *matrices;
+	real_vector3d normal;
+	short node_count, index;
+
+	matrices = first_person_weapon_get_node_matrices(render.local_player_index, &node_count);
+	cross_product3d(&camera->up, &camera->forward, &normal);
+	if (!(normalize3d(&normal) > 0.0f))
+		return;
+	for (index = 0; index < node_count; index++)
+	{
+		real_matrix4x3 *matrix = &matrices[index];
+		real_vector3d *axes[3];
+		real_vector3d offset;
+		real along;
+		int axis;
+
+		axes[0] = &matrix->forward;
+		axes[1] = &matrix->left;
+		axes[2] = &matrix->up;
+		vector_from_points3d(&camera->position, &matrix->position, &offset);
+		along = 2.0f * dot_product3d(&offset, &normal);
+		matrix->position.x -= normal.i * along;
+		matrix->position.y -= normal.j * along;
+		matrix->position.z -= normal.k * along;
+		for (axis = 0; axis < 3; axis++)
+		{
+			along = 2.0f * dot_product3d(axes[axis], &normal);
+			axes[axis]->i -= normal.i * along;
+			axes[axis]->j -= normal.j * along;
+			axes[axis]->k -= normal.k * along;
+		}
+	}
+}
+
+void vr_render_weapon_posed(
+	void)
+{
+	if (!vr_view.stereo || !vr_view.weapon_in_hand || render.local_player_index == NONE)
+		return;
+	vr_weapon_learn();
+	if (vr_view.main_hand == VR_HAND_LEFT)
+		vr_weapon_mirror();
+}
+
+void vr_render_weapon_drawing(
+	int drawing)
+{
+	static boolean mirrored;
+	boolean mirror = drawing && VR_RENDER_WORLD() && vr_view.stereo && vr_view.weapon_in_hand &&
+		vr_view.main_hand == VR_HAND_LEFT;
+
+	if (mirror != mirrored)
+	{
+		mirrored = mirror;
+		halo_vr_mirror_winding(mirror);
+	}
 }
 
 /* the HUD's ground: nothing, so that the panel shows only the HUD */

@@ -2292,6 +2292,10 @@ int halo_scoreboard_pointer_update(int offered, struct halo_ui_pointer *pointer)
 #endif
 
 #ifndef HALO_GLES
+/* the triangles' winding turned over: the headset's first-person weapon
+drawn mirrored, in the left hand (halo_vr_mirror_winding) */
+static int vr_mirror_winding;
+
 /* a headset's controller pointing at the panel the menus are on, in place
 of the mouse (vr_input.c): where it points, and its trigger's clicks there */
 static void ui_point_from_headset(struct halo_ui_pointer *pointer)
@@ -4110,6 +4114,10 @@ static void apply_raster_state(BOOL has_depth)
 #endif
 		GLenum cull_mode = rs[D3DRS_CULLMODE] == rs[D3DRS_FRONTFACE] ? GL_FRONT : GL_BACK;
 
+#ifndef HALO_GLES
+		if (vr_mirror_winding)
+			front_face = front_face == GL_CCW ? GL_CW : GL_CCW;
+#endif
 		if (gl_state.front_face != front_face)
 		{
 			gl_state.front_face = front_face;
@@ -6787,6 +6795,13 @@ static void front_buffer_take(void)
 }
 
 #ifndef HALO_GLES
+/* the first-person weapon mirrored, or not, for the draws that follow
+(port/linux/game/vr_view.c) */
+void halo_vr_mirror_winding(int mirrored)
+{
+	vr_mirror_winding = mirrored != 0;
+}
+
 /* the headset's HUD pass starts on a clear ground (port/linux/game/vr_view.c) */
 void halo_vr_clear_transparent(void)
 {

@@ -79,6 +79,11 @@ struct real_matrix4x3 *first_person_weapon_get_node_matrix(
 pose (port/linux/game/vr_view.c) */
 boolean first_person_weapon_idle(
 	short local_player_index);
+/* port: the matrices the local player's first-person weapon was last posed
+with, and their count (port/linux/game/vr_view.c) */
+struct real_matrix4x3 *first_person_weapon_get_node_matrices(
+	short local_player_index,
+	short *node_count);
 
 /* ---------- globals */
 

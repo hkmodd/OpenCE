@@ -201,6 +201,7 @@ void viewmodel_projection_begin(void)
 
 	if (projection_depth++ != 0)
 		return;
+	vr_render_weapon_drawing(TRUE);
 	projection_applied = FALSE;
 	/* (display.viewmodel_fov's angle; by default the view's own, from before
 	display.fov widened it: arms and a gun right against the camera stretch
@@ -240,7 +241,10 @@ void viewmodel_projection_begin(void)
 
 void viewmodel_projection_end(void)
 {
-	if (!projection_depth || --projection_depth || !projection_applied)
+	if (!projection_depth || --projection_depth)
+		return;
+	vr_render_weapon_drawing(FALSE);
+	if (!projection_applied)
 		return;
 	render.camera = saved_render_camera;
 	render.frustum = saved_render_frustum;
