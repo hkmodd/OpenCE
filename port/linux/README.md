@@ -454,7 +454,9 @@ the setting for one start of the game. It has priority over the file.
 | `vr.aim` | `"hand"` | `HALO_VR_AIM` | With `display.vr`, what aims on foot: `"hand"`, the aiming controller (the weapon held in it, the crosshair where its shot lands), or `"head"`. In a vehicle's seat, `vr.vehicle_aim`. |
 | `vr.roomscale` | `true` | `HALO_VR_ROOMSCALE` | With `display.vr`, the room is the player's: on foot the player walks after the head as the person steps (the off stick still), and in the menus and cinematics the head goes anywhere in the room; `false`, the view leans up to 35 cm from the game's camera. |
 | `vr.cinematics` | `"immersive"` | `HALO_VR_CINEMATICS` | With `display.vr`, the cinematics: `"immersive"`, around the head (each shot ahead of where it faces as the shot begins, a blink at a cut, no letterbox), or `"screen"`, on a screen ahead. |
-| `vr.vehicle_aim` | `"stick"` | `HALO_VR_VEHICLE_AIM` | With `display.vr`, what turns and aims in a vehicle's seat: `"stick"`, the aiming controller's stick as a gamepad's right stick, the head looking around freely (the crosshair where the shot lands), or `"head"`. |
+| `vr.vehicle_view` | `"first_person"` | `HALO_VR_VEHICLE_VIEW` | With `display.vr`, how a vehicle's seat is seen: `"first_person"`, from the seat, the view level and turning with the vehicle (the player's own view only: shots are aimed as always), or `"chase"`, the game's camera. |
+| `vr.vehicle_aim` | `"hand"` | `HALO_VR_VEHICLE_AIM` | With `display.vr`, what aims in a vehicle's seat (a gun, a tank's cannon, where a Banshee flies): `"hand"`, where the aiming controller points (a passenger's own weapon in that hand, in the first-person seat), `"stick"`, its stick as a gamepad's right stick, or `"head"`; with the first two the head looks around freely and the crosshair is where the shot lands. |
+| `vr.vehicle_steering` | `"drive"` | `HALO_VR_VEHICLE_STEERING` | With `display.vr` and the first-person seat, how a Warthog's or a Ghost's driver steers: `"drive"`, the other controller's stick (sideways turns the wheels as far as it is pushed, mirrored backing, as a car's; forward and back are the throttle; the Ghost does not strafe), or `"aim"`, toward where `vr.vehicle_aim` aims, as the game does. |
 | `vr.left_handed` | `false` | `HALO_VR_LEFT_HANDED` | With `display.vr`, the left controller aims and fires and the right moves: the controllers' buttons swap hands, and the weapon, mirrored, is held in the left. |
 | `vr.snap_turn` | `30.0` | `HALO_VR_SNAP_TURN` | With `display.vr`, how far a push of the aiming hand's stick turns, in degrees; `0` turns smoothly instead. |
 | `vr.smooth_turn_speed` | `120.0` | `HALO_VR_SMOOTH_TURN_SPEED` | With `vr.snap_turn` `0`, the stick's turn at full push, in degrees a second. |
@@ -692,12 +694,17 @@ screen, with the cause in the log.
   when other machines are in the game). A reticle is held where the shot
   lands, red when the game's crosshair would be; the HUD draws no
   crosshair. A zoomed weapon shows its zoom in a scope held on it, not in
-  the eyes. With `vr.aim = "head"` the head aims. In a vehicle's seat the
-  aiming stick turns and aims as a gamepad's right stick does, the head
-  looking around freely, and the reticle is where the vehicle's gun (or
-  the passenger's) shoots (`vr.vehicle_aim = "head"`: the head aims). The
-  off stick
-  moves where the head faces. The aiming stick turns (`vr.snap_turn`), and
+  the eyes. With `vr.aim = "head"` the head aims. The off stick moves
+  where the head faces.
+- A vehicle's seat is seen from the seat (`vr.vehicle_view`), the view
+  level and turning with the vehicle, the head looking around freely; the
+  eyes blink getting in and out, as the view turns to the seat's forward.
+  The aiming controller points where a gun shoots, a tank's cannon aims
+  and a Banshee flies (`vr.vehicle_aim`), and a passenger holds their own
+  weapon in it; the reticle is where the shot lands. A Warthog's or a
+  Ghost's driver steers with the off stick (`vr.vehicle_steering`):
+  sideways turns the wheels as far as it is pushed, forward and back are
+  the throttle. The aiming stick turns (`vr.snap_turn`), and
   the mouse, the gamepad's stick and the game's own turns (a respawn, a
   script) turn the world around the player, as a turn of the body. Aim
   assist is off.
@@ -722,8 +729,8 @@ screen, with the cause in the log.
   Vive's and Windows Mixed Reality's trackpads, stand in for the face
   buttons. The game's rumble is felt in the hands. In the menus either
   hand's lower button is A and its upper B, either stick moves about them,
-  and a hand points at the panel and its trigger clicks: the hand whose
-  trigger was pressed last points.
+  and a hand points at the panel, a beam from it, and its trigger clicks:
+  the hand whose trigger was pressed last points.
 - The room is the player's (`vr.roomscale`): stepping in the room walks
   the player there (while the off stick is still), and in the menus,
   cinematics and while dead the head goes anywhere; in a seat it leans up
@@ -731,9 +738,14 @@ screen, with the cause in the log.
 - The HUD is drawn on a panel held before the head (`vr.hud_distance`,
   `vr.hud_width`), which the runtime keeps there as the head moves.
 - The menus are on a panel in the room (`vr.screen_distance`,
-  `vr.screen_width`): the main menu's over its scene, seen in the headset;
-  the pause menu over the game, where the head faced as it came up. The
-  loading screens and cinematics are drawn flat, on that panel.
+  `vr.screen_width`), where the head faced as they came up: the main
+  menu's over its scene, seen in the headset all around; the pause menu
+  over the game. The loading screens (and the cinematics with
+  `vr.cinematics = "screen"`) are drawn flat on a panel placed so too.
+- Gamepad Setup's VR HEADSET, also in the pause menu's Settings, sets the
+  headset's settings: the headset itself (from the next start), what
+  aims, the weapon's hand, turning, room scale, the vehicles' view, aim
+  and steering, and the cinematics.
 - The window shows the left eye, or that panel's picture.
 - The game draws a frame for each of the headset's, at the time the runtime
   gives, and blends the game's 30 ticks a second for each, as SMOOTH

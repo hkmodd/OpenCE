@@ -29,6 +29,9 @@ struct vr_fov
 void vr_rotate(const float q[4], const float v[3], float out[3]);
 /* a turned by b (b first, then a) */
 void vr_quaternion_multiply(const float a[4], const float b[4], float out[4]);
+/* the turn whose matrix's columns are the axes x, y and z (orthonormal,
+right-handed) */
+void vr_quaternion_from_axes(const float x[3], const float y[3], const float z[3], float orientation[4]);
 /* the shortest turn from one direction to another (each of length 1); half
 a turn about an axis across `from` when they are opposite */
 void vr_quaternion_between(const float from[3], const float to[3], float out[4]);
@@ -66,5 +69,13 @@ int vr_limit_reach(float offset[3], float reach);
 
 /* whether every value is finite */
 int vr_finite(const float *values, int count);
+
+/* a driver's steering by the stick (vr.vehicle_steering "drive"): the
+facing's turn from the vehicle's forward (radians, to the left) for the
+stick's sideways push `x` (-1 to 1, right positive), in proportion up to the
+wheels' limits as the vehicle's definition has them (degrees, left positive
+and right negative); mirrored while the vehicle backs, as the game turns the
+wheels against the facing then, so that they turn as the stick does */
+float vr_drive_steer(float x, float left_limit, float right_limit, int backing);
 
 #endif

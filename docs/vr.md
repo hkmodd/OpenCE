@@ -54,7 +54,11 @@ be served later with `XR_KHR_D3D11_enable` and `WGL_NV_DX_interop2`.
   script), with the head put on it last: its offset from where the body
   stands in the room, stopped short of walls, the eye's own offset and the
   head's orientation, roll included. Its frustum is the eye's off-centre
-  field, which `render_camera_build_frustum` takes as it is.
+  field, which `render_camera_build_frustum` takes as it is. The heading
+  (the yaw LOCAL's forward has in the world) is the aiming player's; with
+  no player aiming (the main menu's scene) it is the game camera's less
+  the head's yaw as the view began, so that the head turns about the
+  scene.
 - Room scale (`vr.roomscale`, `vr_room_follow`): the body's place in the
   room is set under the head as the player stands up, sits, dies or a
   cinematic's shot begins. On foot, with the off stick still, the unit
@@ -129,14 +133,28 @@ be served later with `XR_KHR_D3D11_enable` and `WGL_NV_DX_interop2`.
   the weapon), in a square of the back buffer, copied into the scope's
   image, a quad held on the weapon. The eyes keep their field, and the HUD
   leaves out the zoomed view's elements (`hud_weapon.c`).
-- In a vehicle's seat (`vr.vehicle_aim`) the main hand's stick is the
-  pad's right stick (`vr_input.c`), so the facing turns and pitches as a
-  pad turns it, at the player's look sensitivity, the vehicle steering
-  toward it; the head looks around without turning it, and the view turns
-  with the facing only, as a snap turn does. The reticle stands for the
-  HUD's crosshair there too, along the ray of the weapon the HUD would
-  show (the passenger's own, a gunner's the vehicle's), the vehicle not in
-  its way.
+- A vehicle's seat is seen from it (`vr.vehicle_view`, astromaddie's
+  seat view): `director_choose_game_perspective` takes the first person's
+  camera there for the local view only (`director_camera_deterministic`,
+  which aims the shots, is unchanged), so the eyes are at the unit's and
+  its body is not drawn. The heading is the vehicle's yaw, blended between
+  the ticks as the vehicle is drawn, and the seat's own turn: level, the
+  vehicle's pitch and roll not tilting the horizon. Getting in, the seat's
+  forward is put ahead of the head; getting out, the heading on foot goes
+  on from the seat's; both with a blink. The main hand's stick turns the
+  seat's view.
+- What aims in a seat (`vr.vehicle_aim`): the main hand's aim (a gun, a
+  tank's cannon, where a flier goes; a passenger's own weapon is held in
+  the hand as on foot), its stick as the pad's right stick (`vr_input.c`:
+  the facing turns as a pad turns it, the view with the facing or, seen
+  from the seat, with the vehicle), or the head. A Warthog's or a Ghost's
+  driver steers with the off stick (`vr.vehicle_steering`,
+  `vr_drive_steer`): the facing is the vehicle's forward turned in
+  proportion to its sideways push up to the wheels' limits (read from the
+  vehicle's definition), mirrored while it backs, and the pad's left stick
+  keeps its throttle alone. The reticle stands for the HUD's crosshair in
+  seats, along the ray of the weapon the HUD would show (the passenger's
+  own, a gunner's the vehicle's), the vehicle not in its way.
 - A cinematic (`vr.cinematics`) is seen around the head, from its camera:
   each shot is set ahead of where the head faced as it began and turns as
   its camera turns (its pitch and roll are the head's), and a cut (the
@@ -145,8 +163,15 @@ be served later with `XR_KHR_D3D11_enable` and `WGL_NV_DX_interop2`.
   letterbox is the console window's and is not in the eyes. Meanwhile the
   facing is left to the scripts, and their turns turn the heading after.
 - In the menus a hand's ray meets the panel shown (`vr_ray_panel`), and
-  `halo_ui_pointer_update` takes it as the mouse; its trigger clicks, and a
-  dot is drawn on the panel.
+  `halo_ui_pointer_update` takes it as the mouse; its trigger clicks, a dot
+  is drawn on the panel, and a beam (a quad layer over the panel, turned
+  about its length to face the head: astromaddie's) runs from the hand to
+  it. A menu's panel and the flat screen are each placed where the head
+  faced as it came up, and kept there through a moment of the other (a
+  menu's change).
+- The headset's settings have a screen of their own (`tools/port_settings.py`:
+  VR HEADSET, under Gamepad Setup and the pause menu's Settings), whose
+  changes the game takes at once (`config_changes`), but `display.vr`'s.
 - `debug.vr_simulate` gives a headset and two hands of the game's own, and
   `debug.vr_simulate_input` scripts their buttons, sticks and poses, so the
   views and the controls can be checked without a headset
@@ -163,10 +188,10 @@ check of the flat picture:
    holsters, two hands), haptics, the menus' pointer and the immersive
    menus.
 3. Swapping hands, rebinding.
-4. Vehicles steered by the stick, immersive cinematics (moistman's: the
-   camera anchored at each cut, with a blink), and the camera kept right
-   across seats, checkpoints and loads (with 2 and 3, this branch). A
-   first-person view inside vehicles is to come.
+4. Vehicles seen from the seat, aimed by the hand and driven by the
+   stick, immersive cinematics (moistman's: the camera anchored at each
+   cut, with a blink), and the camera kept right across seats,
+   checkpoints and loads (with 2 and 3, this branch).
 5. Other players' heads and hands online. The pose is only drawn: hit boxes,
    shots and movement do not change. A VR player sends its head and hands
    relative to its unit, in millimetres and smallest-three quaternions
@@ -175,5 +200,5 @@ check of the flat picture:
    stock biped for the VR players near it. Everything received is checked
    (finite, within reach, the sender's unit, rate, sequence), and
    `HALO_PORT_NETWORK_VERSION` is raised.
-6. Comfort: snap and smooth turning, a vignette, height calibration and a
-   VR settings screen.
+6. Comfort: a vignette and height calibration (snap and smooth turning,
+   and the settings screen, are in this branch).

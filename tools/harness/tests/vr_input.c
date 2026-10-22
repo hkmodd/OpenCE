@@ -21,6 +21,7 @@ static struct vr_input_settings settings_of(int left_handed, float snap_angle, i
     settings.gestures = gestures;
     settings.move_turn = 0;
     settings.seat_stick = 0;
+    settings.drive = 0;
     settings.room = 0;
     settings.room_offset[0] = settings.room_offset[1] = 0;
     vr_input_bindings_parse("", settings.bindings);
@@ -255,6 +256,25 @@ int main(int argc, char **argv)
         vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
         CHECK(pad.thumb[2] == 0 && pad.thumb[3] == 0, "the right stick still (%d %d)", pad.thumb[2], pad.thumb[3]);
         CHECK(close_to(input.turn, -0.5f, 1e-6f), "a snap (%f)", (double)input.turn);
+        return 0;
+    }
+    CASE("drive") {
+        /* driving, the off stick's sideways steers (vr_view.c): the pad's left stick has the throttle alone, and the
+        main stick still turns */
+        memset(&input, 0, sizeof(input));
+        settings = settings_of(0, 0.5f, 1);
+        settings.drive = 1;
+        frame_of(&frame);
+        frame.hand[VR_HAND_LEFT].stick[0] = 1.0f;
+        frame.hand[VR_HAND_LEFT].stick[1] = 0.5f;
+        frame.hand[VR_HAND_RIGHT].stick[0] = 1.0f;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(pad.thumb[0] == 0 && pad.thumb[1] == 16383, "the throttle alone (%d %d)", pad.thumb[0], pad.thumb[1]);
+        CHECK(close_to(input.turn, -0.5f, 1e-6f), "a snap (%f)", (double)input.turn);
+        /* on foot again, the off stick strafes */
+        settings.drive = 0;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(pad.thumb[0] == 32767, "strafing (%d)", pad.thumb[0]);
         return 0;
     }
     CASE("turn") {

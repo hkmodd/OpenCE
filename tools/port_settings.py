@@ -357,6 +357,39 @@ SCREENS["network_setup/in_game"] = {
     "platform_places": True, "rows": [], "categories": _network["categories"],
 }
 
+# the headset's settings (display.vr, port/linux/game/vr_view.c): a screen of
+# its own, a category of Gamepad Setup's (the controllers) and of the pause
+# menu's SETTINGS (in the headset, the menus a hand points at), the desktop's
+# alone
+_vr_category = ("VR HEADSET:", "gamepad_setup/vr",
+                "The headset: aiming, the weapon's hand, turning,\nthe room, vehicles and cinematics.", "desktop")
+SCREENS["gamepad_setup/vr"] = {
+    "screen": "vr_settings_screen", "header": SCREENS["gamepad_setup"]["header"], "spacing": 30,
+    "rows": [
+        ("VR HEADSET:", "display.vr", ON_OFF,
+         "Play in an OpenXR headset (Oculus, SteamVR,\nMonado). From the next start.", None),
+        ("AIM WITH:", "vr.aim", [("HAND", "hand"), ("HEAD", "head")],
+         "On foot: the controller, the weapon held in it,\nor the head.", None),
+        ("WEAPON HAND:", "vr.left_handed", [("RIGHT", "false"), ("LEFT", "true")],
+         "The hand that holds the weapon. Palms together\nwith the other's grip swap it in play.", None),
+        ("TURNING:", "vr.snap_turn", [("SMOOTH", "0"), ("15", "15"), ("30", "30"), ("45", "45"), ("90", "90")],
+         "The aiming stick turns by snaps of so many\ndegrees, or smoothly.", None),
+        ("ROOM SCALE:", "vr.roomscale", ON_OFF,
+         "Step in the room and the player follows; off,\nthe head leans 35 cm at most.", None),
+        ("VEHICLE VIEW:", "vr.vehicle_view", [("SEAT", "first_person"), ("CHASE", "chase")],
+         "Ride in the seat, the view level with the\nvehicle, or behind it as the game does.", None),
+        ("VEHICLE AIM:", "vr.vehicle_aim", [("HAND", "hand"), ("STICK", "stick"), ("HEAD", "head")],
+         "What aims guns and flies a Banshee in a seat:\nthe controller, its stick or the head.", None),
+        ("STEERING:", "vr.vehicle_steering", [("STICK", "drive"), ("AIM", "aim")],
+         "A Warthog's or Ghost's driver steers with the\nother stick, or toward the aim as the game does.",
+         None),
+        ("CINEMATICS:", "vr.cinematics", [("AROUND", "immersive"), ("SCREEN", "screen")],
+         "Cinematics around the head, a blink at each cut,\nor on a screen ahead.", None),
+    ],
+}
+SCREENS["gamepad_setup"]["categories"] = [_vr_category]
+SCREENS["network_setup/in_game"]["categories"] = _network["categories"] + [_vr_category]
+
 # Controls Setup: the keyboard and mouse's actions, in groups (the order of
 # port/linux/game/menu_functions.c's table of them)
 CONTROL_GROUPS = ["MOVEMENT", "WEAPONS", "ACTIONS", "COMMUNICATION"]

@@ -181,4 +181,60 @@ int vr_finite(const float *values, int count)
 	return 1;
 }
 
+void vr_quaternion_from_axes(const float x[3], const float y[3], const float z[3], float orientation[4])
+{
+	float trace, scale;
+
+	trace = x[0] + y[1] + z[2];
+	if (trace > 0.0f)
+	{
+		scale = sqrtf(trace + 1.0f) * 2.0f;
+		orientation[3] = 0.25f * scale;
+		orientation[0] = (y[2] - z[1]) / scale;
+		orientation[1] = (z[0] - x[2]) / scale;
+		orientation[2] = (x[1] - y[0]) / scale;
+	}
+	else if (x[0] > y[1] && x[0] > z[2])
+	{
+		scale = sqrtf(1.0f + x[0] - y[1] - z[2]) * 2.0f;
+		orientation[3] = (y[2] - z[1]) / scale;
+		orientation[0] = 0.25f * scale;
+		orientation[1] = (y[0] + x[1]) / scale;
+		orientation[2] = (z[0] + x[2]) / scale;
+	}
+	else if (y[1] > z[2])
+	{
+		scale = sqrtf(1.0f + y[1] - x[0] - z[2]) * 2.0f;
+		orientation[3] = (z[0] - x[2]) / scale;
+		orientation[0] = (y[0] + x[1]) / scale;
+		orientation[1] = 0.25f * scale;
+		orientation[2] = (z[1] + y[2]) / scale;
+	}
+	else
+	{
+		scale = sqrtf(1.0f + z[2] - x[0] - y[1]) * 2.0f;
+		orientation[3] = (x[1] - y[0]) / scale;
+		orientation[0] = (z[0] + x[2]) / scale;
+		orientation[1] = (z[1] + y[2]) / scale;
+		orientation[2] = 0.25f * scale;
+	}
+}
+
+float vr_drive_steer(float x, float left_limit, float right_limit, int backing)
+{
+	float limit, angle;
+
+	if (!vr_finite(&x, 1))
+		return 0.0f;
+	if (x > 1.0f)
+		x = 1.0f;
+	else if (x < -1.0f)
+		x = -1.0f;
+	limit = (float)fabs(x > 0.0f ? right_limit : left_limit);
+	if (!vr_finite(&limit, 1))
+		return 0.0f;
+	angle = (float)(-x * limit * VR_PI / 180.0);
+	return backing ? -angle : angle;
+}
+
 #endif

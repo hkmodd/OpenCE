@@ -659,9 +659,11 @@ void first_person_weapon_render_update(
 			first_person_weapon->weapon_index!=NONE)
 		{
 			/* port: in the headset a zoomed weapon stays in the hand, its zoom
-			in the scope held on it */
+			in the scope held on it; seen from a driver's or a gunner's seat it
+			is put away */
 			boolean visible= director_get_perspective(render.local_player_index)==_director_perspective_first_person &&
-				(player_control_get_zoom_level(render.local_player_index)==NONE || vr_render_zoom_hidden());
+				(player_control_get_zoom_level(render.local_player_index)==NONE || vr_render_zoom_hidden()) &&
+				!vr_render_seat_weapon_hidden();
 
 			first_person_weapon_set_visibility(render.local_player_index, visible);
 			if (first_person_weapon->visible)

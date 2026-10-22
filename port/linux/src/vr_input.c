@@ -460,7 +460,10 @@ void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struc
 			input->room_walking = settings->room &&
 				move[0] * move[0] + move[1] * move[1] < VR_ROOM_STILL * VR_ROOM_STILL &&
 				vr_room_walk(input, frame, settings->room_offset, move);
-			/* (turned to the left by move_turn: ahead of the head) */
+			/* (turned to the left by move_turn: ahead of the head; driving,
+			the throttle alone) */
+			if (settings->drive)
+				move[0] = 0.0f;
 			pad->thumb[0] = vr_thumb(move[0] * cosine - move[1] * sine);
 			pad->thumb[1] = vr_thumb(move[0] * sine + move[1] * cosine);
 		}
@@ -529,7 +532,7 @@ int vr_two_handed(struct vr_frame const *frame, int left_handed, float orientati
 	static float const local_up[3] = { 0.0f, 1.0f, 0.0f };
 	struct vr_hand const *main_hand = &frame->hand[left_handed ? VR_HAND_LEFT : VR_HAND_RIGHT];
 	struct vr_hand const *off_hand = &frame->hand[left_handed ? VR_HAND_RIGHT : VR_HAND_LEFT];
-	float z[3], x[3], y[3], up[3], length, trace, scale;
+	float z[3], x[3], y[3], up[3], length;
 	int axis;
 
 	if (!main_hand->tracked || !off_hand->tracked || !(off_hand->buttons & VR_BUTTON_GRIP) ||
@@ -567,40 +570,7 @@ int vr_two_handed(struct vr_frame const *frame, int left_handed, float orientati
 	y[0] = z[1] * x[2] - z[2] * x[1];
 	y[1] = z[2] * x[0] - z[0] * x[2];
 	y[2] = z[0] * x[1] - z[1] * x[0];
-	/* the quaternion of the matrix whose columns are x, y and z */
-	trace = x[0] + y[1] + z[2];
-	if (trace > 0.0f)
-	{
-		scale = sqrtf(trace + 1.0f) * 2.0f;
-		orientation[3] = 0.25f * scale;
-		orientation[0] = (y[2] - z[1]) / scale;
-		orientation[1] = (z[0] - x[2]) / scale;
-		orientation[2] = (x[1] - y[0]) / scale;
-	}
-	else if (x[0] > y[1] && x[0] > z[2])
-	{
-		scale = sqrtf(1.0f + x[0] - y[1] - z[2]) * 2.0f;
-		orientation[3] = (y[2] - z[1]) / scale;
-		orientation[0] = 0.25f * scale;
-		orientation[1] = (y[0] + x[1]) / scale;
-		orientation[2] = (z[0] + x[2]) / scale;
-	}
-	else if (y[1] > z[2])
-	{
-		scale = sqrtf(1.0f + y[1] - x[0] - z[2]) * 2.0f;
-		orientation[3] = (z[0] - x[2]) / scale;
-		orientation[0] = (y[0] + x[1]) / scale;
-		orientation[1] = 0.25f * scale;
-		orientation[2] = (z[1] + y[2]) / scale;
-	}
-	else
-	{
-		scale = sqrtf(1.0f + z[2] - x[0] - y[1]) * 2.0f;
-		orientation[3] = (x[1] - y[0]) / scale;
-		orientation[0] = (z[0] + x[2]) / scale;
-		orientation[1] = (z[1] + y[2]) / scale;
-		orientation[2] = 0.25f * scale;
-	}
+	vr_quaternion_from_axes(x, y, z, orientation);
 	return 1;
 }
 
@@ -666,6 +636,7 @@ static void vr_input_settings_read(struct vr_input_settings *settings)
 	settings->gestures = config_boolean("vr.gestures");
 	settings->move_turn = vr_input_move_turn;
 	settings->seat_stick = vr_render_seat_stick();
+	settings->drive = vr_render_drive();
 	settings->room = vr_render_room(settings->room_offset);
 }
 
@@ -761,6 +732,18 @@ int vr_input_menus(void)
 int vr_input_pointer_shown(float *u, float *v)
 {
 	return vr_input_pointing(u, v);
+}
+
+int vr_input_pointer_hand(void)
+{
+	struct vr_frame const *frame;
+
+	if (!vr_active() || !vr_input_state.menus)
+		return -1;
+	frame = vr_frame_get();
+	if (!frame->controllers || !frame->hand[vr_input_state.pointer_hand].tracked)
+		return -1;
+	return vr_input_state.pointer_hand;
 }
 
 #endif

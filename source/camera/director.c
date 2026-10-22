@@ -127,6 +127,7 @@ symbols in this file:
 #include "flying_camera.h"
 #include "following_camera.h"
 #include "passenger_camera.h" /* port: port/linux/game/passenger_camera.c */
+#include "halo_vr.h" /* port: port/linux/game/vr_view.c */
 #include "observer.h"
 #include "orbiting_camera.h"
 
@@ -619,6 +620,9 @@ static void director_choose_game_perspective(
 	/* port: remember only local display choices, never a shared seat flag */
 	static boolean passenger_views[MAXIMUM_NUMBER_OF_LOCAL_PLAYERS];
 	boolean passenger = passenger_camera_enabled(local_player_index);
+	/* port: in a headset the seat is seen from it (port/linux/game/vr_view.c) */
+	static boolean vr_seat_views[MAXIMUM_NUMBER_OF_LOCAL_PLAYERS];
+	boolean vr_seat_view = vr_render_seat_view(local_player_index);
 	director_perspective perspective;
 	short following;
 	long unit_index;
@@ -631,8 +635,10 @@ static void director_choose_game_perspective(
 	when the seat's enter/exit state has not changed. */
 	if (passenger)
 		following = TRUE;
+	if (vr_seat_view)
+		following = FALSE;
 	if (force || director->seat_state != perspective ||
-		passenger != passenger_views[local_player_index])
+		passenger != passenger_views[local_player_index] || vr_seat_view != vr_seat_views[local_player_index])
 	{
 		if (following == TRUE)
 		{
@@ -659,6 +665,7 @@ static void director_choose_game_perspective(
 
 	/* port: a menu toggle can change the view without changing seats */
 	passenger_views[local_player_index] = passenger;
+	vr_seat_views[local_player_index] = vr_seat_view;
 	return;
 }
 

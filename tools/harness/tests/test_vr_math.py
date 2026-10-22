@@ -8,7 +8,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from harness import CHECK_FAILED, build, enum_with, function, mutated, read, run, structure
 
-CASES = ["bounds", "pose", "helpers", "between"]
+CASES = ["bounds", "pose", "helpers", "between", "axes", "steer"]
 CONTROLS = {
     "bottom-is-top": (("bounds[2] = (float)tan(fov->down);", "bounds[2] = (float)tan(fov->up);"), "bounds"),
     "no-aspect": (("bounds[0] = (float)tan(fov->left) / aspect;", "bounds[0] = (float)tan(fov->left);"), "bounds"),
@@ -27,6 +27,15 @@ CONTROLS = {
     "between-opposite-not-across": (("out[1] = -from[2];\n\t\t\tout[2] = from[1];", "out[1] = from[1];\n\t\t\tout[2] = from[2];"),
                                     "between"),
     "infinity-finite": (("values[index] - values[index] != 0.0f", "values[index] != values[index]"), "helpers"),
+    "axes-transposed": (("orientation[0] = (y[2] - z[1]) / scale;", "orientation[0] = (z[1] - y[2]) / scale;"), "axes"),
+    "axes-y-branch-swapped": (("orientation[3] = (z[0] - x[2]) / scale;\n\t\torientation[0] = (y[0] + x[1]) / scale;",
+                               "orientation[3] = (x[2] - z[0]) / scale;\n\t\torientation[0] = (y[0] + x[1]) / scale;"),
+                              "axes"),
+    "steer-wrong-way": (("angle = (float)(-x * limit * VR_PI / 180.0);", "angle = (float)(x * limit * VR_PI / 180.0);"),
+                        "steer"),
+    "steer-one-limit": (("limit = (float)fabs(x > 0.0f ? right_limit : left_limit);", "limit = (float)fabs(left_limit);"),
+                        "steer"),
+    "steer-backing-unmirrored": (("return backing ? -angle : angle;", "return angle;"), "steer"),
 }
 
 

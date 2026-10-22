@@ -181,6 +181,16 @@ int vr_render_reticle(void);
 /* in a seat with vr.vehicle_aim "stick": the main hand's stick is the
 pad's right stick, the head looks around freely (vr_input.c) */
 int vr_render_seat_stick(void);
+/* director_choose_game_perspective: the local player's seat is seen from
+it, not from the chase camera (vr.vehicle_view "first_person"); for the
+local view only, the shots' deterministic camera unchanged */
+int vr_render_seat_view(short local_player_index);
+/* a driver steered by the off stick (vr.vehicle_steering "drive"): its
+sideways push turns the facing, not the pad's left stick (vr_input.c) */
+int vr_render_drive(void);
+/* first_person_weapons.c: a driver's or a gunner's own weapon is not
+shown in the seat seen from it (the hands are on the controls) */
+int vr_render_seat_weapon_hidden(void);
 /* room scale (vr.roomscale), on foot: how far the head has stepped from
 where the body stands (LOCAL x and z), for the body to walk after it
 (vr_input.c); 0 elsewhere */
@@ -224,6 +234,9 @@ int vr_render_zoom_hidden(void);
 #define vr_render_aiming() 0
 #define vr_render_reticle() 0
 #define vr_render_seat_stick() 0
+#define vr_render_seat_view(local_player_index) 0
+#define vr_render_drive() 0
+#define vr_render_seat_weapon_hidden() 0
 #define vr_render_room(offset) 0
 #define vr_render_hand_holds(unit_index) 0
 #define vr_render_shot_origin(unit_index, origin) 0

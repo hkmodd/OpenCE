@@ -278,11 +278,23 @@ static const struct config_setting config_settings[] =
 		"With display.vr, the cinematics: \"immersive\", around the head (each\n"
 		"shot ahead of where it faces as the shot begins, a blink at a cut, no\n"
 		"letterbox), or \"screen\", on a screen ahead." },
-	{ "vr.vehicle_aim", _config_string, "\"stick\"", "HALO_VR_VEHICLE_AIM", _environment_value, _platform_desktop,
-		"With display.vr, what turns and aims in a vehicle's seat: \"stick\",\n"
-		"the aiming controller's stick as a gamepad's right stick, the head\n"
-		"looking around freely (the crosshair where the shot lands), or\n"
-		"\"head\"." },
+	{ "vr.vehicle_view", _config_string, "\"first_person\"", "HALO_VR_VEHICLE_VIEW", _environment_value,
+		_platform_desktop,
+		"With display.vr, how a vehicle's seat is seen: \"first_person\", from\n"
+		"the seat, the view level and turning with the vehicle, or \"chase\",\n"
+		"the game's camera (behind the Warthog, the Ghost, the Banshee...)." },
+	{ "vr.vehicle_aim", _config_string, "\"hand\"", "HALO_VR_VEHICLE_AIM", _environment_value, _platform_desktop,
+		"With display.vr, what aims in a vehicle's seat (a gun's, a tank's\n"
+		"cannon, where a Banshee flies): \"hand\", where the aiming controller\n"
+		"points (a passenger's own weapon in that hand), \"stick\", its stick\n"
+		"as a gamepad's right stick, or \"head\"; the head looks around freely\n"
+		"with the first two, the crosshair where the shot lands." },
+	{ "vr.vehicle_steering", _config_string, "\"drive\"", "HALO_VR_VEHICLE_STEERING", _environment_value,
+		_platform_desktop,
+		"With display.vr, how a Warthog's or a Ghost's driver steers:\n"
+		"\"drive\", the other controller's stick (sideways turns the wheels as\n"
+		"far as it is pushed, forward and back are the throttle), or \"aim\",\n"
+		"toward where vr.vehicle_aim aims, as the game does." },
 	{ "vr.snap_turn", _config_real, "30.0", "HALO_VR_SNAP_TURN", _environment_value, _platform_desktop,
 		"How far a push of the aiming hand's stick turns, in degrees; 0 turns\n"
 		"smoothly instead, at smooth_turn_speed." },

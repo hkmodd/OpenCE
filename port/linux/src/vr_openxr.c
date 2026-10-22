@@ -72,11 +72,22 @@ const void *vr_platform_graphics_binding(void);
 /* the HUD's and the flat screen's image */
 #define VR_PANEL_WIDTH 1280
 #define VR_PANEL_HEIGHT 960
+/* a menu's panel or the flat screen not shown for this many frames (half
+a second at 90 a second) is placed again ahead of the head */
+#define VR_PLACE_AGAIN 45
 /* the scope's (vr_view.c draws it this size) */
 #define VR_SCOPE_SIZE 512
 /* the aiming reticle's, and how wide it looks (radians across) */
 #define VR_RETICLE_SIZE 64
 #define VR_RETICLE_ANGLE 0.035f
+/* the menus' pointing beam: its image, how thick it is (metres), how far it
+reaches when it meets no panel, and how far short of the panel it stops
+(layers have no depth: one through another is hidden in it) */
+#define VR_BEAM_WIDTH 16
+#define VR_BEAM_LENGTH 256
+#define VR_BEAM_THICKNESS 0.005f
+#define VR_BEAM_REACH 1.5f
+#define VR_BEAM_SHORT 0.02f
 
 #define VR_SWAPCHAIN_IMAGES 8
 
@@ -185,9 +196,11 @@ static struct
 	int running, exiting, lost;
 	int64_t format;
 
-	struct vr_swapchain eyes[2], panel, scope, reticle;
+	struct vr_swapchain eyes[2], panel, scope, reticle, beam;
 	/* the reticle's pictures, white and red (vr_reticle_pictures) */
 	GLuint reticle_pictures[2];
+	/* the beam's picture (vr_beam_picture) */
+	GLuint beam_picture;
 	GLuint framebuffers[2];
 	GLuint mirror;
 	long mirror_width, mirror_height;
@@ -217,11 +230,13 @@ static struct
 	float scope_width;
 	/* the panel shown last, in LOCAL space, and its size (vr_panel_pose) */
 	int panel_shown;
-	/* the menus' panel over the game: placed as a menu comes up (and again
-	after a recentre), where the head then faced */
-	int menu_placed;
-	unsigned long menu_recentres;
-	struct vr_pose menu_pose;
+	/* the menus' panel over the game [1], and the flat screen [2]: placed as
+	each comes up (not shown for VR_PLACE_AGAIN frames, or after a
+	recentre), where the head then faced */
+	int menu_placed[3];
+	unsigned long menu_recentres[3];
+	unsigned long menu_shown[3];
+	struct vr_pose menu_pose[3];
 	struct vr_pose panel_pose;
 	float panel_size[2];
 
@@ -801,7 +816,8 @@ static int vr_create_session(void)
 	}
 	if (!vr_create_swapchain(&vr.panel, VR_PANEL_WIDTH, VR_PANEL_HEIGHT) ||
 		!vr_create_swapchain(&vr.scope, VR_SCOPE_SIZE, VR_SCOPE_SIZE) ||
-		!vr_create_swapchain(&vr.reticle, VR_RETICLE_SIZE, VR_RETICLE_SIZE))
+		!vr_create_swapchain(&vr.reticle, VR_RETICLE_SIZE, VR_RETICLE_SIZE) ||
+		!vr_create_swapchain(&vr.beam, VR_BEAM_WIDTH, VR_BEAM_LENGTH))
 	{
 		return 0;
 	}
@@ -855,10 +871,47 @@ static void vr_reticle_pictures(void)
 	free(pixels);
 }
 
+/* the beam's picture: a pale line, soft across, fading at its ends, its
+alpha premultiplied */
+static void vr_beam_picture(void)
+{
+	unsigned char *pixels = malloc(VR_BEAM_WIDTH * VR_BEAM_LENGTH * 4);
+	int x, y;
+
+	if (!pixels)
+		return;
+	for (y = 0; y < VR_BEAM_LENGTH; y++)
+	{
+		float along = (y + 0.5f) / VR_BEAM_LENGTH;
+		float ends = 6.0f * (along < 1.0f - along ? along : 1.0f - along);
+
+		for (x = 0; x < VR_BEAM_WIDTH; x++)
+		{
+			float across = 1.0f - fabsf(x + 0.5f - VR_BEAM_WIDTH * 0.5f) / (VR_BEAM_WIDTH * 0.5f);
+			float alpha = across * across * (ends < 1.0f ? ends : 1.0f) * 0.8f;
+			unsigned char *pixel = pixels + (y * VR_BEAM_WIDTH + x) * 4;
+
+			pixel[0] = (unsigned char)(0.75f * alpha * 255.0f + 0.5f);
+			pixel[1] = (unsigned char)(0.9f * alpha * 255.0f + 0.5f);
+			pixel[2] = (unsigned char)(alpha * 255.0f + 0.5f);
+			pixel[3] = (unsigned char)(alpha * 255.0f + 0.5f);
+		}
+	}
+	glGenTextures(1, &vr.beam_picture);
+	glBindTexture(GL_TEXTURE_2D, vr.beam_picture);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8_ALPHA8, VR_BEAM_WIDTH, VR_BEAM_LENGTH, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+		pixels);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glBindTexture(GL_TEXTURE_2D, 0);
+	free(pixels);
+}
+
 static int vr_create_drawing(long width, long height)
 {
 	glGenFramebuffers(2, vr.framebuffers);
 	vr_reticle_pictures();
+	vr_beam_picture();
 	glGenVertexArrays(1, &vr.vertex_array);
 	glGenTextures(1, &vr.mirror);
 	glBindTexture(GL_TEXTURE_2D, vr.mirror);
@@ -1330,6 +1383,10 @@ static int vr_simulate_create(void)
 	vr.reticle.width = vr.reticle.height = VR_RETICLE_SIZE;
 	vr.reticle.image_count = 1;
 	vr.reticle.images[0] = vr_simulated_image(VR_RETICLE_SIZE, VR_RETICLE_SIZE);
+	vr.beam.width = VR_BEAM_WIDTH;
+	vr.beam.height = VR_BEAM_LENGTH;
+	vr.beam.image_count = 1;
+	vr.beam.images[0] = vr_simulated_image(VR_BEAM_WIDTH, VR_BEAM_LENGTH);
 	if (!vr_create_drawing(width, height))
 		return 0;
 	vr.running = 1;
@@ -1356,7 +1413,7 @@ or FIRST[-LAST]:HAND.CONTROL=VALUES (the frames, counted from 1; HAND left
 or right; CONTROL trigger, grip, stick=X,Y, click, lower, upper, menu,
 aim=YAW,PITCH in degrees, at=X,Y,Z in LOCAL metres), separated by spaces or
 semicolons; and head.at=X,Y,Z, the head's place (a hand not placed goes
-with it) */
+with it), and head.aim=YAW,PITCH, a turn of the head after the settings' */
 static void vr_simulate_hands(void)
 {
 	const char *at = config_string("debug.vr_simulate_input");
@@ -1377,6 +1434,7 @@ static void vr_simulate_hands(void)
 		state->aim = state->grip;
 	}
 	memset(&head, 0, sizeof(head));
+	head.grip.orientation[3] = 1.0f;
 	while (at && *at)
 	{
 		long first, last;
@@ -1468,6 +1526,12 @@ static void vr_simulate_hands(void)
 		}
 	}
 	memcpy(vr.frame.head.position, head.grip.position, sizeof(vr.frame.head.position));
+	{
+		float turned[4];
+
+		vr_quaternion_multiply(head.grip.orientation, vr.frame.head.orientation, turned);
+		memcpy(vr.frame.head.orientation, turned, sizeof(turned));
+	}
 	for (hand = 0; hand < VR_HAND_COUNT; hand++)
 	{
 		for (axis = 0; axis < 3 && !placed[hand]; axis++)
@@ -1637,6 +1701,8 @@ void vr_dispose(void)
 			xrDestroySwapchain(vr.scope.handle);
 		if (vr.reticle.handle != XR_NULL_HANDLE)
 			xrDestroySwapchain(vr.reticle.handle);
+		if (vr.beam.handle != XR_NULL_HANDLE)
+			xrDestroySwapchain(vr.beam.handle);
 		if (vr.local != XR_NULL_HANDLE)
 			xrDestroySpace(vr.local);
 		if (vr.view != XR_NULL_HANDLE)
@@ -1654,9 +1720,12 @@ void vr_dispose(void)
 		glDeleteTextures(1, &vr.panel.images[0]);
 		glDeleteTextures(1, &vr.scope.images[0]);
 		glDeleteTextures(1, &vr.reticle.images[0]);
+		glDeleteTextures(1, &vr.beam.images[0]);
 	}
 	if (vr.reticle_pictures[0])
 		glDeleteTextures(2, vr.reticle_pictures);
+	if (vr.beam_picture)
+		glDeleteTextures(1, &vr.beam_picture);
 	if (vr.framebuffers[0])
 	{
 		glDeleteFramebuffers(2, vr.framebuffers);
@@ -2158,6 +2227,86 @@ static int vr_reticle_layer(XrCompositionLayerQuad *quad)
 	return 1;
 }
 
+/* the menus' pointing beam: from the pointing hand along its ray, to the
+panel where it meets it (short of it) or a reach ahead, turned about its
+length to face the head (astromaddie's beam) */
+static int vr_beam_layer(XrCompositionLayerQuad *quad)
+{
+	static const float local_forward[3] = { 0.0f, 0.0f, -1.0f };
+	int hand = vr_input_pointer_hand();
+	struct vr_pose const *aim;
+	struct vr_pose panel;
+	float ray[3], end[3], x[3], y[3], z[3], centre[3], length, across, u, v, width, height;
+	GLuint image;
+	int axis;
+
+	if (hand < 0)
+		return 0;
+	aim = &vr.frame.hand[hand].aim;
+	vr_rotate(aim->orientation, local_forward, ray);
+	length = VR_BEAM_REACH;
+	if (vr_input_pointer_shown(&u, &v) && vr_panel_pose(&panel, &width, &height))
+	{
+		float on_panel[3], offset[3];
+
+		on_panel[0] = (u - 0.5f) * width;
+		on_panel[1] = (0.5f - v) * height;
+		on_panel[2] = 0.0f;
+		vr_rotate(panel.orientation, on_panel, offset);
+		for (axis = 0; axis < 3; axis++)
+			end[axis] = panel.position[axis] + offset[axis] - aim->position[axis];
+		length = sqrtf(end[0] * end[0] + end[1] * end[1] + end[2] * end[2]) - VR_BEAM_SHORT;
+	}
+	if (!(length > 0.05f) || !vr_finite(ray, 3))
+		return 0;
+	/* (its length along +y, its face toward the head: +z) */
+	for (axis = 0; axis < 3; axis++)
+	{
+		y[axis] = ray[axis];
+		centre[axis] = aim->position[axis] + ray[axis] * length * 0.5f;
+		z[axis] = vr.frame.head.position[axis] - centre[axis];
+	}
+	across = z[0] * y[0] + z[1] * y[1] + z[2] * y[2];
+	for (axis = 0; axis < 3; axis++)
+		z[axis] -= y[axis] * across;
+	across = sqrtf(z[0] * z[0] + z[1] * z[1] + z[2] * z[2]);
+	if (!(across > 1e-4f))
+		return 0;
+	for (axis = 0; axis < 3; axis++)
+		z[axis] /= across;
+	x[0] = y[1] * z[2] - y[2] * z[1];
+	x[1] = y[2] * z[0] - y[0] * z[2];
+	x[2] = y[0] * z[1] - y[1] * z[0];
+	image = vr_acquire(&vr.beam);
+	if (!image)
+		return 0;
+	vr_copy(vr.beam_picture, VR_BEAM_WIDTH, VR_BEAM_LENGTH, image, VR_BEAM_WIDTH, VR_BEAM_LENGTH);
+	vr_release(&vr.beam);
+	memset(quad, 0, sizeof(*quad));
+	quad->type = XR_TYPE_COMPOSITION_LAYER_QUAD;
+	quad->layerFlags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
+	quad->space = vr.local;
+	quad->eyeVisibility = XR_EYE_VISIBILITY_BOTH;
+	quad->subImage.swapchain = vr.beam.handle;
+	quad->subImage.imageRect.extent.width = VR_BEAM_WIDTH;
+	quad->subImage.imageRect.extent.height = VR_BEAM_LENGTH;
+	quad->pose.position.x = centre[0];
+	quad->pose.position.y = centre[1];
+	quad->pose.position.z = centre[2];
+	{
+		float orientation[4];
+
+		vr_quaternion_from_axes(x, y, z, orientation);
+		quad->pose.orientation.x = orientation[0];
+		quad->pose.orientation.y = orientation[1];
+		quad->pose.orientation.z = orientation[2];
+		quad->pose.orientation.w = orientation[3];
+	}
+	quad->size.width = VR_BEAM_THICKNESS;
+	quad->size.height = length;
+	return 1;
+}
+
 void vr_scope_place(const struct vr_pose *pose, float width)
 {
 	vr.scope_pose = *pose;
@@ -2252,12 +2401,13 @@ static void vr_draw_flat(GLuint texture, long width, long height)
 
 /* a panel's pose: the HUD's ahead of the head (VIEW space, so that it
 turns with it at the compositor's rate); with a menu up over the game (the
-pause menu), the HUD's image held in the room where the head faced as the
-menu came up, level, at the head's height, as the flat screen is; the flat
-screen's ahead of where LOCAL faces */
+pause menu, the main menu's), the HUD's image, and the flat screen
+(loading screens), held in the room where the head faced as it came up,
+level, at the head's height */
 static void vr_panel_layer(XrCompositionLayerQuad *quad, int stereo)
 {
 	int hud = stereo && !vr_input_menus();
+	int placed = stereo ? 1 : 2;
 	float distance = (float)config_real(hud ? "vr.hud_distance" : "vr.screen_distance");
 	float width = (float)config_real(hud ? "vr.hud_width" : "vr.screen_width");
 
@@ -2293,32 +2443,35 @@ static void vr_panel_layer(XrCompositionLayerQuad *quad, int stereo)
 		vr.panel_pose.position[2] = vr.frame.head.position[2] + offset[2];
 		memcpy(vr.panel_pose.orientation, vr.frame.head.orientation, sizeof(vr.panel_pose.orientation));
 	}
-	vr.menu_placed &= stereo && !hud;
-	if (stereo && !hud)
+	if (!hud)
 	{
 		static const float local_forward[3] = { 0.0f, 0.0f, -1.0f };
+		struct vr_pose *pose = &vr.menu_pose[placed];
 
-		if (!vr.menu_placed || vr.menu_recentres != vr.frame.recentres)
+		/* (kept through a few frames of the other: a menu's change) */
+		if (!vr.menu_placed[placed] || vr.frames - vr.menu_shown[placed] > VR_PLACE_AGAIN ||
+			vr.menu_recentres[placed] != vr.frame.recentres)
 		{
 			float forward[3], yaw;
 
 			vr_rotate(vr.frame.head.orientation, local_forward, forward);
 			yaw = (float)atan2(-forward[0], -forward[2]);
-			memset(&vr.menu_pose, 0, sizeof(vr.menu_pose));
-			vr.menu_pose.position[0] = vr.frame.head.position[0] - (float)sin(yaw) * distance;
-			vr.menu_pose.position[1] = vr.frame.head.position[1];
-			vr.menu_pose.position[2] = vr.frame.head.position[2] - (float)cos(yaw) * distance;
-			vr.menu_pose.orientation[1] = (float)sin(yaw * 0.5f);
-			vr.menu_pose.orientation[3] = (float)cos(yaw * 0.5f);
-			vr.menu_placed = 1;
-			vr.menu_recentres = vr.frame.recentres;
+			memset(pose, 0, sizeof(*pose));
+			pose->position[0] = vr.frame.head.position[0] - (float)sin(yaw) * distance;
+			pose->position[1] = vr.frame.head.position[1];
+			pose->position[2] = vr.frame.head.position[2] - (float)cos(yaw) * distance;
+			pose->orientation[1] = (float)sin(yaw * 0.5f);
+			pose->orientation[3] = (float)cos(yaw * 0.5f);
+			vr.menu_placed[placed] = 1;
+			vr.menu_recentres[placed] = vr.frame.recentres;
 		}
-		vr.panel_pose = vr.menu_pose;
-		quad->pose.position.x = vr.menu_pose.position[0];
-		quad->pose.position.y = vr.menu_pose.position[1];
-		quad->pose.position.z = vr.menu_pose.position[2];
-		quad->pose.orientation.y = vr.menu_pose.orientation[1];
-		quad->pose.orientation.w = vr.menu_pose.orientation[3];
+		vr.menu_shown[placed] = vr.frames;
+		vr.panel_pose = *pose;
+		quad->pose.position.x = pose->position[0];
+		quad->pose.position.y = pose->position[1];
+		quad->pose.position.z = pose->position[2];
+		quad->pose.orientation.y = pose->orientation[1];
+		quad->pose.orientation.w = pose->orientation[3];
 	}
 	vr.panel_size[0] = quad->size.width;
 	vr.panel_size[1] = quad->size.height;
@@ -2373,8 +2526,8 @@ int vr_present(unsigned int texture, int width, int height)
 {
 	XrCompositionLayerProjectionView views[2];
 	XrCompositionLayerProjection projection;
-	XrCompositionLayerQuad quad, scope, reticle;
-	const XrCompositionLayerBaseHeader *layers[4];
+	XrCompositionLayerQuad quad, scope, reticle, beam;
+	const XrCompositionLayerBaseHeader *layers[5];
 	uint32_t layer_count = 0;
 	GLuint image;
 	int eye, stereo;
@@ -2424,6 +2577,9 @@ int vr_present(unsigned int texture, int width, int height)
 		vr_release(&vr.panel);
 		vr_panel_layer(&quad, stereo);
 		layers[layer_count++] = (const XrCompositionLayerBaseHeader *)&quad;
+		/* the menus' beam, over the panel */
+		if (vr_beam_layer(&beam))
+			layers[layer_count++] = (const XrCompositionLayerBaseHeader *)&beam;
 	}
 	/* the reticle, over the world and the HUD (the scope's is its own) */
 	if (stereo && vr.frame_state.shouldRender && vr_reticle_layer(&reticle))

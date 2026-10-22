@@ -113,6 +113,10 @@ struct vr_input_settings
 	/* in a seat (vr.vehicle_aim "stick"): the main hand's stick is the
 	pad's right stick, not a turn */
 	int seat_stick;
+	/* a driver steered by the off stick (vr.vehicle_steering "drive"): its
+	sideways push turns the facing (vr_view.c), its forward push is the
+	throttle, and the pad's left stick has no sideways (no strafing) */
+	int drive;
 	/* room scale (vr.roomscale), on foot: how far the head has stepped from
 	where the body stands (LOCAL x and z, metres), which the body walks
 	after while the off stick is still */
@@ -210,6 +214,9 @@ if it points elsewhere */
 int vr_input_pointer(float *u, float *v, int *clicks);
 /* vr_openxr.c: the same point, not taken, for the dot drawn on the panel */
 int vr_input_pointer_shown(float *u, float *v);
+/* vr_openxr.c: the hand that points while a menu is up (VR_HAND_*), for
+its beam; -1 without one */
+int vr_input_pointer_hand(void);
 /* vr_openxr.c: a menu is up (as the input was last read) */
 int vr_input_menus(void);
 

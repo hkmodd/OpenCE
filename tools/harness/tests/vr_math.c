@@ -244,6 +244,47 @@ int main(int argc, char **argv)
         bad[2] = NAN;
         CHECK(!vr_finite(bad, 3), "nor is not a number");
     }
+    CASE("axes") {
+        /* turns of each kind (each branch of the matrix's quaternion): its axes back into the turn */
+        float turns[][4] = {
+            {0.1f, 0.3f, -0.2f, 0.9273618f},
+            {0.9f, 0.1f, 0.3f, 0.2915476f},
+            {0.1f, -0.95f, 0.2f, 0.2f},
+            {-0.2f, 0.1f, 0.97f, 0.0948683f},
+        };
+        size_t index;
+        for (index = 0; index < sizeof(turns) / sizeof(turns[0]); index++) {
+            float x[3], y[3], z[3], back[4], v[3] = {0.3f, -0.5f, 0.8f}, once[3], again[3], length = 0;
+            int axis;
+            for (axis = 0; axis < 4; axis++)
+                length += turns[index][axis] * turns[index][axis];
+            for (axis = 0; axis < 4; axis++)
+                turns[index][axis] /= sqrtf(length);
+            vr_rotate(turns[index], (float[3]){1, 0, 0}, x);
+            vr_rotate(turns[index], (float[3]){0, 1, 0}, y);
+            vr_rotate(turns[index], (float[3]){0, 0, 1}, z);
+            vr_quaternion_from_axes(x, y, z, back);
+            vr_rotate(turns[index], v, once);
+            vr_rotate(back, v, again);
+            CHECK(same3(again, once[0], once[1], once[2]), "turn %d: its axes turn as it does (%f %f %f)", (int)index,
+                (double)again[0], (double)again[1], (double)again[2]);
+        }
+    }
+    CASE("steer") {
+        /* the Warthog's limits as its definition has them: 30 degrees left, 30 right */
+        float full_right = vr_drive_steer(1.0f, 30.0f, -30.0f, 0);
+        CHECK(close_to(full_right, -30.0f * _pi / 180.0f, 1e-6f), "the stick right turns the facing right (%f)",
+            (double)full_right);
+        CHECK(close_to(vr_drive_steer(-0.5f, 40.0f, -20.0f, 0), 20.0f * _pi / 180.0f, 1e-6f),
+            "half left, half the left limit");
+        CHECK(close_to(vr_drive_steer(0.5f, 40.0f, -20.0f, 0), -10.0f * _pi / 180.0f, 1e-6f),
+            "half right, half the right limit");
+        CHECK(close_to(vr_drive_steer(1.0f, 30.0f, -30.0f, 1), -full_right, 1e-6f), "backing, mirrored");
+        CHECK(close_to(vr_drive_steer(3.0f, 30.0f, -30.0f, 0), full_right, 1e-6f), "past the stick's end, the limit");
+        CHECK(vr_drive_steer(0.0f, 30.0f, -30.0f, 0) == 0.0f, "still, straight");
+        CHECK(vr_drive_steer(NAN, 30.0f, -30.0f, 0) == 0.0f && vr_drive_steer(1.0f, 30.0f, INFINITY, 0) == 0.0f,
+            "not a number, straight");
+    }
     CASE("between") {
         float from[3] = {0.36f, 0.48f, -0.8f}, to[3] = {0, 0, -1}, turn[4], turned[3];
         float pairs[][2][3] = {
