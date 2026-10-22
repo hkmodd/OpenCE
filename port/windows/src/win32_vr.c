@@ -5,6 +5,8 @@ The headset's OpenXR runtime on Windows (port/linux/src/vr_openxr.c): its
 manifest, from XR_RUNTIME_JSON or the registry's ActiveRuntime (a 32-bit
 program reads it from WOW6432Node, where 32-bit runtimes are listed), its
 library, and the session's binding to the game's OpenGL context (WGL's).
+Meta's runtime has one of its DLLs mended as it is loaded
+(vr_meta_ipc_client).
 */
 
 #include <windows.h>
@@ -46,6 +48,98 @@ int vr_platform_runtime_manifest(char *path, size_t size)
 	return vr_utf8(text, path, size);
 }
 
+/* Meta's 32-bit runtime (1.208) names its IPC client's threads by calling
+SetThreadDescription, a WINAPI function that takes its arguments off the
+stack, as a cdecl one, which leaves them to the caller: in
+RuntimeIPCServiceClient_32.dll the caller then takes them off again, its
+registers come back wrong and the thread dies (writing at 0x80) a moment
+after the session starts. Its code leaves the name out when GetProcAddress
+finds no SetThreadDescription, so that DLL is loaded here, before the
+runtime starts its threads, and its GetProcAddress (from its imports) is
+one that finds none; its threads are only unnamed. The runtime's other DLLs
+call it as WINAPI and are left as they are. */
+static FARPROC WINAPI vr_ipc_get_proc_address(HMODULE module, LPCSTR name)
+{
+	if (HIWORD((ULONG_PTR)name) && !strcmp(name, "SetThreadDescription"))
+		return NULL;
+	return GetProcAddress(module, name);
+}
+
+/* `module`'s import of `function` from `library` replaced by `replacement` */
+static int vr_replace_import(HMODULE module, const char *library, const char *function, void *replacement)
+{
+	BYTE *base = (BYTE *)module;
+	IMAGE_DOS_HEADER *dos = (IMAGE_DOS_HEADER *)base;
+	IMAGE_NT_HEADERS *headers;
+	IMAGE_DATA_DIRECTORY *directory;
+	IMAGE_IMPORT_DESCRIPTOR *import;
+
+	if (dos->e_magic != IMAGE_DOS_SIGNATURE)
+		return 0;
+	headers = (IMAGE_NT_HEADERS *)(base + dos->e_lfanew);
+	if (headers->Signature != IMAGE_NT_SIGNATURE)
+		return 0;
+	directory = &headers->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
+	if (!directory->VirtualAddress)
+		return 0;
+	for (import = (IMAGE_IMPORT_DESCRIPTOR *)(base + directory->VirtualAddress); import->Name; import++)
+	{
+		IMAGE_THUNK_DATA *names, *slots;
+
+		if (lstrcmpiA((const char *)(base + import->Name), library) || !import->OriginalFirstThunk)
+			continue;
+		names = (IMAGE_THUNK_DATA *)(base + import->OriginalFirstThunk);
+		slots = (IMAGE_THUNK_DATA *)(base + import->FirstThunk);
+		for (; names->u1.AddressOfData; names++, slots++)
+		{
+			IMAGE_IMPORT_BY_NAME *by_name;
+			DWORD protection;
+
+			if (IMAGE_SNAP_BY_ORDINAL(names->u1.Ordinal))
+				continue;
+			by_name = (IMAGE_IMPORT_BY_NAME *)(base + names->u1.AddressOfData);
+			if (strcmp((const char *)by_name->Name, function))
+				continue;
+			if (!VirtualProtect(&slots->u1.Function, sizeof(slots->u1.Function), PAGE_READWRITE, &protection))
+				return 0;
+			slots->u1.Function = (ULONG_PTR)replacement;
+			VirtualProtect(&slots->u1.Function, sizeof(slots->u1.Function), protection, &protection);
+			return 1;
+		}
+	}
+	return 0;
+}
+
+/* Meta's IPC client, beside the runtime's library `runtime`, if it is there */
+static void vr_meta_ipc_client(const wchar_t *runtime)
+{
+	static const wchar_t name[] = L"RuntimeIPCServiceClient_32.dll";
+	wchar_t path[1024];
+	wchar_t *slash, *other;
+	HMODULE module;
+
+	if (wcslen(runtime) >= sizeof(path) / sizeof(path[0]))
+		return;
+	wcscpy(path, runtime);
+	slash = wcsrchr(path, L'\\');
+	other = wcsrchr(path, L'/');
+	if (other > slash)
+		slash = other;
+	if (!slash || (size_t)(slash + 1 - path) + sizeof(name) / sizeof(name[0]) > sizeof(path) / sizeof(path[0]))
+		return;
+	wcscpy(slash + 1, name);
+	if (GetFileAttributesW(path) == INVALID_FILE_ATTRIBUTES)
+		return;
+	module = LoadLibraryExW(path, NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
+	if (!module)
+		return;
+	if (vr_replace_import(module, "KERNEL32.dll", "GetProcAddress", (void *)vr_ipc_get_proc_address))
+		platform_log("vr: Meta's RuntimeIPCServiceClient_32.dll: its threads left unnamed (its calls to name them "
+			"unbalance the stack)");
+	else
+		platform_log("vr: Meta's RuntimeIPCServiceClient_32.dll: its import of GetProcAddress not found");
+}
+
 void *vr_platform_library_open(const char *path)
 {
 	wchar_t text[1024];
@@ -57,7 +151,10 @@ void *vr_platform_library_open(const char *path)
 	/* (a runtime's own DLLs beside it are found from its folder) */
 	library = LoadLibraryExW(text, NULL, wcschr(text, L'\\') || wcschr(text, L'/') ? LOAD_WITH_ALTERED_SEARCH_PATH : 0);
 	if (library)
+	{
+		vr_meta_ipc_client(text);
 		return library;
+	}
 	error = GetLastError();
 	if (error == ERROR_BAD_EXE_FORMAT)
 		platform_log("vr: the OpenXR runtime's library is not 32-bit: the game needs a 32-bit runtime");
