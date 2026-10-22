@@ -240,6 +240,11 @@ static struct
 	struct vr_pose panel_pose;
 	float panel_size[2];
 
+	/* the runtime takes an OpenGL image's rows from the top, as Direct3D's
+	(vr.image_rows; SteamVR's), not from the bottom as OpenGL and OpenXR keep
+	them: what is written into its images is turned over */
+	int rows_from_top;
+
 	/* debug.vr_simulate: a headset of the game's own, without a runtime
 	(its images plain textures) */
 	int simulated;
@@ -494,6 +499,23 @@ static int vr_load_runtime(void)
 	return 1;
 }
 
+/* vr.image_rows: "auto" takes the rows from the top for SteamVR (its
+OpenXR runtime shows an OpenGL image upside down, where Meta's shows it as
+the specification has it), from the bottom for any other */
+static void vr_image_rows(const char *runtime_name)
+{
+	const char *rows = config_string("vr.image_rows");
+
+	if (rows && !strcmp(rows, "top"))
+		vr.rows_from_top = 1;
+	else if (rows && !strcmp(rows, "bottom"))
+		vr.rows_from_top = 0;
+	else
+		vr.rows_from_top = runtime_name && !strncmp(runtime_name, "SteamVR", 7);
+	if (vr.rows_from_top)
+		platform_log("vr: the runtime's images are written with their rows from the top (vr.image_rows)");
+}
+
 static int vr_create_instance(void)
 {
 	XrExtensionProperties *extensions;
@@ -564,11 +586,13 @@ static int vr_create_instance(void)
 #undef VR_RESOLVE
 	memset(&properties, 0, sizeof(properties));
 	properties.type = XR_TYPE_INSTANCE_PROPERTIES;
+	properties.runtimeName[0] = '\0';
 	if (XR_SUCCEEDED(xrGetInstanceProperties(vr.instance, &properties)))
 	{
 		platform_log("vr: %s %u.%u.%u", properties.runtimeName, XR_VERSION_MAJOR(properties.runtimeVersion),
 			XR_VERSION_MINOR(properties.runtimeVersion), XR_VERSION_PATCH(properties.runtimeVersion));
 	}
+	vr_image_rows(properties.runtimeName);
 	return 1;
 }
 
@@ -621,17 +645,19 @@ brightness (the game draws the HUD's colours over the world as light; over
 black, how bright a pixel is says how much of it there is). It draws with
 the game's glClipControl(GL_UPPER_LEFT) (d3d8_gl.c), which puts clip space's
 top in the image's row 0: so the picture's row 0, its top, is sampled for
-the image's last row, the top as OpenGL and the runtime keep it. */
+the image's last row, the top as OpenGL and the runtime keep it (`rows`
+-1 turns it over, for a runtime that takes the rows from the top). */
 static GLuint vr_panel_program(void)
 {
 	static const char *const vertex_text =
 		"#version 330 core\n"
+		"uniform float rows;\n"
 		"out vec2 position;\n"
 		"void main()\n"
 		"{\n"
 		"	vec2 corner = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));\n"
 		"	position = corner;\n"
-		"	gl_Position = vec4(corner * 2.0 - 1.0, 0.0, 1.0);\n"
+		"	gl_Position = vec4(corner.x * 2.0 - 1.0, (corner.y * 2.0 - 1.0) * rows, 0.0, 1.0);\n"
 		"}\n";
 	static const char *const fragment_text =
 		"#version 330 core\n"
@@ -675,6 +701,7 @@ static GLuint vr_panel_program(void)
 	}
 	glUseProgram(program);
 	glUniform1i(glGetUniformLocation(program, "picture"), 0);
+	glUniform1f(glGetUniformLocation(program, "rows"), vr.rows_from_top ? -1.0f : 1.0f);
 	glUseProgram(0);
 	return program;
 }
@@ -1365,6 +1392,7 @@ static int vr_simulate_create(void)
 	width = (long)(VR_SIMULATED_WIDTH * scale + 0.5);
 	height = (long)(VR_SIMULATED_HEIGHT * scale + 0.5);
 	vr.simulated = 1;
+	vr_image_rows("simulated");
 	vr.format = VR_FORMAT_SRGB8_ALPHA8;
 	for (eye = 0; eye < 2; eye++)
 	{
@@ -2061,16 +2089,20 @@ static void vr_release(struct vr_swapchain *swapchain)
 }
 
 /* the picture (a texture whose rows are from the top) into a texture
-whose rows are from the bottom, as OpenGL's and the runtime's are */
-static void vr_copy(GLuint source, long source_width, long source_height, GLuint destination, long width, long height)
+whose rows are from the bottom, as OpenGL's and the runtime's are; into a
+runtime's `image`, as that runtime takes them */
+static void vr_copy(GLuint source, long source_width, long source_height, GLuint destination, long width, long height,
+	int image)
 {
+	GLint top = image && vr.rows_from_top ? 0 : (GLint)height, bottom = (GLint)height - top;
+
 	glBindFramebuffer(GL_READ_FRAMEBUFFER, vr.framebuffers[0]);
 	glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, source, 0);
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, vr.framebuffers[1]);
 	glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, destination, 0);
 	glDisable(GL_SCISSOR_TEST);
 	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-	glBlitFramebuffer(0, 0, (GLint)source_width, (GLint)source_height, 0, (GLint)height, (GLint)width, 0,
+	glBlitFramebuffer(0, 0, (GLint)source_width, (GLint)source_height, 0, top, (GLint)width, bottom,
 		GL_COLOR_BUFFER_BIT, source_width == width && source_height == height ? GL_NEAREST : GL_LINEAR);
 	glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
 	glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
@@ -2099,14 +2131,14 @@ void vr_resolve_eye(int eye, unsigned int texture, int width, int height)
 		}
 		else
 		{
-			vr_copy(texture, width, height, image, vr.eyes[eye].width, vr.eyes[eye].height);
+			vr_copy(texture, width, height, image, vr.eyes[eye].width, vr.eyes[eye].height, 1);
 		}
 		vr_release(&vr.eyes[eye]);
 		vr.eyes_drawn[eye] = 1;
 	}
 	/* the window's mirror: the left eye */
 	if (eye == 0)
-		vr_copy(texture, width, height, vr.mirror, vr.mirror_width, vr.mirror_height);
+		vr_copy(texture, width, height, vr.mirror, vr.mirror_width, vr.mirror_height, 0);
 	glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
 }
@@ -2131,14 +2163,16 @@ void vr_resolve_scope(unsigned int texture, int width, int height, int x0, int y
 	image = vr_acquire(&vr.scope);
 	if (!image)
 		return;
-	/* (rows from the top into an image's from the bottom) */
+	/* (rows from the top into an image's from the bottom, or as the runtime
+	takes them) */
 	glBindFramebuffer(GL_READ_FRAMEBUFFER, vr.framebuffers[0]);
 	glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, 0);
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, vr.framebuffers[1]);
 	glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, image, 0);
 	glDisable(GL_SCISSOR_TEST);
 	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-	glBlitFramebuffer(x0, y0, x1, y1, 0, VR_SCOPE_SIZE, VR_SCOPE_SIZE, 0, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+	glBlitFramebuffer(x0, y0, x1, y1, 0, vr.rows_from_top ? 0 : VR_SCOPE_SIZE, VR_SCOPE_SIZE,
+		vr.rows_from_top ? VR_SCOPE_SIZE : 0, GL_COLOR_BUFFER_BIT, GL_LINEAR);
 	glEnable(GL_SCISSOR_TEST);
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	for (index = 0; index < (int)VR_COUNT(reticle); index++)
@@ -2192,7 +2226,7 @@ static int vr_reticle_layer(XrCompositionLayerQuad *quad)
 	if (!image)
 		return 0;
 	vr_copy(vr.reticle_pictures[vr.reticle_target], VR_RETICLE_SIZE, VR_RETICLE_SIZE, image, VR_RETICLE_SIZE,
-		VR_RETICLE_SIZE);
+		VR_RETICLE_SIZE, 1);
 	vr_release(&vr.reticle);
 	/* (its +z toward the head: a turn about +y, then a tilt about +x) */
 	yaw = (float)atan2(offset[0], offset[2]);
@@ -2280,7 +2314,7 @@ static int vr_beam_layer(XrCompositionLayerQuad *quad)
 	image = vr_acquire(&vr.beam);
 	if (!image)
 		return 0;
-	vr_copy(vr.beam_picture, VR_BEAM_WIDTH, VR_BEAM_LENGTH, image, VR_BEAM_WIDTH, VR_BEAM_LENGTH);
+	vr_copy(vr.beam_picture, VR_BEAM_WIDTH, VR_BEAM_LENGTH, image, VR_BEAM_WIDTH, VR_BEAM_LENGTH, 1);
 	vr_release(&vr.beam);
 	memset(quad, 0, sizeof(*quad));
 	quad->type = XR_TYPE_COMPOSITION_LAYER_QUAD;
@@ -2502,8 +2536,9 @@ static void vr_draw_pointer(GLuint image)
 	if (!vr_input_pointer_shown(&u, &v))
 		return;
 	x = (int)(u * VR_PANEL_WIDTH);
-	/* (the image's rows are from the bottom) */
-	y = (int)((1.0f - v) * VR_PANEL_HEIGHT);
+	/* (the image's rows are from the bottom, unless the runtime takes them
+	from the top) */
+	y = (int)((vr.rows_from_top ? v : 1.0f - v) * VR_PANEL_HEIGHT);
 	glBindFramebuffer(GL_FRAMEBUFFER, vr.framebuffers[1]);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, image, 0);
 	glEnable(GL_SCISSOR_TEST);
@@ -2570,7 +2605,7 @@ int vr_present(unsigned int texture, int width, int height)
 		if (stereo)
 			vr_draw_panel(texture, image);
 		else
-			vr_copy(texture, width, height, image, VR_PANEL_WIDTH, VR_PANEL_HEIGHT);
+			vr_copy(texture, width, height, image, VR_PANEL_WIDTH, VR_PANEL_HEIGHT, 1);
 		vr_draw_pointer(image);
 		if (vr.dumping)
 			vr_dump_texture(image, VR_PANEL_WIDTH, VR_PANEL_HEIGHT, stereo ? "hud" : "flat", 0, 1);

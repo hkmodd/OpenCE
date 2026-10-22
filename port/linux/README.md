@@ -447,6 +447,7 @@ the setting for one start of the game. It has priority over the file.
 | `display.hdr_output` | `false` | `HALO_HDR_OUTPUT` | Not on Android or in a browser. With `display.hdr`, `true`: the window asks for floating-point pixels (scRGB). On a display that has HDR on (on Windows, "Use HDR"), the tone mapping then goes up to the display's headroom over SDR white, and the light past white is shown brighter than white. Without an HDR display the picture is as with `false`; if the driver has no such window, the game makes an 8-bit one. Read at start. With NVIDIA's driver on Windows, the NVIDIA Control Panel's "Vulkan/OpenGL present method" must be "Prefer layered on DXGI Swapchain": otherwise a fullscreen or borderless window turns black, then oversaturated. Experimental. |
 | `display.vr` | `false` | `HALO_VR` | Not on Android or in a browser. `true`: play in a VR headset through its OpenXR runtime. `false`: nothing of OpenXR is loaded. Read at start. Refer to "VR". |
 | `vr.resolution_scale` | `1.0` | `HALO_VR_RESOLUTION_SCALE` | With `display.vr`, the eyes' resolution as a multiple of the runtime's recommended one, from `0.5` to `2.0`. Read at start. |
+| `vr.image_rows` | `"auto"` | `HALO_VR_IMAGE_ROWS` | With `display.vr`, how the OpenXR runtime takes the rows of the game's images: `"bottom"` first (OpenGL's and OpenXR's way), `"top"` first, or `"auto"`: from the top for SteamVR, which otherwise shows the game upside down, from the bottom for any other runtime. Read at start. |
 | `vr.hud_distance` | `15.0` | `HALO_VR_HUD_DISTANCE` | With `display.vr`, how far before the head the HUD's panel is held, in metres, from `0.5` to `100`. |
 | `vr.hud_width` | `10.0` | `HALO_VR_HUD_WIDTH` | With `display.vr`, the HUD panel's width in metres, from `0.2` to `100`. |
 | `vr.screen_distance` | `2.0` | `HALO_VR_SCREEN_DISTANCE` | With `display.vr`, how far the panel of the menus, loading screens and cinematics is, in metres, from `0.5` to `100`, before where the headset faced when the runtime last recentred it. |
@@ -679,6 +680,9 @@ Meta's runtime and SteamVR both install a 32-bit library. On Linux it reads
 `openxr/1/active_runtime.i686.json`, then `openxr/1/active_runtime.json`,
 in `$XDG_CONFIG_HOME` (`~/.config`), `$XDG_CONFIG_DIRS` (`/etc/xdg`) and
 `/etc`. `XR_RUNTIME_JSON` names another runtime's manifest for one start.
+SteamVR takes the images' rows from the top, as Direct3D's, and would
+show the game upside down: the game turns them over for it
+(`vr.image_rows`).
 The game loads the runtime from its manifest itself, as the OpenXR
 specification describes for a loader: the SDK's loader (C++) is not used,
 and API layers are not loaded (`port/third_party/openxr`). A runtime that

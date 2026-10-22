@@ -248,6 +248,12 @@ static const struct config_setting config_settings[] =
 	{ "vr.resolution_scale", _config_real, "1.0", "HALO_VR_RESOLUTION_SCALE", _environment_value, _platform_desktop,
 		"With display.vr, the eyes' resolution as a multiple of the runtime's\n"
 		"recommended one, 0.5 to 2.0. Taken up when the game starts." },
+	{ "vr.image_rows", _config_string, "\"auto\"", "HALO_VR_IMAGE_ROWS", _environment_value, _platform_desktop,
+		"With display.vr, how the OpenXR runtime takes the rows of the images\n"
+		"the game gives it: \"bottom\" first, as OpenGL and OpenXR have them,\n"
+		"\"top\" first, or \"auto\": from the top for SteamVR, which otherwise\n"
+		"shows the game upside down, from the bottom for any other runtime. Taken\n"
+		"up when the game starts." },
 	{ "vr.hud_distance", _config_real, "15.0", "HALO_VR_HUD_DISTANCE", _environment_value, _platform_desktop,
 		"How far ahead of the head the HUD's panel is held, in metres (0.5 to\n"
 		"100)." },

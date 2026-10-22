@@ -37,6 +37,13 @@ manifest (`port/windows/src/win32_vr.c`, `port/linux/src/posix_vr.c`), its
 `library_path`, then `xrNegotiateLoaderRuntimeInterface`. Only the Khronos
 headers are vendored (`port/third_party/openxr`). API layers are not loaded.
 
+An OpenGL image's rows are from the bottom, in OpenXR as in OpenGL, and
+Meta's runtime shows them so. SteamVR's (2.18, 32-bit, a Rift) showed the
+game upside down in the headset: it takes them from the top, as
+Direct3D's. `vr.image_rows` (`"auto"`) writes every image the runtime is
+given, the eyes', the panel's, the scope's, the reticle's and the beam's,
+turned over for a runtime named SteamVR; `"top"` or `"bottom"` choose.
+
 The session draws on the game's own context with `XR_KHR_opengl_enable`
 (WGL; GLX, or EGL with `XR_MNDX_egl_enable`). Windows Mixed Reality's and
 Virtual Desktop's runtimes give Direct3D and Vulkan images only; they could
