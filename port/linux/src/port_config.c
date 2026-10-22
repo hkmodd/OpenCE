@@ -267,7 +267,17 @@ static const struct config_setting config_settings[] =
 	{ "vr.aim", _config_string, "\"hand\"", "HALO_VR_AIM", _environment_value, _platform_desktop,
 		"With display.vr, what aims on foot: \"hand\", the aiming controller\n"
 		"(the weapon held in it, the crosshair where its shot lands), or\n"
-		"\"head\". In a vehicle's seat the head aims." },
+		"\"head\". In a vehicle's seat, vr.vehicle_aim." },
+	{ "vr.cinematics", _config_string, "\"immersive\"", "HALO_VR_CINEMATICS", _environment_value,
+		_platform_desktop,
+		"With display.vr, the cinematics: \"immersive\", around the head (each\n"
+		"shot ahead of where it faces as the shot begins, a blink at a cut, no\n"
+		"letterbox), or \"screen\", on a screen ahead." },
+	{ "vr.vehicle_aim", _config_string, "\"stick\"", "HALO_VR_VEHICLE_AIM", _environment_value, _platform_desktop,
+		"With display.vr, what turns and aims in a vehicle's seat: \"stick\",\n"
+		"the aiming controller's stick as a gamepad's right stick, the head\n"
+		"looking around freely (the crosshair where the shot lands), or\n"
+		"\"head\"." },
 	{ "vr.snap_turn", _config_real, "30.0", "HALO_VR_SNAP_TURN", _environment_value, _platform_desktop,
 		"How far a push of the aiming hand's stick turns, in degrees; 0 turns\n"
 		"smoothly instead, at smooth_turn_speed." },

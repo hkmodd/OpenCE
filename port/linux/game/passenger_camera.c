@@ -146,7 +146,7 @@ boolean passenger_camera_reticle_begin(short local_player_index, long weapon_ind
 	struct collision_result collision;
 
 	reticle_active = FALSE;
-	if (vr_render_hand_aiming())
+	if (vr_render_reticle())
 		return FALSE;
 	if (!passenger_camera_enabled(local_player_index) ||
 		director_get_perspective(local_player_index) != _director_perspective_third_person)

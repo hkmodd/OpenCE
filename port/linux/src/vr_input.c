@@ -422,7 +422,16 @@ void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struc
 			pad->thumb[0] = vr_thumb(off_hand->stick[0] * cosine - off_hand->stick[1] * sine);
 			pad->thumb[1] = vr_thumb(off_hand->stick[0] * sine + off_hand->stick[1] * cosine);
 		}
-		input->turn = vr_stick_turn(input, settings, main_hand->stick[0], seconds);
+		if (settings->seat_stick)
+		{
+			pad->thumb[2] = vr_thumb(main_hand->stick[0]);
+			pad->thumb[3] = vr_thumb(main_hand->stick[1]);
+			input->snapped = 0;
+		}
+		else
+		{
+			input->turn = vr_stick_turn(input, settings, main_hand->stick[0], seconds);
+		}
 
 		if (settings->gestures)
 		{
@@ -614,6 +623,7 @@ static void vr_input_settings_read(struct vr_input_settings *settings)
 	settings->turn_rate = (float)((rate > 0.0 && rate <= 720.0 ? rate : 120.0) * 0.017453292519943);
 	settings->gestures = config_boolean("vr.gestures");
 	settings->move_turn = vr_input_move_turn;
+	settings->seat_stick = vr_render_seat_stick();
 }
 
 int vr_input_gamepad(struct vr_pad *pad, int menus)

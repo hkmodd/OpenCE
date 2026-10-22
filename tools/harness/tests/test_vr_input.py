@@ -10,7 +10,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from harness import CHECK_FAILED, build, mutated, read, run
 
-CASES = ["gameplay", "move", "menus", "menu-button", "turn", "gestures", "hands", "ray", "bindings", "swap"]
+CASES = ["gameplay", "move", "menus", "menu-button", "turn", "seat", "gestures", "hands", "ray", "bindings", "swap"]
 CONTROLS = {
     "left-handed-ignored": (("main_index = input->left_handed ? VR_HAND_LEFT : VR_HAND_RIGHT;",
                              "main_index = VR_HAND_RIGHT;"), "gameplay"),
@@ -25,6 +25,8 @@ CONTROLS = {
     "snap-wrong-way": (("return x > 0.0f ? -settings->snap_angle : settings->snap_angle;",
                         "return x > 0.0f ? settings->snap_angle : -settings->snap_angle;"), "turn"),
     "snap-repeats": (("\t\tinput->snapped = 1;\n", "\t\tinput->snapped = 0;\n"), "turn"),
+    "seat-stick-turns": (("if (settings->seat_stick)\n", "if (0)\n"), "seat"),
+    "seat-stick-sideways": (("pad->thumb[2] = vr_thumb(main_hand->stick[0]);", "pad->thumb[2] = 0;"), "seat"),
     "punch-any-way": (("along > VR_PUNCH_ALONG * speed", "along > -speed"), "gestures"),
     "crouch-no-hysteresis": (("input->crouched = height < input->standing - VR_CROUCH_RISE;",
                               "input->crouched = height < input->standing - VR_CROUCH_DEPTH;"), "gestures"),

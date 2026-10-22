@@ -110,6 +110,9 @@ struct vr_input_settings
 	/* the head's yaw from the aiming hand's (radians to the left): the off
 	stick moves where the head faces, the game's facing being the hand's */
 	float move_turn;
+	/* in a seat (vr.vehicle_aim "stick"): the main hand's stick is the
+	pad's right stick, not a turn */
+	int seat_stick;
 };
 
 struct vr_input

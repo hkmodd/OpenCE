@@ -65,6 +65,7 @@ cutscenes are drawn as always, onto the flat screen held in the room.
 #include "rasterizer/rasterizer.h"
 #include "render/render.h"
 #include "render/render_cameras.h"
+#include "units/unit_definitions.h"
 #include "units/units.h"
 
 #include <math.h>
@@ -86,6 +87,12 @@ void halo_vr_resolve_scope(short x0, short y0, short x1, short y1);
 and how far short of a wall it stops (world units) */
 #define VR_HEAD_REACH 0.35f
 #define VR_WALL_MARGIN 0.04f
+
+/* a cinematic's cut: its camera moved further than this in a frame (world
+units) or turned more (radians); and the eyes' blink at a cut (seconds) */
+#define VR_CUT_DISTANCE 1.5f
+#define VR_CUT_TURN 0.5236f
+#define VR_CUT_BLINK 0.1f
 
 /* a turn of the head in a frame (radians) that counts as looking around,
 more than its tremor: about 15 degrees a second at 60 frames */
@@ -138,6 +145,8 @@ static struct
 	real set_yaw;
 	boolean aiming;
 	boolean hand_aiming;
+	/* in a seat, the facing turned by the main hand's stick, the head free */
+	boolean seat_stick;
 	/* the first-person weapon's camera, behind the aiming hand, its muzzle
 	in the world, and the unit holding it */
 	struct render_camera weapon_camera;
@@ -157,6 +166,15 @@ static struct
 	boolean settings_valid;
 	short main_hand;
 	boolean aim_with_hand;
+	boolean seat_aim_with_stick;
+	boolean immersive_cinematics;
+
+	/* in a cinematic: the head's yaw as its shot began, and its camera's
+	last place and yaw (to tell a cut) */
+	boolean cinematic;
+	real cinematic_head_yaw;
+	real_point3d cinematic_position;
+	real cinematic_yaw;
 } vr_view;
 
 static void vr_settings_read(
@@ -167,6 +185,8 @@ static void vr_settings_read(
 	vr_view.settings_read_at = config_changes();
 	vr_view.settings_valid = TRUE;
 	vr_view.aim_with_hand = strcmp(config_string("vr.aim"), "head") != 0;
+	vr_view.seat_aim_with_stick = strcmp(config_string("vr.vehicle_aim"), "head") != 0;
+	vr_view.immersive_cinematics = strcmp(config_string("vr.cinematics"), "screen") != 0;
 }
 
 /* the hand that aims: the main controller, tracked, with vr.aim "hand" and
@@ -190,6 +210,22 @@ static struct vr_hand const *vr_aiming_hand(
 		return NULL;
 	vr_view.unit_index = unit_index;
 	return hand;
+}
+
+/* the player in a seat, its facing the main hand's stick's to turn
+(vr.vehicle_aim), with controllers */
+static boolean vr_seat_stick(
+	struct vr_frame const *frame,
+	short local_player_index)
+{
+	long unit_index = player_get(local_player_get_player_index(local_player_index))->unit_index;
+	struct unit_datum *unit = unit_index == NONE ? NULL : unit_try_and_get(unit_index);
+
+	vr_settings_read();
+	if (!vr_view.seat_aim_with_stick || !frame->controllers || !unit || unit->object.parent_object_index == NONE)
+		return FALSE;
+	vr_view.unit_index = unit_index;
+	return TRUE;
 }
 
 /* the aim's orientation: the hand's, or with the off hand holding the
@@ -225,6 +261,29 @@ static void vr_weapon_side(
 	side[0] = vr_view.main_hand == VR_HAND_LEFT ? -right[0] : right[0];
 	side[1] = right[1];
 	side[2] = right[2];
+}
+
+/* the weapon the unit aims: its own, or in a gunner's seat the vehicle's
+(as the HUD's crosshair takes it, hud_weapon.c) */
+static long vr_aimed_weapon(
+	void)
+{
+	long weapon_index = vr_held_weapon();
+	struct unit_datum *unit = unit_try_and_get(vr_view.unit_index);
+	struct unit_datum *parent;
+	struct unit_seat const *seat;
+
+	if (weapon_index != NONE || !unit || unit->object.parent_object_index == NONE ||
+		unit->unit.parent_seat_index == NONE)
+	{
+		return weapon_index;
+	}
+	parent = unit_get(unit->object.parent_object_index);
+	seat = TAG_BLOCK_GET_ELEMENT(&unit_definition_get(parent->definition_index)->unit.seats,
+		unit->unit.parent_seat_index, struct unit_seat);
+	if (!TEST_FLAG(seat->flags, _unit_seat_gunner_bit) || parent->unit.current_weapon_index == NONE)
+		return NONE;
+	return unit_inventory_get_weapon(unit->object.parent_object_index, parent->unit.current_weapon_index);
 }
 
 /* what is learnt of a weapon's type's model, or NULL */
@@ -278,6 +337,33 @@ static void vr_weapon_in_hand(
 }
 
 /* ---------- the eyes */
+
+/* a cinematic's heading: each shot is seen ahead of where the head faced
+as it began, and turns as its camera turns; at a cut (the camera moved or
+turned further than it does in a frame) the eyes blink (moistman42069's
+way) */
+static real vr_cinematic_heading(
+	struct vr_frame const *frame,
+	struct render_camera const *camera)
+{
+	static float const local_forward[3] = { 0.0f, 0.0f, -1.0f };
+	float head[3], forward[3];
+	real yaw = vr_yaw_of(camera->forward.n, 0.0f);
+
+	if (!vr_view.cinematic ||
+		distance_squared3d(&camera->position, &vr_view.cinematic_position) > VR_CUT_DISTANCE * VR_CUT_DISTANCE ||
+		fabs(vr_wrap_angle(yaw - vr_view.cinematic_yaw)) > VR_CUT_TURN)
+	{
+		vr_rotate(frame->head.orientation, local_forward, head);
+		vr_local_to_world(head, 0.0f, forward);
+		vr_view.cinematic_head_yaw = vr_yaw_of(forward, 0.0f);
+		vr_blink(VR_CUT_BLINK);
+	}
+	vr_view.cinematic = TRUE;
+	vr_view.cinematic_position = camera->position;
+	vr_view.cinematic_yaw = yaw;
+	return vr_wrap_angle(yaw - vr_view.cinematic_head_yaw);
+}
 
 /* the head's offset from the origin (LOCAL metres), limited to a lean and
 stopped short of the walls around the game's camera */
@@ -392,14 +478,19 @@ static void vr_reticle(
 	real_vector3d forward, ray;
 	struct collision_result collision;
 	float world[3], local[3], position[3];
-	long weapon_index = vr_held_weapon();
+	long weapon_index = vr_aimed_weapon();
+	struct unit_datum *unit = unit_try_and_get(vr_view.unit_index);
+	long ignored = vr_view.unit_index;
 	int axis;
 
 	if (weapon_index == NONE || !weapon_get_projectile_ray(weapon_index, 0, &origin, &forward))
 		return;
+	/* (in a seat, the vehicle is not in the way) */
+	if (unit && unit->object.parent_object_index != NONE)
+		ignored = unit->object.parent_object_index;
 	/* (as far as the passengers' reticle looks: 128 units) */
 	scale_vector3d(&forward, 128.0f, &ray);
-	if (collision_test_vector(_collision_test_for_projectiles_flags, &origin, &ray, vr_view.unit_index, &collision))
+	if (collision_test_vector(_collision_test_for_projectiles_flags, &origin, &ray, ignored, &collision))
 		target = collision.point;
 	else
 		point_from_line3d(&origin, &forward, 128.0f, &target);
@@ -484,19 +575,33 @@ short vr_render_windows(
 	for (window_index = 0; window_index < MAXIMUM_WINDOWS + 1; window_index++)
 		vr_view.pass_of_window[window_index] = _vr_render_pass_none;
 	frame = vr_frame_get();
+	vr_settings_read();
 	if (!frame->stereo ||
 		window_count != 2 ||
 		windows[0].local_player_index == NONE ||
 		windows[0].console_window ||
 		!windows[1].console_window ||
-		cinematic_in_progress())
+		(cinematic_in_progress() && !vr_view.immersive_cinematics))
 	{
+		vr_view.cinematic = FALSE;
 		return window_count;
 	}
 	player = windows[0];
 	console = windows[1];
 	anchor = player.render_camera.position;
-	heading = vr_heading(frame, &player.render_camera);
+	/* (in a cinematic the head looks around its shot, without a letterbox;
+	back in the game, a blink too) */
+	if (cinematic_in_progress())
+	{
+		heading = vr_cinematic_heading(frame, &player.render_camera);
+	}
+	else
+	{
+		if (vr_view.cinematic)
+			vr_blink(VR_CUT_BLINK);
+		vr_view.cinematic = FALSE;
+		heading = vr_heading(frame, &player.render_camera);
+	}
 	aspect = (real)(player.render_camera.viewport_bounds.x1 - player.render_camera.viewport_bounds.x0) /
 		(real)(player.render_camera.viewport_bounds.y1 - player.render_camera.viewport_bounds.y0);
 	vr_head_offset(frame, &anchor, heading, head);
@@ -519,7 +624,7 @@ short vr_render_windows(
 	/* the weapon's camera, behind the aiming hand: the grip's place less
 	VR_WEAPON_GRIP along the axes of the aim, turned so that the model's
 	barrel lies along it (vr_weapon_in_hand) */
-	vr_view.weapon_in_hand = vr_view.hand_aiming;
+	vr_view.weapon_in_hand = vr_view.hand_aiming && !vr_view.cinematic;
 	if (vr_view.weapon_in_hand)
 	{
 		struct vr_hand const *hand = &frame->hand[vr_view.main_hand];
@@ -543,7 +648,7 @@ short vr_render_windows(
 		vr_camera_from_pose(&muzzle, &aim, offset, &anchor, heading);
 		vr_view.muzzle = muzzle.position;
 	}
-	if (vr_view.weapon_in_hand)
+	if (vr_view.weapon_in_hand || (vr_view.seat_stick && !vr_view.cinematic))
 		vr_reticle(frame, player.local_player_index, &anchor, heading, head);
 	window_index = 2;
 	vr_view.scope = vr_view.weapon_in_hand && vr_scope_window(frame, &player, &anchor, heading, head,
@@ -753,9 +858,11 @@ void vr_player_control_facing(
 
 	vr_view.aiming = FALSE;
 	vr_view.hand_aiming = FALSE;
-	/* (the first local player's alone: the headset is one) */
+	vr_view.seat_stick = FALSE;
+	/* (the first local player's alone: the headset is one; in a cinematic
+	the scripts' facing is kept, and turns the heading after it) */
 	if (!frame->stereo || local_player_index != local_player_get_next(NONE) ||
-		local_player_get_player_index(local_player_index) == NONE)
+		local_player_get_player_index(local_player_index) == NONE || cinematic_in_progress())
 	{
 		return;
 	}
@@ -783,6 +890,15 @@ void vr_player_control_facing(
 
 		vr_hand_aim(frame, hand, orientation);
 		vr_rotate(orientation, local_forward, aim);
+	}
+	else if (vr_seat_stick(frame, local_player_index))
+	{
+		/* in a seat the main stick turns the facing, as a pad's right stick
+		does, and the head looks around: the view turns with the facing */
+		vr_view.set_yaw = before.yaw;
+		vr_view.seat_stick = TRUE;
+		vr_input_aim_turn(0.0f);
+		return;
 	}
 	else
 		memcpy(aim, head, sizeof(aim));
@@ -833,10 +949,16 @@ int vr_render_zoom_hidden(
 	return vr_view.scope;
 }
 
-int vr_render_hand_aiming(
+int vr_render_reticle(
 	void)
 {
-	return vr_view.aiming && vr_view.hand_aiming;
+	return (vr_view.aiming && vr_view.hand_aiming) || vr_view.seat_stick;
+}
+
+int vr_render_seat_stick(
+	void)
+{
+	return vr_view.seat_stick;
 }
 
 int vr_render_hand_holds(
@@ -926,6 +1048,8 @@ void vr_view_reset(
 	vr_view.stereo = FALSE;
 	vr_view.hand_aiming = FALSE;
 	vr_view.weapon_in_hand = FALSE;
+	vr_view.seat_stick = FALSE;
+	vr_view.cinematic = FALSE;
 	/* (a new map's weapon types are others) */
 	memset(vr_view.fits, 0, sizeof(vr_view.fits));
 	vr_view.next_fit = 0;

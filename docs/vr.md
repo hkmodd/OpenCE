@@ -119,6 +119,21 @@ be served later with `XR_KHR_D3D11_enable` and `WGL_NV_DX_interop2`.
   the weapon), in a square of the back buffer, copied into the scope's
   image, a quad held on the weapon. The eyes keep their field, and the HUD
   leaves out the zoomed view's elements (`hud_weapon.c`).
+- In a vehicle's seat (`vr.vehicle_aim`) the main hand's stick is the
+  pad's right stick (`vr_input.c`), so the facing turns and pitches as a
+  pad turns it, at the player's look sensitivity, the vehicle steering
+  toward it; the head looks around without turning it, and the view turns
+  with the facing only, as a snap turn does. The reticle stands for the
+  HUD's crosshair there too, along the ray of the weapon the HUD would
+  show (the passenger's own, a gunner's the vehicle's), the vehicle not in
+  its way.
+- A cinematic (`vr.cinematics`) is seen around the head, from its camera:
+  each shot is set ahead of where the head faced as it began and turns as
+  its camera turns (its pitch and roll are the head's), and a cut (the
+  camera moved or turned further than it does in a frame) blacks the eyes
+  for a tenth of a second (moistman42069's anchor and blink). The
+  letterbox is the console window's and is not in the eyes. Meanwhile the
+  facing is left to the scripts, and their turns turn the heading after.
 - In the menus a hand's ray meets the panel shown (`vr_ray_panel`), and
   `halo_ui_pointer_update` takes it as the mouse; its trigger clicks, and a
   dot is drawn on the panel.
@@ -137,10 +152,11 @@ check of the flat picture:
    picture-in-picture scope, the gestures (melee, flashlight, crouch,
    holsters, two hands), haptics, the menus' pointer and the immersive
    menus.
-3. Swapping hands, rebinding (with 2, this branch).
+3. Swapping hands, rebinding.
 4. Vehicles steered by the stick, immersive cinematics (moistman's: the
    camera anchored at each cut, with a blink), and the camera kept right
-   across seats, checkpoints and loads.
+   across seats, checkpoints and loads (with 2 and 3, this branch). A
+   first-person view inside vehicles is to come.
 5. Other players' heads and hands online. The pose is only drawn: hit boxes,
    shots and movement do not change. A VR player sends its head and hands
    relative to its unit, in millimetres and smallest-three quaternions

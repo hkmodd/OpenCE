@@ -20,6 +20,7 @@ static struct vr_input_settings settings_of(int left_handed, float snap_angle, i
     settings.turn_rate = 2.0f;
     settings.gestures = gestures;
     settings.move_turn = 0;
+    settings.seat_stick = 0;
     vr_input_bindings_parse("", settings.bindings);
     return settings;
 }
@@ -183,6 +184,27 @@ int main(int argc, char **argv)
         frame.hand[VR_HAND_LEFT].buttons = 0;
         vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
         CHECK(!(pad.buttons & (VR_PAD_START | VR_PAD_BACK)), "let go after a long press, neither");
+        return 0;
+    }
+    CASE("seat") {
+        /* in a seat the main stick is the pad's right stick, and turns nothing */
+        memset(&input, 0, sizeof(input));
+        settings = settings_of(0, 0.5f, 1);
+        settings.seat_stick = 1;
+        frame_of(&frame);
+        frame.hand[VR_HAND_RIGHT].stick[0] = 0.8f;
+        frame.hand[VR_HAND_RIGHT].stick[1] = -1.0f;
+        frame.hand[VR_HAND_LEFT].stick[1] = 1.0f;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(pad.thumb[2] == 26213 && pad.thumb[3] == -32767, "the right stick as the main (%d %d)", pad.thumb[2],
+            pad.thumb[3]);
+        CHECK(input.turn == 0 && !input.snapped, "no snap");
+        CHECK(pad.thumb[0] == 0 && pad.thumb[1] == 32767, "the off stick the left (%d %d)", pad.thumb[0], pad.thumb[1]);
+        /* out of it, the main stick turns again, and the right stick is still */
+        settings.seat_stick = 0;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(pad.thumb[2] == 0 && pad.thumb[3] == 0, "the right stick still (%d %d)", pad.thumb[2], pad.thumb[3]);
+        CHECK(close_to(input.turn, -0.5f, 1e-6f), "a snap (%f)", (double)input.turn);
         return 0;
     }
     CASE("turn") {

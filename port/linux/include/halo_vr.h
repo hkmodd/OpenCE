@@ -143,6 +143,8 @@ void vr_scope_place(const struct vr_pose *pose, float width);
 /* the aiming reticle this frame: where the shot lands (LOCAL space), red
 over a target the game would aim at */
 void vr_reticle_place(const float position[3], int target);
+/* the eyes black for this long (a cinematic's cut, vr_view.c) */
+void vr_blink(float seconds);
 
 /* ---------- the game side (vr_view.c) */
 
@@ -173,9 +175,12 @@ its turns count as looking */
 void vr_player_control_facing(short local_player_index);
 /* no aim assist under the head or the hand */
 int vr_render_aiming(void);
-/* the hand aims: the HUD draws no crosshair, a reticle is held where its
-shot lands (passenger_camera.c) */
-int vr_render_hand_aiming(void);
+/* a hand or the stick in a seat aims: the HUD draws no crosshair, a
+reticle is held where the shot lands (passenger_camera.c) */
+int vr_render_reticle(void);
+/* in a seat with vr.vehicle_aim "stick": the main hand's stick is the
+pad's right stick, the head looks around freely (vr_input.c) */
+int vr_render_seat_stick(void);
 /* first_person_weapons.c: the unit's weapon is in the aiming hand: it
 neither bobs, sways nor is posed */
 int vr_render_hand_holds(long unit_index);
@@ -213,7 +218,8 @@ int vr_render_zoom_hidden(void);
 #define vr_view_reset() ((void)0)
 #define vr_player_control_facing(local_player_index) ((void)0)
 #define vr_render_aiming() 0
-#define vr_render_hand_aiming() 0
+#define vr_render_reticle() 0
+#define vr_render_seat_stick() 0
 #define vr_render_hand_holds(unit_index) 0
 #define vr_render_shot_origin(unit_index, origin) 0
 #define vr_render_shot_from_hand(unit_index) 0

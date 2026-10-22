@@ -451,7 +451,9 @@ the setting for one start of the game. It has priority over the file.
 | `vr.hud_width` | `10.0` | `HALO_VR_HUD_WIDTH` | With `display.vr`, the HUD panel's width in metres, from `0.2` to `100`. |
 | `vr.screen_distance` | `2.0` | `HALO_VR_SCREEN_DISTANCE` | With `display.vr`, how far the panel of the menus, loading screens and cinematics is, in metres, from `0.5` to `100`, before where the headset faced when the runtime last recentred it. |
 | `vr.screen_width` | `2.4` | `HALO_VR_SCREEN_WIDTH` | With `display.vr`, that panel's width in metres, from `0.2` to `100`. |
-| `vr.aim` | `"hand"` | `HALO_VR_AIM` | With `display.vr`, what aims on foot: `"hand"`, the aiming controller (the weapon held in it, the crosshair where its shot lands), or `"head"`. In a vehicle's seat the head aims. |
+| `vr.aim` | `"hand"` | `HALO_VR_AIM` | With `display.vr`, what aims on foot: `"hand"`, the aiming controller (the weapon held in it, the crosshair where its shot lands), or `"head"`. In a vehicle's seat, `vr.vehicle_aim`. |
+| `vr.cinematics` | `"immersive"` | `HALO_VR_CINEMATICS` | With `display.vr`, the cinematics: `"immersive"`, around the head (each shot ahead of where it faces as the shot begins, a blink at a cut, no letterbox), or `"screen"`, on a screen ahead. |
+| `vr.vehicle_aim` | `"stick"` | `HALO_VR_VEHICLE_AIM` | With `display.vr`, what turns and aims in a vehicle's seat: `"stick"`, the aiming controller's stick as a gamepad's right stick, the head looking around freely (the crosshair where the shot lands), or `"head"`. |
 | `vr.left_handed` | `false` | `HALO_VR_LEFT_HANDED` | With `display.vr`, the left controller aims and fires and the right moves: the controllers' buttons swap hands, and the weapon, mirrored, is held in the left. |
 | `vr.snap_turn` | `30.0` | `HALO_VR_SNAP_TURN` | With `display.vr`, how far a push of the aiming hand's stick turns, in degrees; `0` turns smoothly instead. |
 | `vr.smooth_turn_speed` | `120.0` | `HALO_VR_SMOOTH_TURN_SPEED` | With `vr.snap_turn` `0`, the stick's turn at full push, in degrees a second. |
@@ -689,8 +691,11 @@ screen, with the cause in the log.
   when other machines are in the game). A reticle is held where the shot
   lands, red when the game's crosshair would be; the HUD draws no
   crosshair. A zoomed weapon shows its zoom in a scope held on it, not in
-  the eyes. In a vehicle's seat, and with `vr.aim = "head"`, the head
-  aims. The off stick
+  the eyes. With `vr.aim = "head"` the head aims. In a vehicle's seat the
+  aiming stick turns and aims as a gamepad's right stick does, the head
+  looking around freely, and the reticle is where the vehicle's gun (or
+  the passenger's) shoots (`vr.vehicle_aim = "head"`: the head aims). The
+  off stick
   moves where the head faces. The aiming stick turns (`vr.snap_turn`), and
   the mouse, the gamepad's stick and the game's own turns (a respawn, a
   script) turn the world around the player, as a turn of the body. Aim

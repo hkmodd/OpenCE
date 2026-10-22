@@ -208,6 +208,8 @@ static struct
 	unsigned long frames, frames_without_eyes;
 	/* the reticle this frame: where it is, and whether over a target */
 	int reticle_placed, reticle_target;
+	/* the eyes are black for this many seconds more (vr_blink) */
+	float blink;
 	float reticle_position[3];
 	/* the scope's image is drawn this frame, where it is held, its width */
 	int scope_drawn;
@@ -1761,6 +1763,8 @@ static void vr_end_frame(const XrCompositionLayerBaseHeader *const *layers, uint
 {
 	XrFrameEndInfo end;
 
+	if (vr.blink > 0.0f)
+		vr.blink -= vr.frame.display_period;
 	if (vr.simulated)
 	{
 		vr.frame_begun = 0;
@@ -1997,7 +2001,20 @@ void vr_resolve_eye(int eye, unsigned int texture, int width, int height)
 	image = vr_acquire(&vr.eyes[eye]);
 	if (image)
 	{
-		vr_copy(texture, width, height, image, vr.eyes[eye].width, vr.eyes[eye].height);
+		if (vr.blink > 0.0f)
+		{
+			glBindFramebuffer(GL_DRAW_FRAMEBUFFER, vr.framebuffers[1]);
+			glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, image, 0);
+			glDisable(GL_SCISSOR_TEST);
+			glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+			glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+			glClear(GL_COLOR_BUFFER_BIT);
+			glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
+		}
+		else
+		{
+			vr_copy(texture, width, height, image, vr.eyes[eye].width, vr.eyes[eye].height);
+		}
 		vr_release(&vr.eyes[eye]);
 		vr.eyes_drawn[eye] = 1;
 	}
@@ -2052,6 +2069,12 @@ void vr_resolve_scope(unsigned int texture, int width, int height, int x0, int y
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
 	vr_release(&vr.scope);
 	vr.scope_drawn = 1;
+}
+
+void vr_blink(float seconds)
+{
+	if (seconds > vr.blink)
+		vr.blink = seconds;
 }
 
 void vr_reticle_place(const float position[3], int target)
