@@ -13,6 +13,7 @@ that draw the first-person weapon (rasterizer and render sources).
 
 #include "cseries.h"
 #include "view_fov.h"
+#include "halo_vr.h"
 #include "camera/director.h"
 #include "cutscene/cinematics.h"
 #include "game/players.h"
@@ -207,7 +208,10 @@ void viewmodel_projection_begin(void)
 	angle = viewmodel_vertical();
 	if (!angle)
 		angle = render_fov_authored_vertical(render.local_player_index);
-	if (!angle || render.local_player_index < 0 || render.local_player_index >= MAXIMUM_LOCAL_PLAYERS ||
+	/* (the headset's eyes keep their own fields for the weapon too: the
+	world's and the weapon's must meet in each eye, vr_view.c) */
+	if (!angle || VR_RENDER_EYE() || render.local_player_index < 0 ||
+		render.local_player_index >= MAXIMUM_LOCAL_PLAYERS ||
 		global_window_parameters.rasterizer_target != _rasterizer_target_render_primary ||
 		cinematic_in_progress() || (director_camera_scripted && *director_camera_scripted) ||
 		director_get_perspective(render.local_player_index) != _director_perspective_first_person ||

@@ -17,6 +17,7 @@ and the debug keyboard that the game's console reads.
 #include "port_mods.h"
 #include "xiso.h"
 #include "touch_input.h"
+#include "halo_vr.h"
 #include "../game/text_filter.h"
 
 #include <SDL3/SDL.h>
@@ -566,7 +567,12 @@ int halo_interpolation_enabled(void)
 		read_at = config_changes();
 		enabled = config_boolean("display.interpolation");
 	}
+#ifndef HALO_GLES
+	/* (the headset's frames come at its own rate, between the ticks) */
+	return enabled || vr_active();
+#else
 	return enabled;
+#endif
 }
 
 #ifndef HALO_ANDROID
@@ -1273,6 +1279,10 @@ BOOL platform_video_initialize(unsigned long width, unsigned long height)
 	}
 	platform_mouse_capture(TRUE);
 #endif
+#ifndef HALO_GLES
+	/* display.vr: the headset, on this context */
+	vr_initialize();
+#endif
 	return TRUE;
 }
 
@@ -1307,7 +1317,11 @@ void platform_display_apply(void)
 	if (!platform_window)
 		return;
 #endif
+#ifndef HALO_GLES
+	SDL_GL_SetSwapInterval(config_boolean("display.vsync") && !vr_active() ? 1 : 0);
+#else
 	SDL_GL_SetSwapInterval(config_boolean("display.vsync") ? 1 : 0);
+#endif
 }
 
 void platform_video_drawable_size(int *width, int *height)
@@ -1377,6 +1391,21 @@ void platform_video_swap(void)
 		platform_log("display: showing a frame took %.1f s in the graphics driver", (double)swap_time / 1000.0);
 #ifdef HALO_WEB
 	web_frame_shown();
+#endif
+#ifndef HALO_GLES
+	/* the headset paces the frames (xrWaitFrame, vr_openxr.c): the window
+	is its mirror, and neither its vsync nor display.max_fps may hold them */
+	{
+		static int swap_interval_vr;
+
+		if (vr_active() != swap_interval_vr)
+		{
+			swap_interval_vr = vr_active();
+			SDL_GL_SetSwapInterval(!swap_interval_vr && config_boolean("display.vsync") ? 1 : 0);
+		}
+		if (swap_interval_vr)
+			return;
+	}
 #endif
 #ifndef HALO_ANDROID
 	interval = frame_interval_ns();

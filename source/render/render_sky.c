@@ -29,6 +29,7 @@ symbols in this file:
 #include "objects/objects.h"
 #include "rasterizer/rasterizer.h"
 #include "scenario/scenario.h"
+#include "halo_vr.h" /* port: display.vr, port/linux/game/vr_view.c */
 
 /* ---------- constants */
 
@@ -150,7 +151,9 @@ void render_sky(
 						}
 						else if (animation->node_count == model->nodes.count)
 						{
-							real phase = (real)fmod(
+							/* port: the headset's second eye draws the phase
+							the first moved on to (port/linux/game/vr_view.c) */
+							real phase = VR_RENDER_REPEAT() ? render_sky_globals[i] : (real)fmod(
 								(double)(render.time_delta_since_tick_sec / sky_animation->period + render_sky_globals[i]),
 								1.0);
 							render_sky_globals[i] = phase;

@@ -42,6 +42,7 @@ with their unit, and with what it rides.
 #include "game/players.h"
 #include "render/render_cameras.h"
 #include "units/units.h"
+#include "halo_vr.h"
 
 /* port/linux/src/port_config.c */
 int config_boolean(const char *name);
@@ -495,6 +496,8 @@ void render_interpolation_reset(void)
 		interpolated_first_person[index].node_count = 0;
 		interpolated_first_person[index].has_previous = FALSE;
 	}
+	/* (and the headset's heading, taken again from the new map's facing) */
+	vr_view_reset();
 }
 
 /* ---------- frames */

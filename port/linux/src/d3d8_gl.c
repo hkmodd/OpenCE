@@ -26,6 +26,7 @@ Conventions carried over from the Xbox:
 #include "halo_ui_pointer.h"
 #include "port_config.h"
 #include "main/console.h"
+#include "halo_vr.h"
 
 #include <SDL3/SDL.h>
 
@@ -199,6 +200,14 @@ static void screen_mode_choose(long *width, float scale[2])
 	*width = 640;
 	scale[0] = scale[1] = 1.0f;
 	screen_supersampling = 1.0f;
+	/* the headset's eyes (display.vr): the Xbox's 640x480 drawn at their
+	resolution, the HUD and the menus kept 4:3 for their panel */
+	if (vr_screen_size(&display_width, &display_height))
+	{
+		scale[0] = (float)display_width / 640.0f;
+		scale[1] = (float)display_height / (float)SCREEN_HEIGHT;
+		return;
+	}
 	if (platform_screen_mode(&display_width, &display_height) && display_width > 0 && display_height > 0)
 	{
 		long wanted = (SCREEN_HEIGHT * display_width + display_height / 2) / display_height;
@@ -6748,6 +6757,29 @@ static void front_buffer_take(void)
 	device.front_buffer_taken = device.frame + 1;
 }
 
+#ifndef HALO_GLES
+/* the headset's HUD pass starts on a clear ground (port/linux/game/vr_view.c) */
+void halo_vr_clear_transparent(void)
+{
+	D3DDevice_Clear(0, NULL, D3DCLEAR_TARGET, 0, 1.0f, 0);
+}
+
+/* an eye's window has ended: the back buffer's picture into its image
+(port/linux/src/vr_openxr.c) */
+void halo_vr_resolve_eye(int eye)
+{
+	struct render_target_entry *back_buffer;
+
+	if (!device.gl_ready || !(back_buffer = render_target_get(&device.back_buffer)))
+		return;
+	draw_flush();
+	render_target_resolve(&back_buffer->target);
+	vr_resolve_eye(eye, back_buffer->target.texture, (int)back_buffer->target.gl_width,
+		(int)back_buffer->target.gl_height);
+	xgpu_gl_state_invalidate();
+}
+#endif
+
 void WINAPI D3DDevice_Present(CONST RECT *source_rectangle, CONST RECT *destination_rectangle,
 	void *unused, void *unused2)
 {
@@ -6779,33 +6811,42 @@ void WINAPI D3DDevice_Present(CONST RECT *source_rectangle, CONST RECT *destinat
 			write_key_screenshot(back_buffer);
 #endif
 
-		platform_video_drawable_size(&window_width, &window_height);
-		/* letterbox to the back buffer's aspect ratio */
-		width = window_width;
-		height = (int)((long)window_width * back_buffer->target.gl_height / back_buffer->target.gl_width);
-		if (height > window_height)
+#ifndef HALO_GLES
+		/* the headset's frame ends with the back buffer's picture (the HUD,
+		or the flat screen), and the window shows its left eye or the flat
+		screen */
+		if (!vr_present(back_buffer->target.texture, (int)back_buffer->target.gl_width,
+			(int)back_buffer->target.gl_height))
+#endif
 		{
-			height = window_height;
-			width = (int)((long)window_height * back_buffer->target.gl_width / back_buffer->target.gl_height);
-		}
-		x = (window_width - width) / 2;
-		y = (window_height - height) / 2;
-		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-		glDisable(GL_SCISSOR_TEST);
-		glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-		glClear(GL_COLOR_BUFFER_BIT);
-		/* (display.hdr's back buffer, or display.hdr_output's window, by a
-		shader: a blit neither makes the pixels linear nor, on OpenGL ES,
-		converts half floats) */
-		if (!((back_buffer->target.format == GL_RGBA16F || hdr.float_window) &&
-			xgpu_post_present(back_buffer->target.texture, x, y, width, height,
-				hdr.float_window ? hdr.sdr_white : 0.0f)))
-		{
-			glBindFramebuffer(GL_READ_FRAMEBUFFER, framebuffer_get(back_buffer->target.texture, 0));
-			/* row 0 of the render target is the top of the picture */
-			glBlitFramebuffer(0, 0, (GLint)back_buffer->target.gl_width, (GLint)back_buffer->target.gl_height,
-				x, y + height, x + width, y, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+			platform_video_drawable_size(&window_width, &window_height);
+			/* letterbox to the back buffer's aspect ratio */
+			width = window_width;
+			height = (int)((long)window_width * back_buffer->target.gl_height / back_buffer->target.gl_width);
+			if (height > window_height)
+			{
+				height = window_height;
+				width = (int)((long)window_height * back_buffer->target.gl_width / back_buffer->target.gl_height);
+			}
+			x = (window_width - width) / 2;
+			y = (window_height - height) / 2;
+			glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+			glDisable(GL_SCISSOR_TEST);
+			glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+			glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+			glClear(GL_COLOR_BUFFER_BIT);
+			/* (display.hdr's back buffer, or display.hdr_output's window, by a
+			shader: a blit neither makes the pixels linear nor, on OpenGL ES,
+			converts half floats) */
+			if (!((back_buffer->target.format == GL_RGBA16F || hdr.float_window) &&
+				xgpu_post_present(back_buffer->target.texture, x, y, width, height,
+					hdr.float_window ? hdr.sdr_white : 0.0f)))
+			{
+				glBindFramebuffer(GL_READ_FRAMEBUFFER, framebuffer_get(back_buffer->target.texture, 0));
+				/* row 0 of the render target is the top of the picture */
+				glBlitFramebuffer(0, 0, (GLint)back_buffer->target.gl_width, (GLint)back_buffer->target.gl_height,
+					x, y + height, x + width, y, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+			}
 		}
 		glBindVertexArray(device.vertex_array);
 		platform_video_swap();

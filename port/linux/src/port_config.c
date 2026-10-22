@@ -237,6 +237,30 @@ static const struct config_setting config_settings[] =
 		"HDR display shows what is past white brighter than the desktop's\n"
 		"white rather than tone mapped down to it; the operating system's HDR\n"
 		"must be on. Taken up when the game starts." },
+#ifndef HALO_GLES
+	{ "display.vr", _config_boolean, "false", "HALO_VR", _environment_value, _platform_desktop,
+		"Play in a VR headset, through its OpenXR runtime (SteamVR, Meta's PC\n"
+		"runtime, Monado): the eyes in the headset, the HUD and the menus on\n"
+		"panels before them, the left eye in the window. The game is 32-bit, so\n"
+		"the runtime must have a 32-bit part (port/linux/README.md, \"VR\").\n"
+		"Off, nothing of it is loaded. Taken up when the game starts." },
+
+	{ "vr.resolution_scale", _config_real, "1.0", "HALO_VR_RESOLUTION_SCALE", _environment_value, _platform_desktop,
+		"With display.vr, the eyes' resolution as a multiple of the runtime's\n"
+		"recommended one, 0.5 to 2.0. Taken up when the game starts." },
+	{ "vr.hud_distance", _config_real, "15.0", "HALO_VR_HUD_DISTANCE", _environment_value, _platform_desktop,
+		"How far ahead of the head the HUD's panel is held, in metres (0.5 to\n"
+		"100)." },
+	{ "vr.hud_width", _config_real, "10.0", "HALO_VR_HUD_WIDTH", _environment_value, _platform_desktop,
+		"The HUD panel's width in metres (0.2 to 100): 10 at 15 m is about 37\n"
+		"degrees across." },
+	{ "vr.screen_distance", _config_real, "2.0", "HALO_VR_SCREEN_DISTANCE", _environment_value, _platform_desktop,
+		"How far ahead the panel of the menus, loading screens and cutscenes is\n"
+		"held, in metres (0.5 to 100), from where the headset faced when the\n"
+		"runtime last recentred it." },
+	{ "vr.screen_width", _config_real, "2.4", "HALO_VR_SCREEN_WIDTH", _environment_value, _platform_desktop,
+		"That panel's width in metres (0.2 to 100)." },
+#endif
 
 	{ "audio.enabled", _config_boolean, "true", "HALO_NO_AUDIO", _environment_set_is_false, _platform_all,
 		"Play sound." },

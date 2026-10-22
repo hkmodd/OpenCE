@@ -445,6 +445,12 @@ the setting for one start of the game. It has priority over the file.
 | `display.hdr_exposure` | `1.0` | `HALO_HDR_EXPOSURE` | With `display.hdr`, the light of the 3D view is multiplied by this before the tone mapping, from `0.25` to `4.0`. |
 | `display.hdr_tone_mapping` | `"neutral"` | `HALO_HDR_TONE_MAPPING` | With `display.hdr`, the curve that brings the light into the display's range. `"neutral"`: the picture is as without HDR up to 80% of white, and the light past it rolls off to white in place of being clipped. `"aces"`: the ACES filmic curve (Narkowicz's fit), with more contrast and darker shadows. `"reinhard"`: the extended Reinhard curve on luminance, softer and darker. |
 | `display.hdr_output` | `false` | `HALO_HDR_OUTPUT` | Not on Android or in a browser. With `display.hdr`, `true`: the window asks for floating-point pixels (scRGB). On a display that has HDR on (on Windows, "Use HDR"), the tone mapping then goes up to the display's headroom over SDR white, and the light past white is shown brighter than white. Without an HDR display the picture is as with `false`; if the driver has no such window, the game makes an 8-bit one. Read at start. With NVIDIA's driver on Windows, the NVIDIA Control Panel's "Vulkan/OpenGL present method" must be "Prefer layered on DXGI Swapchain": otherwise a fullscreen or borderless window turns black, then oversaturated. Experimental. |
+| `display.vr` | `false` | `HALO_VR` | Not on Android or in a browser. `true`: play in a VR headset through its OpenXR runtime. `false`: nothing of OpenXR is loaded. Read at start. Refer to "VR". |
+| `vr.resolution_scale` | `1.0` | `HALO_VR_RESOLUTION_SCALE` | With `display.vr`, the eyes' resolution as a multiple of the runtime's recommended one, from `0.5` to `2.0`. Read at start. |
+| `vr.hud_distance` | `15.0` | `HALO_VR_HUD_DISTANCE` | With `display.vr`, how far before the head the HUD's panel is held, in metres, from `0.5` to `100`. |
+| `vr.hud_width` | `10.0` | `HALO_VR_HUD_WIDTH` | With `display.vr`, the HUD panel's width in metres, from `0.2` to `100`. |
+| `vr.screen_distance` | `2.0` | `HALO_VR_SCREEN_DISTANCE` | With `display.vr`, how far the panel of the menus, loading screens and cinematics is, in metres, from `0.5` to `100`, before where the headset faced when the runtime last recentred it. |
+| `vr.screen_width` | `2.4` | `HALO_VR_SCREEN_WIDTH` | With `display.vr`, that panel's width in metres, from `0.2` to `100`. |
 | `audio.enabled` | `true` | `HALO_NO_AUDIO=1` sets `false` | `false`: no audio device. The sound continues without output. |
 | `audio.volume` | `1.0` | `HALO_VOLUME` | The master volume. |
 | `audio.music_volume` | `1.0` | `HALO_MUSIC_VOLUME` | The music's volume, of the master volume. |
@@ -641,6 +647,55 @@ the game does with the body are unchanged.
 
 Only this machine's view changes. Nothing the machines send each other
 changes, so players with different settings play together.
+
+## VR
+
+With `display.vr = true` (or `HALO_VR=1`) the Linux and Windows builds draw
+into a VR headset through the headset's OpenXR runtime: SteamVR, Meta's PC
+runtime (the Rift, and the Quest by Link) or Monado. The runtime must give
+OpenGL images (`XR_KHR_opengl_enable`); Windows Mixed Reality's and Virtual
+Desktop's runtimes give Direct3D images only, and the game stays on the
+screen, with a line in the log.
+
+The game is 32-bit, so it loads the runtime's 32-bit library. On Windows
+it reads the active runtime from the registry's 32-bit view
+(`HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Khronos\OpenXR\1\ActiveRuntime`);
+Meta's runtime and SteamVR both install a 32-bit library. On Linux it reads
+`openxr/1/active_runtime.i686.json`, then `openxr/1/active_runtime.json`,
+in `$XDG_CONFIG_HOME` (`~/.config`), `$XDG_CONFIG_DIRS` (`/etc/xdg`) and
+`/etc`. `XR_RUNTIME_JSON` names another runtime's manifest for one start.
+The game loads the runtime from its manifest itself, as the OpenXR
+specification describes for a loader: the SDK's loader (C++) is not used,
+and API layers are not loaded (`port/third_party/openxr`). A runtime that
+cannot be loaded, or a headset that is not there, leaves the game on the
+screen, with the cause in the log.
+
+- Each eye is drawn from its own position with its own field of view, as
+  the runtime gives them for the moment the frame is shown: the head turns,
+  tilts and moves the view, and the distance between the eyes is the
+  headset's.
+- The head aims: where it looks is where the player looks and shoots. The
+  mouse, the gamepad's stick and the game's own turns (a respawn, a script)
+  turn the world around the player, as a turn of the body. Aim assist is
+  off.
+- The head can move the view up to 35 cm from the game's camera, and not
+  through a wall.
+- The HUD is drawn on a panel held before the head (`vr.hud_distance`,
+  `vr.hud_width`), which the runtime keeps there as the head moves.
+- The menus, loading screens and cinematics are drawn flat, on a panel in
+  the room (`vr.screen_distance`, `vr.screen_width`).
+- The window shows the left eye, or that panel's picture.
+- The game draws a frame for each of the headset's, at the time the runtime
+  gives, and blends the game's 30 ticks a second for each, as SMOOTH
+  MOTION does (on in the headset whatever its setting). V-sync and the
+  frame rate limit are off while the headset is on.
+- When the runtime ends the session (its menu's quit), the game quits. If
+  the runtime loses the headset, the game goes on, on the screen.
+
+Only this machine's view changes. Nothing the machines send each other
+changes, so a player in a headset plays with players on screens.
+
+How it is built: [docs/vr.md](../../docs/vr.md).
 
 ## System link
 
@@ -1445,6 +1500,7 @@ Other changes:
 | `interface/first_person_weapons.c` | The first-person hands are drawn with the unit's shield modifier shader, as its body is (`display.viewmodel_shield`). |
 | `render/render_objects.c`, `objects/objects.c` | In first person, your own body is drawn from the waist down with the pose `first_person_legs.c` makes (`display.first_person_legs`); the waist it found and the mesh `object_mesh.c` read are forgotten on a new map. |
 | `objects/object_lights.c` | Glows the port lights itself (`shield_glow.c`): dynamic lights attached to an object's node, colored and sized each frame by their maker, drawn with a light definition the map has. |
+| `main/main.c`, `render/render.c`, `render/render_sky.c`, `effects/weather_particle_systems.c`, `objects/widgets/glow.c`, `game/player_control.c` | In a headset (`display.vr`, `game/vr_view.c`): a frame waits for the headset's and takes its time from it; the player's window is drawn as two eyes and a HUD, each with its own frustum; the HUD is drawn alone, the eyes without it; the sky's animation, the weather and the glows move on once a frame, not once for each eye; the head sets the player's facing, without aim assist. |
 | `render/render_objects.c`, `interface/first_person_weapons.c`, `rasterizer/xbox/rasterizer_xbox_plasma_energy.c`, `items/projectiles.c` | An overshield as `overshield_effect.c` draws it (`display.overshield_effect`): in its own color, its intensity full, its energy slower, faded above the height it has risen to; a hit on it plays the projectile's effect for an Elite's energy shield in place of its own (only the effect: the projectile's response is its own). |
 | `render/render_objects.c`, `interface/first_person_weapons.c`, `rasterizer/xbox/rasterizer_xbox_plasma_energy.c` | A local player's shield plasma is drawn in the chosen armor color (`display.shield_color`, `shield_color.c`), on the body and on the first-person arms. |
 | `rasterizer/xbox/rasterizer_xbox_text.c`, `rasterizer/rasterizer_text.c` | The characters of a string are one draw, not a draw each (and a second for the drop shadow). The batch is drawn early before a character is cached and before the high-res glyph atlas starts over (`src/text_hires.c`). |

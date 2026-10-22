@@ -280,7 +280,11 @@ The decompilation is of the Xbox build 2342 (`cachebeta.exe`, SHA-256
 OpenCE starts from the decompilation of
 [bnunu/halo-1](https://github.com/bnunu/halo-1), which is a fork of
 [punpckhdq/halo](https://github.com/punpckhdq/halo). The artists of the
-high-res redraws are in [AUTHORS.md](AUTHORS.md). The main contributors are Jonas Volman (@bnunu) and MrBruh (@cybersecurity). Everyone else who has contributed is on the
+high-res redraws are in [AUTHORS.md](AUTHORS.md). The VR support
+(`display.vr`) learnt from two VR conversions of the decompilation,
+released under CC0:
+[astromaddie/HaloCE-VR](https://github.com/astromaddie/HaloCE-VR) and
+[moistman42069/HaloCE-DecompRemix-VR-PC-Android](https://github.com/moistman42069/HaloCE-DecompRemix-VR-PC-Android). The main contributors are Jonas Volman (@bnunu) and MrBruh (@cybersecurity). Everyone else who has contributed is on the
 [contributors page](https://github.com/OpenCommunityEdition/OpenCE/graphs/contributors).
 
 ## Licence

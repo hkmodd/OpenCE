@@ -212,6 +212,7 @@ symbols in this file:
 #include "real_math.h"
 #include "passenger_camera.h" /* port: port/linux/game/passenger_camera.c; after the limit2d alias above */
 #include "network_coop.h" /* port: port/linux/game/network_coop.c */
+#include "halo_vr.h" /* port: display.vr, port/linux/game/vr_view.c */
 
 /* ---------- constants */
 
@@ -766,6 +767,9 @@ static void handle_one_player_input(
 				input.facing_delta.yaw,
 				input.facing_delta.pitch);
 			player_control_angle_step_ticks = 1.f;
+			/* port: in the headset the head aims, the input's turns turning
+			its heading (port/linux/game/vr_view.c) */
+			vr_player_control_facing(local_player_index);
 		}
 
 		if (unit->object.parent_object_index == NONE)
@@ -1295,7 +1299,10 @@ static void get_local_player_input_blob(
 							extern int halo_linux_mouse_aiming(short gamepad_index);
 							extern int halo_linux_touch_aiming(short gamepad_index);
 
-							if (halo_linux_mouse_aiming(gamepad_index) || halo_linux_touch_aiming(gamepad_index))
+							/* port: nor for the headset's head, which the view
+							must not turn under (port/linux/game/vr_view.c) */
+							if (halo_linux_mouse_aiming(gamepad_index) || halo_linux_touch_aiming(gamepad_index) ||
+								vr_render_aiming())
 							{
 								control->magnetism_level = 0.f;
 							}

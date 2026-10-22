@@ -404,6 +404,7 @@ symbols in this file:
 #include "tag_files/files.h"
 #include "custom_edition_cache.h" /* port: custom_edition_level_name */
 #include "view_fov.h" /* port: display.fov, before the projection and culling */
+#include "halo_vr.h" /* port: display.vr, port/linux/game/vr_view.c and port/linux/src/vr_openxr.c */
 
 #if defined(HALO_WINDOWS) || defined(HALO_ANDROID) || defined(__linux__)
 #define HALO_NATIVE_BUILD_INFO 1
@@ -2467,6 +2468,13 @@ static void main_update_time_unthrottled(
 			(double)frequency.QuadPart);
 	}
 	previous_counter = counter;
+	/* port: in the headset, the step between its frames' display times */
+	{
+		double display_seconds;
+
+		if (vr_frame_seconds(&display_seconds))
+			seconds_elapsed = (real)display_seconds;
+	}
 
 	if (main_globals.movie)
 	{
@@ -3363,9 +3371,15 @@ static void main_game_render(
 
 	if (global_screenshot_count.count <= 0)
 	{
+		/* port: the headset's eyes and HUD in place of the player's window
+		(port/linux/game/vr_view.c) */
+		short render_window_count = vr_render_windows(
+			global_screenshot_count.windows,
+			(short)(player_window_count + 1));
+
 		render_frame(
 			global_screenshot_count.windows,
-			player_window_count + 1,
+			render_window_count,
 			NULL,
 			NULL,
 			main_globals.movie,
@@ -3537,6 +3551,9 @@ static boolean main_loop_iteration(
 			main_reset_map_private();
 		}
 
+		/* port: the headset's frame, which paces the loop as vsync does
+		(port/linux/src/vr_openxr.c) */
+		vr_frame_begin();
 		profile_frame_start();
 		profile_scope_enter(main_input_section)
 		input_frame_begin();
@@ -3689,6 +3706,8 @@ static boolean main_loop_iteration(
 		input_frame_end();
 		profile_frame_end();
 		main_frame_rate_debug();
+		/* port: a headset frame begun and not shown ends with nothing */
+		vr_frame_finish();
 
 		if (main_globals.restart_time)
 		{

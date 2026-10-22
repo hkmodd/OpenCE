@@ -90,6 +90,7 @@ symbols in this file:
 /* port: static transparent part links for the newly loaded model tags. */
 #include "models/models.h"
 #include "structure_culling.h" /* port: port/linux/game/structure_culling.c */
+#include "halo_vr.h" /* port: display.vr, port/linux/game/vr_view.c */
 
 /* ---------- constants */
 
@@ -332,15 +333,47 @@ static void render_window(
 	parameters.window_index = render.window_index;
 	parameters.fog = render.fog;
 
-	structure_visibility_compute();
+	/* port: the headset's HUD pass draws no world (port/linux/game/vr_view.c) */
+	if (!VR_RENDER_HUD())
+		structure_visibility_compute();
 	player_effect_get_screen_flash(local_player_index, &parameters.screen_flash);
 	rasterizer_window_begin(&parameters);
+	/* port: the headset's HUD pass: the HUD alone, over a clear ground, for
+	the panel it is shown on */
+	if (VR_RENDER_HUD())
+	{
+		vr_render_hud_begin();
+		interface_draw_screen();
+		halo_screen_ui_offset(TRUE);
+		render_ui_widgets(local_player_index, &rasterizer_camera->viewport_bounds);
+		halo_screen_ui_offset(FALSE);
+		rasterizer_window_end();
+		profile_render_window_end();
+		return;
+	}
 
 	if (!bink_playback_in_progress())
 	{
 		build_sprite_prepare_for_window();
 		render_sky();
-		first_person_weapon_render_update();
+		/* port: in the headset the first-person weapon is posed once a
+		frame, from the head between the eyes: posed per eye, it would sit
+		at the same place in each and lose its depth */
+		if (VR_RENDER_EYE())
+		{
+			if (!VR_RENDER_REPEAT())
+			{
+				struct render_camera eye_camera = render.camera;
+
+				vr_render_weapon_camera(&render.camera);
+				first_person_weapon_render_update();
+				render.camera = eye_camera;
+			}
+		}
+		else
+		{
+			first_person_weapon_render_update();
+		}
 		lights_preprocess_scene();
 		render_objects();
 		structure_render_preprocess();
@@ -430,11 +463,16 @@ static void render_window(
 				rasterizer_camera->viewport_bounds.x1,
 				rasterizer_camera->viewport_bounds.y1);
 		}
-		interface_draw_screen();
+		/* port: the headset's eyes have no HUD: its own pass draws it */
+		if (!VR_RENDER_EYE())
+			interface_draw_screen();
 		rasterizer_screen_flash();
-		halo_screen_ui_offset(TRUE);
-		render_ui_widgets(local_player_index, &rasterizer_camera->viewport_bounds);
-		halo_screen_ui_offset(FALSE);
+		if (!VR_RENDER_EYE())
+		{
+			halo_screen_ui_offset(TRUE);
+			render_ui_widgets(local_player_index, &rasterizer_camera->viewport_bounds);
+			halo_screen_ui_offset(FALSE);
+		}
 	}
 
 	bink_playback_render();
@@ -469,7 +507,11 @@ static void render_player_frame(
 		(word)render.visible_sky_index,
 		&camera->position,
 		&render.fog);
-	structure_get_planar_fog((short)render.cluster_index, &render.fog);
+	/* port: not for the headset's HUD pass, which draws no world: the planar
+	fog's animation would wait for a structure pass that never comes
+	(structure_render_set_fog_offset takes it once a window) */
+	if (!VR_RENDER_HUD())
+		structure_get_planar_fog((short)render.cluster_index, &render.fog);
 
 	if (render.fog.atmospheric_maximum_distance != 0.0f &&
 		render.visible_sky_index == NONE &&
@@ -519,6 +561,9 @@ static void render_player_frame(
 			sizeof(rectangle2d)));
 
 	render_camera_build_frustum_bounds(camera, &frustum_bounds);
+	/* port: an eye's own, off-centre field, or the HUD panel's
+	(port/linux/game/vr_view.c) */
+	vr_render_frustum_bounds(&frustum_bounds);
 
 	if (screenshot_combined_index != NULL)
 	{
@@ -550,7 +595,8 @@ static void render_player_frame(
 		&rasterizer_frustum,
 		TRUE);
 
-	if (main_get_window_count() == 1)
+	/* port: (not for the headset's HUD pass, which draws no world) */
+	if (main_get_window_count() == 1 && !VR_RENDER_HUD())
 	{
 		if (structure_visibility_find_mirror(camera, &frustum, &mirror))
 		{
@@ -626,6 +672,9 @@ void render_frame(
 
 		window = &windoze[window_index];
 		render.window_index = window_index;
+		/* port: the headset's pass, if this window is one of its
+		(port/linux/game/vr_view.c) */
+		vr_render_window_begin(window_index);
 		if (window->console_window)
 		{
 			window_type = 0;
@@ -643,6 +692,7 @@ void render_frame(
 			render_player_frame(
 				window,
 				screenshot_index != NULL ? &screenshot_combined_index : NULL);
+			vr_render_window_end(window_index);
 			continue;
 		}
 		else
@@ -651,6 +701,7 @@ void render_frame(
 		}
 
 		render_nonplayer_frame(window, window_type);
+		vr_render_window_end(window_index);
 	}
 
 	halo_screen_ui_offset(TRUE);
