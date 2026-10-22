@@ -695,6 +695,7 @@ symbols in this file:
 #include "network_coop.h" /* port: port/linux/game/network_coop.c */
 #include "coop_scripts.h" /* port: port/linux/game/coop_scripts.c */
 #include "coop_enemies.h" /* port: port/linux/game/coop_enemies.c */
+#include "halo_vr.h" /* port: port/linux/game/vr_view.c */
 
 /* port: the control and animation impulses the host's actors give their
 units go to the clients' copies (port/linux/game/network_actors.c) */
@@ -4989,7 +4990,12 @@ void unit_adjust_projectile_ray(
 		*direction = unit->unit.aiming_vector;
 	}
 
-	if (adjust_origin)
+	/* port: in the headset, the aiming hand's shot starts at the weapon in
+	it (no other machine in the game: port/linux/game/vr_view.c) */
+	if (vr_render_shot_origin(unit_index, origin->n))
+	{
+	}
+	else if (adjust_origin)
 	{
 		real_point3d camera_position;
 

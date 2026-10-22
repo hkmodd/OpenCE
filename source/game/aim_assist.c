@@ -49,6 +49,7 @@ symbols in this file:
 #include "camera/observer.h"
 #include "camera/first_person_camera.h" /* port: preserve the passenger's input aim basis */
 #include "passenger_camera.h" /* port: port/linux/game/passenger_camera.c */
+#include "halo_vr.h" /* port: port/linux/game/vr_view.c */
 #include "game/game.h"
 #include "game/game_allegiance.h"
 #include "game/game_globals.h"
@@ -573,6 +574,13 @@ long player_aim_projectile_preview(
 		real autoaim_level;
 
 		director_camera_deterministic(player->unit_index, &camera_position, &camera_direction);
+		/* port: a shot from a headset's hand is aimed from the weapon along
+		it, not turned to where the eye's ray meets the world */
+		if (vr_render_shot_from_hand(player->unit_index))
+		{
+			camera_position= *position;
+			camera_direction= *direction;
+		}
 		target_direction= *direction;
 		autoaim_level= 0.f;
 

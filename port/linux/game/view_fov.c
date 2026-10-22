@@ -210,7 +210,7 @@ void viewmodel_projection_begin(void)
 		angle = render_fov_authored_vertical(render.local_player_index);
 	/* (the headset's eyes keep their own fields for the weapon too: the
 	world's and the weapon's must meet in each eye, vr_view.c) */
-	if (!angle || VR_RENDER_EYE() || render.local_player_index < 0 ||
+	if (!angle || VR_RENDER_WORLD() || render.local_player_index < 0 ||
 		render.local_player_index >= MAXIMUM_LOCAL_PLAYERS ||
 		global_window_parameters.rasterizer_target != _rasterizer_target_render_primary ||
 		cinematic_in_progress() || (director_camera_scripted && *director_camera_scripted) ||
@@ -264,7 +264,8 @@ boolean viewmodel_is_visible(void)
 		initialized = TRUE;
 		read_at = changes;
 	}
-	return visible;
+	/* (not in the headset's scope: the world from the weapon's muzzle) */
+	return visible && !VR_RENDER_SCOPE();
 }
 
 /* ---------- whether the energy shield's flare is drawn on the arms */

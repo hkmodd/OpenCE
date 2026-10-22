@@ -260,6 +260,23 @@ static const struct config_setting config_settings[] =
 		"runtime last recentred it." },
 	{ "vr.screen_width", _config_real, "2.4", "HALO_VR_SCREEN_WIDTH", _environment_value, _platform_desktop,
 		"That panel's width in metres (0.2 to 100)." },
+	{ "vr.left_handed", _config_boolean, "false", "HALO_VR_LEFT_HANDED", _environment_set_is_true, _platform_desktop,
+		"With display.vr, the left controller aims and fires and the right\n"
+		"moves: the controllers' buttons swap hands." },
+	{ "vr.aim", _config_string, "\"hand\"", "HALO_VR_AIM", _environment_value, _platform_desktop,
+		"With display.vr, what aims on foot: \"hand\", the aiming controller\n"
+		"(the weapon held in it, the crosshair where its shot lands), or\n"
+		"\"head\". In a vehicle's seat the head aims." },
+	{ "vr.snap_turn", _config_real, "30.0", "HALO_VR_SNAP_TURN", _environment_value, _platform_desktop,
+		"How far a push of the aiming hand's stick turns, in degrees; 0 turns\n"
+		"smoothly instead, at smooth_turn_speed." },
+	{ "vr.smooth_turn_speed", _config_real, "120.0", "HALO_VR_SMOOTH_TURN_SPEED", _environment_value,
+		_platform_desktop,
+		"With snap_turn 0, the stick's turn at full push, in degrees a second." },
+	{ "vr.gestures", _config_boolean, "true", "HALO_VR_GESTURES", _environment_value, _platform_desktop,
+		"The hands' and head's motions: a punch is a melee attack, the other\n"
+		"hand's grip at the head the flashlight (else the grip alone), the\n"
+		"head lowered a crouch." },
 #endif
 
 	{ "audio.enabled", _config_boolean, "true", "HALO_NO_AUDIO", _environment_set_is_false, _platform_all,
@@ -795,6 +812,30 @@ static const struct config_setting config_settings[] =
 		"A folder to save frames to (with screenshot_every); empty none." },
 	{ "debug.screenshot_every", _config_integer, "0", "HALO_SCREENSHOT_EVERY", _environment_value, _platform_all,
 		"Save every this many frames to screenshot_directory; 0 none." },
+#ifndef HALO_GLES
+	{ "debug.vr_simulate", _config_boolean, "false", "HALO_VR_SIMULATE", _environment_set_is_true, _platform_desktop,
+		"With display.vr, a headset of the game's own in place of the runtime:\n"
+		"a Rift's eyes held still, frames at once (tests, and images of what\n"
+		"the headset shows with vr_dump_frame)." },
+	{ "debug.vr_simulate_yaw", _config_real, "0.0", "HALO_VR_SIMULATE_YAW", _environment_value, _platform_desktop,
+		"The simulated head's turn to the left, in degrees." },
+	{ "debug.vr_simulate_pitch", _config_real, "0.0", "HALO_VR_SIMULATE_PITCH", _environment_value,
+		_platform_desktop,
+		"The simulated head's tilt up, in degrees." },
+	{ "debug.vr_simulate_roll", _config_real, "0.0", "HALO_VR_SIMULATE_ROLL", _environment_value, _platform_desktop,
+		"The simulated head's roll to the left, in degrees." },
+	{ "debug.vr_dump_frame", _config_integer, "0", "HALO_VR_DUMP_FRAME", _environment_value, _platform_desktop,
+		"Write the headset's images of this stereo frame (its eyes and HUD) to\n"
+		"screenshot_directory, as vr-<image>-<frame>.bmp; 0 none." },
+	{ "debug.vr_dump_every", _config_integer, "0", "HALO_VR_DUMP_EVERY", _environment_value, _platform_desktop,
+		"After vr_dump_frame, write them every this many stereo frames; 0 once." },
+	{ "debug.vr_simulate_input", _config_string, "\"\"", "HALO_VR_SIMULATE_INPUT", _environment_value,
+		_platform_desktop,
+		"What the simulated controllers do: FIRST[-LAST]:HAND.CONTROL[=VALUES]\n"
+		"items (frames from 1; HAND left or right; CONTROL trigger, grip,\n"
+		"stick=X,Y, click, lower, upper, menu, aim=YAW,PITCH degrees,\n"
+		"at=X,Y,Z metres), separated by spaces or semicolons." },
+#endif
 	{ "debug.texture_dump_directory", _config_string, "\"\"", "HALO_TEXTURE_DUMP", _environment_value, _platform_all,
 		"A folder to write every texture to as it is uploaded; empty none." },
 	{ "debug.texture_log", _config_boolean, "false", "HALO_TEXTURE_LOG", _environment_set_is_true, _platform_all,

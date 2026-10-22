@@ -231,6 +231,7 @@ symbols in this file:
 #include "sound/sound_definitions.h"
 #include "units/unit_definitions.h"
 #include "units/units.h"
+#include "halo_vr.h" /* port: port/linux/game/vr_view.c */
 
 #ifdef HALO_PORT_MAXIMUM_NETWORK_PLAYERS
 #include "bitmaps/bitmap_group.h"
@@ -2414,9 +2415,13 @@ boolean weapon_get_projectile_ray(long weapon_index, short trigger_index, real_p
 			right = *global_left3d;
 		cross_product3d(forward, &right, &up);
 		normalize3d(&up);
-		point_from_line3d(origin, forward, trigger->first_person_weapon_offset.x, origin);
-		point_from_line3d(origin, &right, trigger->first_person_weapon_offset.y, origin);
-		point_from_line3d(origin, &up, trigger->first_person_weapon_offset.z, origin);
+		/* port: (not from a headset's hand, at the weapon already) */
+		if (!vr_render_shot_from_hand(owner_index))
+		{
+			point_from_line3d(origin, forward, trigger->first_person_weapon_offset.x, origin);
+			point_from_line3d(origin, &right, trigger->first_person_weapon_offset.y, origin);
+			point_from_line3d(origin, &up, trigger->first_person_weapon_offset.z, origin);
+		}
 		player_aim_projectile_preview(unit->unit.player_index, origin, forward);
 	}
 	if (TEST_FLAG(trigger->flags, _weapon_trigger_uses_weapon_origin_bit))
@@ -2511,21 +2516,26 @@ static void trigger_create_projectiles(
 				cross_product3d(&forward, &right, &up);
 				normalize3d(&up);
 
-				point_from_line3d(
-					&origin,
-					&forward,
-					trigger_definition->first_person_weapon_offset.x,
-					&origin);
-				point_from_line3d(
-					&origin,
-					&right,
-					trigger_definition->first_person_weapon_offset.y,
-					&origin);
-				point_from_line3d(
-					&origin,
-					&up,
-					trigger_definition->first_person_weapon_offset.z,
-					&origin);
+				/* port: a shot from a headset's hand starts at the weapon
+				already (port/linux/game/vr_view.c) */
+				if (!vr_render_shot_from_hand(owner_object_index))
+				{
+					point_from_line3d(
+						&origin,
+						&forward,
+						trigger_definition->first_person_weapon_offset.x,
+						&origin);
+					point_from_line3d(
+						&origin,
+						&right,
+						trigger_definition->first_person_weapon_offset.y,
+						&origin);
+					point_from_line3d(
+						&origin,
+						&up,
+						trigger_definition->first_person_weapon_offset.z,
+						&origin);
+				}
 
 				target_object_index= player_aim_projectile(player_index, &origin, &forward);
 			}

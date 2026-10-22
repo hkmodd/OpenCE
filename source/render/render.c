@@ -359,7 +359,7 @@ static void render_window(
 		/* port: in the headset the first-person weapon is posed once a
 		frame, from the head between the eyes: posed per eye, it would sit
 		at the same place in each and lose its depth */
-		if (VR_RENDER_EYE())
+		if (VR_RENDER_WORLD())
 		{
 			if (!VR_RENDER_REPEAT())
 			{
@@ -367,6 +367,7 @@ static void render_window(
 
 				vr_render_weapon_camera(&render.camera);
 				first_person_weapon_render_update();
+				vr_render_weapon_posed();
 				render.camera = eye_camera;
 			}
 		}
@@ -463,11 +464,12 @@ static void render_window(
 				rasterizer_camera->viewport_bounds.x1,
 				rasterizer_camera->viewport_bounds.y1);
 		}
-		/* port: the headset's eyes have no HUD: its own pass draws it */
-		if (!VR_RENDER_EYE())
+		/* port: the headset's eyes (and scope) have no HUD: its own pass
+		draws it */
+		if (!VR_RENDER_WORLD())
 			interface_draw_screen();
 		rasterizer_screen_flash();
-		if (!VR_RENDER_EYE())
+		if (!VR_RENDER_WORLD())
 		{
 			halo_screen_ui_offset(TRUE);
 			render_ui_widgets(local_player_index, &rasterizer_camera->viewport_bounds);

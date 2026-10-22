@@ -26,6 +26,9 @@ Screenshot is a normal bound action (default F10), also available in the
 menus. F11 switches between fullscreen and the window, and F12 releases
 or recaptures the mouse, always.
 
+In a headset (display.vr) its controllers drive the first controller too
+(vr_input.c): their buttons press the pad's, merged with the others.
+
 Mouse aim does not go through the right stick: the game's look code asks
 halo_linux_mouse_look for the motion since its last call and adds it to the
 stick's facing change, so aiming is direct rather than rate based.
@@ -41,6 +44,7 @@ drive the controller.
 #include "sdl_platform.h"
 #include "port_config.h"
 #include "touch_input.h"
+#include "vr_input.h"
 /* port/linux/game/network_aim_assist.c */
 extern unsigned char network_aim_assist_block_mouse(void);
 #include "halo_keyboard.h"
@@ -1111,6 +1115,44 @@ static void merge_button(XINPUT_GAMEPAD *pad, int analog_index, BOOL down)
 		pad->bAnalogButtons[analog_index] = 0xff;
 }
 
+#ifndef HALO_GLES
+/* the headset's controllers (vr_input.c) over the first controller: each
+button pressed by either, each stick and trigger the one pushed further */
+static void vr_gamepad(XINPUT_GAMEPAD *pad, BOOL menus)
+{
+	struct vr_pad vr_pad;
+	SHORT *thumbs[4];
+	int index;
+
+	_Static_assert(VR_PAD_START == XINPUT_GAMEPAD_START && VR_PAD_RIGHT_THUMB == XINPUT_GAMEPAD_RIGHT_THUMB &&
+		VR_PAD_A == XINPUT_GAMEPAD_A && VR_PAD_RIGHT_TRIGGER == XINPUT_GAMEPAD_RIGHT_TRIGGER,
+		"the headset's pad is XInput's");
+	if (!vr_input_gamepad(&vr_pad, menus))
+		return;
+	pad->wButtons |= vr_pad.buttons;
+	for (index = 0; index < VR_PAD_ANALOG_COUNT; index++)
+	{
+		if (vr_pad.analog[index] > pad->bAnalogButtons[index])
+			pad->bAnalogButtons[index] = vr_pad.analog[index];
+	}
+	thumbs[0] = &pad->sThumbLX;
+	thumbs[1] = &pad->sThumbLY;
+	thumbs[2] = &pad->sThumbRX;
+	thumbs[3] = &pad->sThumbRY;
+	for (index = 0; index < 4; index += 2)
+	{
+		long pushed = (long)vr_pad.thumb[index] * vr_pad.thumb[index] +
+			(long)vr_pad.thumb[index + 1] * vr_pad.thumb[index + 1];
+
+		if (pushed > (long)*thumbs[index] * *thumbs[index] + (long)*thumbs[index + 1] * *thumbs[index + 1])
+		{
+			*thumbs[index] = vr_pad.thumb[index];
+			*thumbs[index + 1] = vr_pad.thumb[index + 1];
+		}
+	}
+}
+#endif
+
 static void sdl_gamepad_state(SDL_Gamepad *gamepad, XINPUT_GAMEPAD *pad)
 {
 	static const struct
@@ -1292,6 +1334,9 @@ DWORD WINAPI XInputGetState(HANDLE device, PXINPUT_STATE state)
 			sdl_gamepad_state(gamepads[0], &state->Gamepad);
 		test_input_gamepad(&state->Gamepad);
 		touch_input_gamepad(&state->Gamepad);
+#ifndef HALO_GLES
+		vr_gamepad(&state->Gamepad, input.menus);
+#endif
 #if defined(HALO_ANDROID) || defined(HALO_WEB)
 		touch_input_controls(&state->Gamepad, input.menus);
 #endif
@@ -1337,6 +1382,10 @@ DWORD WINAPI XInputSetState(HANDLE device, PXINPUT_FEEDBACK feedback)
 	it can) */
 	if (port == 0)
 		touch_input_rumble(feedback->Rumble.wLeftMotorSpeed, feedback->Rumble.wRightMotorSpeed);
+#else
+	/* (and the headset's controllers, for the first's) */
+	if (port == 0 && vr_active())
+		vr_input_rumble(feedback->Rumble.wLeftMotorSpeed / 65535.0f, feedback->Rumble.wRightMotorSpeed / 65535.0f);
 #endif
 	count = sdl_gamepads(gamepads);
 	if (port_gamepad(gamepads, count, port))

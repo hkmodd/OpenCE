@@ -145,6 +145,7 @@ symbols in this file:
 #include "text/font_group.h"
 #include "text/text_group.h"
 #include "text/unicode.h"
+#include "halo_vr.h" /* port: port/linux/game/vr_view.c */
 #include "network_coop.h" /* port: port/linux/game/network_coop.c */
 
 #include <stddef.h>
@@ -542,6 +543,9 @@ static void render_state_bitmap(
 	the map's own picture of it is looked for, which a Custom Edition map's
 	message icons (13 sequences to the Xbox's 24) may not have, so that the
 	button was not drawn */
+	/* port: in a headset the prompt names the controller's button that
+	presses that one */
+	icon = vr_render_prompt_icon(icon);
 	if (hud_hires_button_draw(icon, cursor_bounds, color))
 		return;
 	if (icon->frame_rate)

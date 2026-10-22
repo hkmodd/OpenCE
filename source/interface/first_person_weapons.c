@@ -125,6 +125,7 @@ symbols in this file:
 #include "sound/sound_manager.h"
 #include "units/units.h"
 #include "view_fov.h" /* port: port/linux/game/view_fov.c */
+#include "halo_vr.h" /* port: port/linux/game/vr_view.c */
 #include "shaders/shader_definitions.h" /* port: (the shield's flare on the arms) */
 #include "shaders/shaders.h"
 /* port: port/linux/game/shield_color.c */
@@ -657,8 +658,10 @@ void first_person_weapon_render_update(
 		if (first_person_weapon->unit_index!=NONE &&
 			first_person_weapon->weapon_index!=NONE)
 		{
+			/* port: in the headset a zoomed weapon stays in the hand, its zoom
+			in the scope held on it */
 			boolean visible= director_get_perspective(render.local_player_index)==_director_perspective_first_person &&
-				player_control_get_zoom_level(render.local_player_index)==NONE;
+				(player_control_get_zoom_level(render.local_player_index)==NONE || vr_render_zoom_hidden());
 
 			first_person_weapon_set_visibility(render.local_player_index, visible);
 			if (first_person_weapon->visible)
@@ -687,6 +690,19 @@ short first_person_weapon_get_marker_by_name_render(
 	}
 
 	return 0;
+}
+
+/* port: idle, and neither readied, fired, reloaded, thrown nor posed: the
+headset learns where its barrel points as it is held (port/linux/game/vr_view.c) */
+boolean first_person_weapon_idle(
+	short local_player_index)
+{
+	struct first_person_weapon *first_person_weapon= first_person_weapon_get(local_player_index);
+
+	return first_person_weapon->visible &&
+		first_person_weapon->state==_first_person_weapon_state_idle &&
+		first_person_weapon->interpolation_frame_count==0 &&
+		first_person_weapon->firing_push_back==0.0f;
 }
 
 void first_person_weapon_center_flashlight(
@@ -1897,6 +1913,12 @@ static void first_person_weapon_update(
 		{
 			moving= FALSE;
 		}
+		/* port: a weapon in a headset's hand does not bob as the player
+		walks: the hand holds it */
+		if (vr_render_hand_holds(first_person_weapon->unit_index))
+		{
+			moving= FALSE;
+		}
 
 		if (first_person_weapon->moving_animation.index!=NONE)
 		{
@@ -2034,6 +2056,15 @@ static void first_person_weapon_update(
 				1.0f,
 				FALSE);
 		}
+		/* port: nor sways as the player moves or turns (the hand turns
+		the player) */
+		if (vr_render_hand_holds(first_person_weapon->unit_index))
+		{
+			first_person_weapon->position.i= first_person_weapon->position.j= 0.0f;
+			first_person_weapon->position_velocity.i= first_person_weapon->position_velocity.j= 0.0f;
+			first_person_weapon->turning.i= first_person_weapon->turning.j= 0.0f;
+			first_person_weapon->turning_velocity.i= first_person_weapon->turning_velocity.j= 0.0f;
+		}
 
 		accelerate_to_position(
 			&first_person_weapon->firing_push_back,
@@ -2059,7 +2090,9 @@ static void first_person_weapon_update(
 			}
 		}
 
-		if (player_control_get_autoaim_level(local_player_index)!=0.0f ||
+		/* port: nor is posed (turned about in the hand) */
+		if (vr_render_hand_holds(first_person_weapon->unit_index) ||
+			player_control_get_autoaim_level(local_player_index)!=0.0f ||
 			player_control_get_zoom_level(local_player_index)!=NONE ||
 			first_person_weapon->firing_push_back!=0.0f ||
 			first_person_weapon->position.i!=0.0f ||

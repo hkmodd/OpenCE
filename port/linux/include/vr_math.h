@@ -29,11 +29,16 @@ struct vr_fov
 void vr_rotate(const float q[4], const float v[3], float out[3]);
 /* a turned by b (b first, then a) */
 void vr_quaternion_multiply(const float a[4], const float b[4], float out[4]);
+/* the shortest turn from one direction to another (each of length 1); half
+a turn about an axis across `from` when they are opposite */
+void vr_quaternion_between(const float from[3], const float to[3], float out[4]);
 
 /* a LOCAL direction or offset in the game's axes (+x forward, +y left, +z
 up) for a viewer whose heading is `yaw` (radians, growing to the left from
 the world's +x) */
 void vr_local_to_world(const float local[3], float yaw, float out[3]);
+/* the inverse: a direction or offset in the game's axes as a LOCAL one */
+void vr_world_to_local(const float world[3], float yaw, float out[3]);
 
 /* where a pose looks from in the game's world: `anchor` (world units) moved
 by the pose's offset from `origin` (LOCAL metres), and its forward and up,

@@ -451,6 +451,11 @@ the setting for one start of the game. It has priority over the file.
 | `vr.hud_width` | `10.0` | `HALO_VR_HUD_WIDTH` | With `display.vr`, the HUD panel's width in metres, from `0.2` to `100`. |
 | `vr.screen_distance` | `2.0` | `HALO_VR_SCREEN_DISTANCE` | With `display.vr`, how far the panel of the menus, loading screens and cinematics is, in metres, from `0.5` to `100`, before where the headset faced when the runtime last recentred it. |
 | `vr.screen_width` | `2.4` | `HALO_VR_SCREEN_WIDTH` | With `display.vr`, that panel's width in metres, from `0.2` to `100`. |
+| `vr.aim` | `"hand"` | `HALO_VR_AIM` | With `display.vr`, what aims on foot: `"hand"`, the aiming controller (the weapon held in it, the crosshair where its shot lands), or `"head"`. In a vehicle's seat the head aims. |
+| `vr.left_handed` | `false` | `HALO_VR_LEFT_HANDED` | With `display.vr`, the left controller aims and fires and the right moves: the controllers' buttons swap hands. |
+| `vr.snap_turn` | `30.0` | `HALO_VR_SNAP_TURN` | With `display.vr`, how far a push of the aiming hand's stick turns, in degrees; `0` turns smoothly instead. |
+| `vr.smooth_turn_speed` | `120.0` | `HALO_VR_SMOOTH_TURN_SPEED` | With `vr.snap_turn` `0`, the stick's turn at full push, in degrees a second. |
+| `vr.gestures` | `true` | `HALO_VR_GESTURES` | With `display.vr`, a punch is a melee attack, the other hand's grip at the head is the flashlight (`false`: the grip alone) and lowering the head crouches. |
 | `audio.enabled` | `true` | `HALO_NO_AUDIO=1` sets `false` | `false`: no audio device. The sound continues without output. |
 | `audio.volume` | `1.0` | `HALO_VOLUME` | The master volume. |
 | `audio.music_volume` | `1.0` | `HALO_MUSIC_VOLUME` | The music's volume, of the master volume. |
@@ -522,6 +527,10 @@ the setting for one start of the game. It has priority over the file.
 | `debug.fixed_step` | `false` | `HALO_FIXED_STEP` | `true`: a game of this computer alone runs one tick a frame, whatever time has passed, so that it plays the same every time (tests). |
 | `debug.exit_after` | `0.0` | `HALO_EXIT_AFTER` | The game stops after this number of seconds (from when its window opens; with `debug.null_renderer`, or no display, from its first frame). `0`: never. |
 | `debug.screenshot_directory`, `debug.screenshot_every` | `""`, `0` | `HALO_SCREENSHOT_DIR`, `HALO_SCREENSHOT_EVERY` | The game writes each Nth frame to this folder as a BMP file. |
+| `debug.vr_simulate` | `false` | `HALO_VR_SIMULATE` | With `display.vr`, a headset of the game's own in place of the runtime: a Rift's eyes, frames at once, two hands held before it. For tests. |
+| `debug.vr_simulate_yaw`, `_pitch`, `_roll` | `0.0` | `HALO_VR_SIMULATE_YAW`, `_PITCH`, `_ROLL` | The simulated head's turn, in degrees (left, up, to the left). |
+| `debug.vr_simulate_input` | `""` | `HALO_VR_SIMULATE_INPUT` | What the simulated controllers do: `FIRST[-LAST]:HAND.CONTROL[=VALUES]` items separated by spaces or semicolons (frames from 1; `left` or `right`; `trigger`, `grip`, `stick=X,Y`, `click`, `lower`, `upper`, `menu`, `aim=YAW,PITCH` in degrees, `at=X,Y,Z` in metres). |
+| `debug.vr_dump_frame`, `debug.vr_dump_every` | `0`, `0` | `HALO_VR_DUMP_FRAME`, `HALO_VR_DUMP_EVERY` | Write the headset's images of that stereo frame (and every Nth after it) to `debug.screenshot_directory`, as `vr-<image>-<frame>.bmp`: the eyes, the HUD's panel, the flat screen. |
 | `debug.hidden_window`, `debug.null_renderer` | `false` | `HALO_HIDDEN_WINDOW`, `HALO_NULL_RENDERER` | `true`: no visible window, or no graphics. |
 | `debug.gpu_stats`, `debug.gpu_trace_frame`, `debug.gpu_trace_constants`, `debug.gpu_dump_shaders`, `debug.texture_dump_directory`, `debug.texture_log`, `debug.gl_debug`, `debug.texture_no_cache` | off | `HALO_GPU_STATS`, `HALO_GPU_TRACE`, `HALO_GPU_TRACE_CONSTANTS`, `HALO_GPU_DUMP_SHADERS`, `HALO_TEXTURE_DUMP`, `HALO_TEXTURE_LOG`, `HALO_GL_DEBUG`, `HALO_TEXTURE_NO_CACHE` | Tools to find problems in the graphics: counts for each frame, all the GL state of one frame, the GLSL code, the textures. |
 | `debug.menu_open` | `""` | `HALO_MENU_OPEN` | Start on this screen of the menus (`main_menu/settings_select/...`, as `port/assets/menus` names it), a player profile being edited, to look at it. |
@@ -674,16 +683,46 @@ screen, with the cause in the log.
   the runtime gives them for the moment the frame is shown: the head turns,
   tilts and moves the view, and the distance between the eyes is the
   headset's.
-- The head aims: where it looks is where the player looks and shoots. The
-  mouse, the gamepad's stick and the game's own turns (a respawn, a script)
-  turn the world around the player, as a turn of the body. Aim assist is
-  off.
+- The aiming controller aims (`vr.aim`): the weapon is held in it and shots
+  go where it points, starting at the weapon (from the eye, as always,
+  when other machines are in the game). A reticle is held where the shot
+  lands, red when the game's crosshair would be; the HUD draws no
+  crosshair. A zoomed weapon shows its zoom in a scope held on it, not in
+  the eyes. In a vehicle's seat, and with `vr.aim = "head"`, the head
+  aims. The off stick
+  moves where the head faces. The aiming stick turns (`vr.snap_turn`), and
+  the mouse, the gamepad's stick and the game's own turns (a respawn, a
+  script) turn the world around the player, as a turn of the body. Aim
+  assist is off.
+- The controllers (Touch, Index, Vive, Windows Mixed Reality, or any the
+  runtime maps to a simple controller), for the right-handed
+  (`vr.left_handed` swaps the hands):
+
+  | Right hand | | Left hand | |
+  | --- | --- | --- | --- |
+  | trigger | fire | trigger | grenade |
+  | A | jump | X | switch grenades |
+  | B | action, reload | Y | switch weapons |
+  | grip | melee (or a punch) | grip at the head | flashlight |
+  | stick | turn | stick | move |
+  | stick click | zoom | stick click | crouch (or lower the head) |
+  | | | menu | pause; held a second, the scores |
+
+  They press the gamepad's buttons for those actions in the standard
+  preset, so a player's own preset applies to them too. Index's A and B, and
+  Vive's and Windows Mixed Reality's trackpads, stand in for the face
+  buttons. The game's rumble is felt in the hands. In the menus either
+  hand's lower button is A and its upper B, either stick moves about them,
+  and a hand points at the panel and its trigger clicks: the hand whose
+  trigger was pressed last points.
 - The head can move the view up to 35 cm from the game's camera, and not
   through a wall.
 - The HUD is drawn on a panel held before the head (`vr.hud_distance`,
   `vr.hud_width`), which the runtime keeps there as the head moves.
-- The menus, loading screens and cinematics are drawn flat, on a panel in
-  the room (`vr.screen_distance`, `vr.screen_width`).
+- The menus are on a panel in the room (`vr.screen_distance`,
+  `vr.screen_width`): the main menu's over its scene, seen in the headset;
+  the pause menu over the game, where the head faced as it came up. The
+  loading screens and cinematics are drawn flat, on that panel.
 - The window shows the left eye, or that panel's picture.
 - The game draws a frame for each of the headset's, at the time the runtime
   gives, and blends the game's 30 ticks a second for each, as SMOOTH
@@ -1500,7 +1539,10 @@ Other changes:
 | `interface/first_person_weapons.c` | The first-person hands are drawn with the unit's shield modifier shader, as its body is (`display.viewmodel_shield`). |
 | `render/render_objects.c`, `objects/objects.c` | In first person, your own body is drawn from the waist down with the pose `first_person_legs.c` makes (`display.first_person_legs`); the waist it found and the mesh `object_mesh.c` read are forgotten on a new map. |
 | `objects/object_lights.c` | Glows the port lights itself (`shield_glow.c`): dynamic lights attached to an object's node, colored and sized each frame by their maker, drawn with a light definition the map has. |
-| `main/main.c`, `render/render.c`, `render/render_sky.c`, `effects/weather_particle_systems.c`, `objects/widgets/glow.c`, `game/player_control.c` | In a headset (`display.vr`, `game/vr_view.c`): a frame waits for the headset's and takes its time from it; the player's window is drawn as two eyes and a HUD, each with its own frustum; the HUD is drawn alone, the eyes without it; the sky's animation, the weather and the glows move on once a frame, not once for each eye; the head sets the player's facing, without aim assist. |
+| `main/main.c`, `render/render.c`, `render/render_sky.c`, `effects/weather_particle_systems.c`, `objects/widgets/glow.c`, `game/player_control.c` | In a headset (`display.vr`, `game/vr_view.c`): a frame waits for the headset's and takes its time from it; the player's window is drawn as two eyes and a HUD, each with its own frustum; the HUD is drawn alone, the eyes without it; the sky's animation, the weather and the glows move on once a frame, not once for each eye; the head or the aiming controller sets the player's facing, without aim assist. |
+| `units/units.c`, `items/weapons.c`, `game/aim_assist.c` | In a headset, with no other machine in the game, the shot of a player whose controller aims starts at the muzzle of the weapon in the hand and goes along the aim: not from the eye, nor turned to where the eye's ray meets the world (`game/vr_view.c`). |
+| `interface/first_person_weapons.c` | In a headset, the weapon in the aiming controller stays as the hand holds it: no walking bob, sway or idle posing, and zoomed it stays in the hand (the zoom is in a scope on it); whether it is idle, when its barrel's place is read (`game/vr_view.c`). |
+| `interface/hud_messaging.c`, `interface/hud_weapon.c` | In a headset, the prompts show the controllers' buttons, and with a scope on the weapon in the hand the HUD leaves out the zoomed view's crosshair, mask and meters (`game/vr_view.c`). |
 | `render/render_objects.c`, `interface/first_person_weapons.c`, `rasterizer/xbox/rasterizer_xbox_plasma_energy.c`, `items/projectiles.c` | An overshield as `overshield_effect.c` draws it (`display.overshield_effect`): in its own color, its intensity full, its energy slower, faded above the height it has risen to; a hit on it plays the projectile's effect for an Elite's energy shield in place of its own (only the effect: the projectile's response is its own). |
 | `render/render_objects.c`, `interface/first_person_weapons.c`, `rasterizer/xbox/rasterizer_xbox_plasma_energy.c` | A local player's shield plasma is drawn in the chosen armor color (`display.shield_color`, `shield_color.c`), on the body and on the first-person arms. |
 | `rasterizer/xbox/rasterizer_xbox_text.c`, `rasterizer/rasterizer_text.c` | The characters of a string are one draw, not a draw each (and a second for the drop shadow). The batch is drawn early before a character is cached and before the high-res glyph atlas starts over (`src/text_hires.c`). |

@@ -212,6 +212,13 @@ int main(int argc, char **argv)
     }
     CASE("helpers") {
         float a[4] = {0.1f, 0.3f, -0.2f, 0.9273618f}, b[4] = {-0.3f, 0.2f, 0.4f, 0.8426150f}, ab[4];
+        float local[3] = {0.3f, -0.2f, -1.5f}, world[3], back[3];
+        vr_local_to_world(local, 0.7f, world);
+        vr_world_to_local(world, 0.7f, back);
+        CHECK(same3(back, local[0], local[1], local[2]), "the world's axes back to LOCAL's (%f %f %f)", (double)back[0],
+            (double)back[1], (double)back[2]);
+        vr_world_to_local((float[3]){0, 1, 0}, 1.5707963f, back);
+        CHECK(same3(back, 0, 0, -1), "a quarter turn left, the world's +y is ahead");
         float v[3] = {0.3f, -0.5f, 0.8f}, step[3], once[3], twice[3];
         float offset[3] = {3, 0, 4}, small[3] = {0.1f, 0, 0};
         float wide[4], left[4] = {-1, 0.5f, -0.8f, 0.9f}, right[4] = {-0.6f, 1.1f, -0.9f, 0.7f};
@@ -236,6 +243,38 @@ int main(int argc, char **argv)
         CHECK(vr_finite(v, 3) && !vr_finite(bad, 3), "infinity is not finite");
         bad[2] = NAN;
         CHECK(!vr_finite(bad, 3), "nor is not a number");
+    }
+    CASE("between") {
+        float from[3] = {0.36f, 0.48f, -0.8f}, to[3] = {0, 0, -1}, turn[4], turned[3];
+        float pairs[][2][3] = {
+            {{0.36f, 0.48f, -0.8f}, {0, 0, -1}},
+            {{0, 0, -1}, {0.6f, 0, -0.8f}},
+            {{1, 0, 0}, {0, 1, 0}},
+            {{0, 0, -1}, {0, 0, 1}},
+            {{1, 0, 0}, {-1, 0, 0}},
+            {{0.6f, 0.8f, 0}, {-0.6f, -0.8f, 0}},
+        };
+        size_t index;
+        for (index = 0; index < sizeof(pairs) / sizeof(pairs[0]); index++) {
+            vr_quaternion_between(pairs[index][0], pairs[index][1], turn);
+            vr_rotate(turn, pairs[index][0], turned);
+            CHECK(same3(turned, pairs[index][1][0], pairs[index][1][1], pairs[index][1][2]),
+                "pair %d: turned onto the other (%f %f %f)", (int)index, (double)turned[0], (double)turned[1],
+                (double)turned[2]);
+            CHECK(close_to(turn[0] * turn[0] + turn[1] * turn[1] + turn[2] * turn[2] + turn[3] * turn[3], 1, 1e-5f),
+                "pair %d: of length 1", (int)index);
+        }
+        /* the shortest turn: about the axis across both, so a direction
+        across them both is kept */
+        vr_quaternion_between(from, to, turn);
+        {
+            float across[3] = {from[1] * to[2] - from[2] * to[1], from[2] * to[0] - from[0] * to[2],
+                from[0] * to[1] - from[1] * to[0]}, kept[3];
+            vr_rotate(turn, across, kept);
+            CHECK(same3(kept, across[0], across[1], across[2]), "the axis across both is kept");
+        }
+        vr_quaternion_between(to, to, turn);
+        CHECK(close_to(turn[3], 1, 1e-6f), "no turn from a direction to itself");
     }
     return 0;
 }

@@ -26,7 +26,7 @@ Conventions carried over from the Xbox:
 #include "halo_ui_pointer.h"
 #include "port_config.h"
 #include "main/console.h"
-#include "halo_vr.h"
+#include "vr_input.h"
 
 #include <SDL3/SDL.h>
 
@@ -2291,6 +2291,32 @@ int halo_scoreboard_pointer_update(int offered, struct halo_ui_pointer *pointer)
 }
 #endif
 
+#ifndef HALO_GLES
+/* a headset's controller pointing at the panel the menus are on, in place
+of the mouse (vr_input.c): where it points, and its trigger's clicks there */
+static void ui_point_from_headset(struct halo_ui_pointer *pointer)
+{
+	static short last_x = -1, last_y = -1;
+	struct render_target_entry *back_buffer = render_target_get(&device.back_buffer);
+	float u, v;
+	int clicks;
+
+	if (!vr_active() || !back_buffer || !vr_input_pointer(&u, &v, &clicks))
+		return;
+	pointer->x = (short)floorf(u * back_buffer->target.width - (float)(halo_screen_width() - 640) / 2.0f);
+	pointer->y = (short)floorf(v * back_buffer->target.height);
+	pointer->moved = pointer->x != last_x || pointer->y != last_y;
+	last_x = pointer->x;
+	last_y = pointer->y;
+	pointer->click_x = pointer->x;
+	pointer->click_y = pointer->y;
+	pointer->left_clicks = (unsigned char)(clicks < 255 ? clicks : 255);
+	pointer->right_clicks = 0;
+	pointer->wheel_steps = 0;
+	pointer->touch = 0;
+}
+#endif
+
 int halo_ui_pointer_update(int menus_active, struct halo_ui_pointer *pointer)
 {
 	struct platform_ui_pointer state;
@@ -2309,6 +2335,9 @@ int halo_ui_pointer_update(int menus_active, struct halo_ui_pointer *pointer)
 	pointer->touch = state.touch != FALSE;
 	pointer->downs = (unsigned char)(state.downs < 255 ? state.downs : 255);
 	ui_point_from_window(state.down_x, state.down_y, &pointer->down_x, &pointer->down_y);
+#ifndef HALO_GLES
+	ui_point_from_headset(pointer);
+#endif
 	return 1;
 }
 
@@ -6776,6 +6805,28 @@ void halo_vr_resolve_eye(int eye)
 	render_target_resolve(&back_buffer->target);
 	vr_resolve_eye(eye, back_buffer->target.texture, (int)back_buffer->target.gl_width,
 		(int)back_buffer->target.gl_height);
+	xgpu_gl_state_invalidate();
+}
+
+/* the scope's window has ended: its rectangle of the back buffer (in the
+screen's coordinates) into the scope's image */
+void halo_vr_resolve_scope(short x0, short y0, short x1, short y1)
+{
+	struct render_target_entry *back_buffer;
+	float scale_x, scale_y;
+
+	if (!device.gl_ready || !(back_buffer = render_target_get(&device.back_buffer)) ||
+		back_buffer->target.width <= 0 || back_buffer->target.height <= 0)
+	{
+		return;
+	}
+	draw_flush();
+	render_target_resolve(&back_buffer->target);
+	scale_x = (float)back_buffer->target.gl_width / (float)back_buffer->target.width;
+	scale_y = (float)back_buffer->target.gl_height / (float)back_buffer->target.height;
+	vr_resolve_scope(back_buffer->target.texture, (int)back_buffer->target.gl_width,
+		(int)back_buffer->target.gl_height, (int)(x0 * scale_x + 0.5f), (int)(y0 * scale_y + 0.5f),
+		(int)(x1 * scale_x + 0.5f), (int)(y1 * scale_y + 0.5f));
 	xgpu_gl_state_invalidate();
 }
 #endif

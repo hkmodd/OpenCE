@@ -77,6 +77,7 @@ symbols in this file:
 #include "tag_files/tag_groups.h"
 #include "units/unit_definitions.h"
 #include "units/units.h"
+#include "halo_vr.h" /* port: port/linux/game/vr_view.c */
 
 #include <math.h>
 #include <string.h>
@@ -787,7 +788,10 @@ static void hud_update_weapon_local_player(
 					break;
 
 				case _crosshair_state_zoom:
-					result = player_control_get_zoom_level(player->local_player_index) != NONE ?
+					/* port: (a headset's scope shows the zoom: the HUD's
+					crosshairs stay unzoomed, port/linux/game/vr_view.c) */
+					result = player_control_get_zoom_level(player->local_player_index) != NONE &&
+						!vr_render_zoom_hidden() ?
 						player_control_get_zoom_level(player->local_player_index) + 2 :
 						1;
 					break;
@@ -1758,6 +1762,10 @@ static void render_weapon_hud(
 			rectangle2d window_bounds;
 			boolean zoomed_layout = hud_multitexture_overlays_follow_zoom(&element->static_element.multitexture_overlays);
 
+			/* port: in a headset's scope the zoomed view's elements are not
+			the HUD's (port/linux/game/vr_view.c) */
+			if (zoomed_layout && vr_render_zoom_hidden())
+				continue;
 			if (zoomed_layout)
 				hud_zoomed_layout_begin(&window_bounds);
 			state_index = element->header.state_type;
@@ -1789,6 +1797,10 @@ static void render_weapon_hud(
 			rectangle2d window_bounds;
 			boolean zoomed_layout = hud_multitexture_overlays_follow_zoom(&element->meter_element.multitexture_overlays);
 
+			/* port: in a headset's scope the zoomed view's elements are not
+			the HUD's (port/linux/game/vr_view.c) */
+			if (zoomed_layout && vr_render_zoom_hidden())
+				continue;
 			if (zoomed_layout)
 				hud_zoomed_layout_begin(&window_bounds);
 
@@ -1827,6 +1839,10 @@ static void render_weapon_hud(
 			rectangle2d window_bounds;
 			boolean zoomed_layout = hud_number_shows_only_when_zoomed(&element->number_element);
 
+			/* port: in a headset's scope the zoomed view's elements are not
+			the HUD's (port/linux/game/vr_view.c) */
+			if (zoomed_layout && vr_render_zoom_hidden())
+				continue;
 			if (TEST_FLAG(
 				element->weapon_flags,
 				_weapon_number_divide_by_clip_size_bit))

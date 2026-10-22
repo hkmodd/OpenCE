@@ -43,6 +43,43 @@ void vr_quaternion_multiply(const float a[4], const float b[4], float out[4])
 	out[3] = w;
 }
 
+void vr_quaternion_between(const float from[3], const float to[3], float out[4])
+{
+	float w = 1.0f + from[0] * to[0] + from[1] * to[1] + from[2] * to[2];
+	float length;
+
+	if (w < 1e-6f)
+	{
+		/* (opposite: about x crossed with `from`, or y when `from` is
+		along x) */
+		w = 0.0f;
+		if (from[0] * from[0] < 0.9f)
+		{
+			out[0] = 0.0f;
+			out[1] = -from[2];
+			out[2] = from[1];
+		}
+		else
+		{
+			out[0] = from[2];
+			out[1] = 0.0f;
+			out[2] = -from[0];
+		}
+	}
+	else
+	{
+		out[0] = from[1] * to[2] - from[2] * to[1];
+		out[1] = from[2] * to[0] - from[0] * to[2];
+		out[2] = from[0] * to[1] - from[1] * to[0];
+	}
+	out[3] = w;
+	length = (float)sqrt(out[0] * out[0] + out[1] * out[1] + out[2] * out[2] + w * w);
+	out[0] /= length;
+	out[1] /= length;
+	out[2] /= length;
+	out[3] /= length;
+}
+
 void vr_local_to_world(const float local[3], float yaw, float out[3])
 {
 	float forward = -local[2], left = -local[0], up = local[1];
@@ -51,6 +88,16 @@ void vr_local_to_world(const float local[3], float yaw, float out[3])
 	out[0] = forward * cosine - left * sine;
 	out[1] = forward * sine + left * cosine;
 	out[2] = up;
+}
+
+void vr_world_to_local(const float world[3], float yaw, float out[3])
+{
+	float cosine = (float)cos(yaw), sine = (float)sin(yaw);
+	float forward = world[0] * cosine + world[1] * sine, left = world[1] * cosine - world[0] * sine;
+
+	out[0] = -left;
+	out[1] = world[2];
+	out[2] = -forward;
 }
 
 void vr_pose_view(const struct vr_pose *pose, const float origin[3], const float anchor[3], float yaw,

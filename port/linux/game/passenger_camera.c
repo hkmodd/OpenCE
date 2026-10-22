@@ -5,10 +5,14 @@ An optional local view for the Warthog's passenger and the Scorpion's four
 passengers. The reference seat supplies the camera track and pivot only;
 the passenger keeps their own aim and its limits. No seat tags are changed,
 and the deterministic camera used for shooting keeps its original view.
+
+In a headset, while a hand aims, the HUD draws no crosshair: a reticle is
+held in the world where the hand's shot lands (vr_view.c).
 */
 
 #include "cseries.h"
 #include "passenger_camera.h"
+#include "halo_vr.h"
 #include "camera/director.h"
 #include "cutscene/cinematics.h"
 #include "game/game_engine.h"
@@ -142,6 +146,8 @@ boolean passenger_camera_reticle_begin(short local_player_index, long weapon_ind
 	struct collision_result collision;
 
 	reticle_active = FALSE;
+	if (vr_render_hand_aiming())
+		return FALSE;
 	if (!passenger_camera_enabled(local_player_index) ||
 		director_get_perspective(local_player_index) != _director_perspective_third_person)
 		return TRUE;
