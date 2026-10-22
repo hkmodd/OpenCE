@@ -452,6 +452,7 @@ the setting for one start of the game. It has priority over the file.
 | `vr.screen_distance` | `2.0` | `HALO_VR_SCREEN_DISTANCE` | With `display.vr`, how far the panel of the menus, loading screens and cinematics is, in metres, from `0.5` to `100`, before where the headset faced when the runtime last recentred it. |
 | `vr.screen_width` | `2.4` | `HALO_VR_SCREEN_WIDTH` | With `display.vr`, that panel's width in metres, from `0.2` to `100`. |
 | `vr.aim` | `"hand"` | `HALO_VR_AIM` | With `display.vr`, what aims on foot: `"hand"`, the aiming controller (the weapon held in it, the crosshair where its shot lands), or `"head"`. In a vehicle's seat, `vr.vehicle_aim`. |
+| `vr.roomscale` | `true` | `HALO_VR_ROOMSCALE` | With `display.vr`, the room is the player's: on foot the player walks after the head as the person steps (the off stick still), and in the menus and cinematics the head goes anywhere in the room; `false`, the view leans up to 35 cm from the game's camera. |
 | `vr.cinematics` | `"immersive"` | `HALO_VR_CINEMATICS` | With `display.vr`, the cinematics: `"immersive"`, around the head (each shot ahead of where it faces as the shot begins, a blink at a cut, no letterbox), or `"screen"`, on a screen ahead. |
 | `vr.vehicle_aim` | `"stick"` | `HALO_VR_VEHICLE_AIM` | With `display.vr`, what turns and aims in a vehicle's seat: `"stick"`, the aiming controller's stick as a gamepad's right stick, the head looking around freely (the crosshair where the shot lands), or `"head"`. |
 | `vr.left_handed` | `false` | `HALO_VR_LEFT_HANDED` | With `display.vr`, the left controller aims and fires and the right moves: the controllers' buttons swap hands, and the weapon, mirrored, is held in the left. |
@@ -723,8 +724,10 @@ screen, with the cause in the log.
   hand's lower button is A and its upper B, either stick moves about them,
   and a hand points at the panel and its trigger clicks: the hand whose
   trigger was pressed last points.
-- The head can move the view up to 35 cm from the game's camera, and not
-  through a wall.
+- The room is the player's (`vr.roomscale`): stepping in the room walks
+  the player there (while the off stick is still), and in the menus,
+  cinematics and while dead the head goes anywhere; in a seat it leans up
+  to 35 cm. The view never goes through a wall.
 - The HUD is drawn on a panel held before the head (`vr.hud_distance`,
   `vr.hud_width`), which the runtime keeps there as the head moves.
 - The menus are on a panel in the room (`vr.screen_distance`,

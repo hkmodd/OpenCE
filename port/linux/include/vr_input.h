@@ -113,6 +113,11 @@ struct vr_input_settings
 	/* in a seat (vr.vehicle_aim "stick"): the main hand's stick is the
 	pad's right stick, not a turn */
 	int seat_stick;
+	/* room scale (vr.roomscale), on foot: how far the head has stepped from
+	where the body stands (LOCAL x and z, metres), which the body walks
+	after while the off stick is still */
+	int room;
+	float room_offset[2];
 };
 
 struct vr_input
@@ -153,6 +158,8 @@ struct vr_input
 	int pointer_hand;
 	int clicks;
 	int menus;
+	/* the body walks after the head this frame (room scale) */
+	int room_walking;
 };
 
 /* the pad of this frame's controllers; `menus` while a menu is up, and the
@@ -192,6 +199,8 @@ int vr_input_left_handed(void);
 /* vr_view.c: the turn the stick made this frame (radians to the left),
 taken */
 float vr_input_turn(void);
+/* vr_view.c: the body walked after the head this frame (room scale) */
+int vr_input_room_walking(void);
 /* vr_view.c: the head's yaw from the aiming hand's (radians to the left), 0
 while the head aims */
 void vr_input_aim_turn(float radians);

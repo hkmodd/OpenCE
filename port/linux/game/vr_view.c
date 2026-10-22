@@ -83,9 +83,20 @@ void halo_vr_resolve_eye(int eye);
 /* ... and a rectangle of it (the screen's coordinates) into the scope's */
 void halo_vr_resolve_scope(short x0, short y0, short x1, short y1);
 
-/* how far the head may lean the view from the game's camera, in metres,
-and how far short of a wall it stops (world units) */
+/* how far the head may lean the view from the game's camera, in metres
+(in a seat, or anywhere without room scale), and how far short of a wall
+it stops (world units) */
 #define VR_HEAD_REACH 0.35f
+/* room scale (vr_room_follow): how far the head may be from the body on
+foot (when the unit is held back, or walked by the stick), and anywhere
+else (the menus, a cinematic, dead: the room); a move of the game's camera
+larger than this in a frame (world units) is not a walk */
+#define VR_ROOM_REACH 0.6f
+#define VR_ROOM_ANYWHERE 10.0f
+#define VR_ROOM_JUMP 0.5f
+/* how long after a walk the unit still coasts (seconds), its moves the
+body's too */
+#define VR_ROOM_COAST 0.3f
 #define VR_WALL_MARGIN 0.04f
 
 /* a cinematic's cut: its camera moved further than this in a frame (world
@@ -126,6 +137,15 @@ struct vr_weapon_fit
 };
 
 int vr_render_pass;
+
+/* what the player is doing, for room scale */
+enum
+{
+	_vr_room_none,
+	_vr_room_on_foot,
+	_vr_room_seated,
+	_vr_room_cinematic
+};
 
 static struct
 {
@@ -168,6 +188,18 @@ static struct
 	boolean aim_with_hand;
 	boolean seat_aim_with_stick;
 	boolean immersive_cinematics;
+	boolean room_scale;
+
+	/* room scale: where the body stands in LOCAL space (x and z), what the
+	player is doing (VR_ROOM_*), whether the unit walks after the head this
+	frame, and the game's camera last drawn */
+	boolean room_valid;
+	short room_state;
+	float room_body[2];
+	boolean room;
+	boolean room_anchor_valid;
+	real_point3d room_anchor;
+	real room_coast;
 
 	/* in a cinematic: the head's yaw as its shot began, and its camera's
 	last place and yaw (to tell a cut) */
@@ -187,6 +219,7 @@ static void vr_settings_read(
 	vr_view.aim_with_hand = strcmp(config_string("vr.aim"), "head") != 0;
 	vr_view.seat_aim_with_stick = strcmp(config_string("vr.vehicle_aim"), "head") != 0;
 	vr_view.immersive_cinematics = strcmp(config_string("vr.cinematics"), "screen") != 0;
+	vr_view.room_scale = config_boolean("vr.roomscale");
 }
 
 /* the hand that aims: the main controller, tracked, with vr.aim "hand" and
@@ -338,6 +371,74 @@ static void vr_weapon_in_hand(
 
 /* ---------- the eyes */
 
+/* room scale (vr.roomscale): the body's place under the head, in LOCAL
+space. It is set under the head as the player starts a thing (stands up
+on foot, sits, a cinematic's shot begins, dies). On foot the unit walks
+after the head (vr_input.c), and while it does, its camera's moves carry
+the body along, so that the room stays still around the head; anywhere
+else the body stays. The head's reach from the body: a lean in a seat, a
+step on foot, the room elsewhere (without room scale, a lean from the
+room's centre) */
+static float vr_room_follow(
+	struct vr_frame const *frame,
+	short local_player_index,
+	real_point3d const *anchor,
+	real heading)
+{
+	long player_index = local_player_get_player_index(local_player_index);
+	long unit_index = player_index == NONE ? NONE : player_get(player_index)->unit_index;
+	struct unit_datum *unit = unit_index == NONE ? NULL : unit_try_and_get(unit_index);
+	short state = vr_view.cinematic ? _vr_room_cinematic : !unit ? _vr_room_none :
+		unit->object.parent_object_index != NONE ? _vr_room_seated : _vr_room_on_foot;
+	boolean walked;
+
+	/* (the unit walked, or coasts after a walk) */
+	if (vr_view.room && vr_input_room_walking())
+		vr_view.room_coast = VR_ROOM_COAST;
+	else
+		vr_view.room_coast -= frame->display_period > 0.0f ? frame->display_period : 1.0f / 90.0f;
+	walked = vr_view.room_coast > 0.0f;
+
+	vr_view.room = FALSE;
+	if (!vr_view.room_scale)
+	{
+		vr_view.room_body[0] = vr_view.room_body[1] = 0.0f;
+		vr_view.room_valid = FALSE;
+		vr_view.room_anchor_valid = FALSE;
+		return VR_HEAD_REACH;
+	}
+	if (!vr_view.room_valid || state != vr_view.room_state)
+	{
+		vr_view.room_body[0] = frame->head.position[0];
+		vr_view.room_body[1] = frame->head.position[2];
+		vr_view.room_valid = TRUE;
+		vr_view.room_state = state;
+		vr_view.room_coast = 0.0f;
+		walked = FALSE;
+	}
+	if (walked && vr_view.room_anchor_valid)
+	{
+		real_vector3d moved;
+		float world[3], local[3];
+
+		vector_from_points3d(&vr_view.room_anchor, anchor, &moved);
+		moved.k = 0.0f;
+		if (magnitude_squared3d(&moved) < VR_ROOM_JUMP * VR_ROOM_JUMP)
+		{
+			world[0] = (float)(moved.i / VR_UNITS_PER_METRE);
+			world[1] = (float)(moved.j / VR_UNITS_PER_METRE);
+			world[2] = 0.0f;
+			vr_world_to_local(world, heading, local);
+			vr_view.room_body[0] += local[0];
+			vr_view.room_body[1] += local[2];
+		}
+	}
+	vr_view.room_anchor = *anchor;
+	vr_view.room_anchor_valid = TRUE;
+	vr_view.room = state == _vr_room_on_foot;
+	return state == _vr_room_seated ? VR_HEAD_REACH : state == _vr_room_on_foot ? VR_ROOM_REACH : VR_ROOM_ANYWHERE;
+}
+
 /* a cinematic's heading: each shot is seen ahead of where the head faced
 as it began, and turns as its camera turns; at a cut (the camera moved or
 turned further than it does in a frame) the eyes blink (moistman42069's
@@ -357,6 +458,7 @@ static real vr_cinematic_heading(
 		vr_rotate(frame->head.orientation, local_forward, head);
 		vr_local_to_world(head, 0.0f, forward);
 		vr_view.cinematic_head_yaw = vr_yaw_of(forward, 0.0f);
+		vr_view.room_valid = FALSE;
 		vr_blink(VR_CUT_BLINK);
 	}
 	vr_view.cinematic = TRUE;
@@ -371,6 +473,7 @@ static void vr_head_offset(
 	struct vr_frame const *frame,
 	real_point3d const *anchor,
 	real heading,
+	float reach,
 	float offset[3])
 {
 	real_vector3d vector;
@@ -378,10 +481,10 @@ static void vr_head_offset(
 	struct collision_result collision;
 	real length;
 
-	offset[0] = frame->head.position[0];
+	offset[0] = frame->head.position[0] - vr_view.room_body[0];
 	offset[1] = frame->head.position[1];
-	offset[2] = frame->head.position[2];
-	vr_limit_reach(offset, VR_HEAD_REACH);
+	offset[2] = frame->head.position[2] - vr_view.room_body[1];
+	vr_limit_reach(offset, reach);
 	vr_local_to_world(offset, heading, world);
 	vector.i = world[0] * VR_UNITS_PER_METRE;
 	vector.j = world[1] * VR_UNITS_PER_METRE;
@@ -584,6 +687,7 @@ short vr_render_windows(
 		(cinematic_in_progress() && !vr_view.immersive_cinematics))
 	{
 		vr_view.cinematic = FALSE;
+		vr_view.room = FALSE;
 		return window_count;
 	}
 	player = windows[0];
@@ -604,7 +708,7 @@ short vr_render_windows(
 	}
 	aspect = (real)(player.render_camera.viewport_bounds.x1 - player.render_camera.viewport_bounds.x0) /
 		(real)(player.render_camera.viewport_bounds.y1 - player.render_camera.viewport_bounds.y0);
-	vr_head_offset(frame, &anchor, heading, head);
+	vr_head_offset(frame, &anchor, heading, vr_room_follow(frame, player.local_player_index, &anchor, heading), head);
 	for (eye = 0; eye < 2; eye++)
 	{
 		struct render_camera *camera = &windows[eye].rasterizer_camera;
@@ -961,6 +1065,18 @@ int vr_render_seat_stick(
 	return vr_view.seat_stick;
 }
 
+int vr_render_room(
+	float offset[2])
+{
+	struct vr_frame const *frame = vr_frame_get();
+
+	if (!vr_view.room)
+		return 0;
+	offset[0] = frame->head.position[0] - vr_view.room_body[0];
+	offset[1] = frame->head.position[2] - vr_view.room_body[1];
+	return 1;
+}
+
 int vr_render_hand_holds(
 	long unit_index)
 {
@@ -1050,6 +1166,9 @@ void vr_view_reset(
 	vr_view.weapon_in_hand = FALSE;
 	vr_view.seat_stick = FALSE;
 	vr_view.cinematic = FALSE;
+	vr_view.room = FALSE;
+	vr_view.room_valid = FALSE;
+	vr_view.room_anchor_valid = FALSE;
 	/* (a new map's weapon types are others) */
 	memset(vr_view.fits, 0, sizeof(vr_view.fits));
 	vr_view.next_fit = 0;

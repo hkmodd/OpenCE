@@ -268,6 +268,11 @@ static const struct config_setting config_settings[] =
 		"With display.vr, what aims on foot: \"hand\", the aiming controller\n"
 		"(the weapon held in it, the crosshair where its shot lands), or\n"
 		"\"head\". In a vehicle's seat, vr.vehicle_aim." },
+	{ "vr.roomscale", _config_boolean, "true", "HALO_VR_ROOMSCALE", _environment_value, _platform_desktop,
+		"With display.vr, the room is the player's: on foot the player walks\n"
+		"after the head as the person steps (the off stick still), and in the\n"
+		"menus and cinematics the head goes anywhere in the room; false, the\n"
+		"view leans up to 35 cm from the game's camera." },
 	{ "vr.cinematics", _config_string, "\"immersive\"", "HALO_VR_CINEMATICS", _environment_value,
 		_platform_desktop,
 		"With display.vr, the cinematics: \"immersive\", around the head (each\n"

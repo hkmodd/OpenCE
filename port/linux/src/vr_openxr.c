@@ -1355,11 +1355,14 @@ debug.vr_simulate_input has them do: a list of FIRST[-LAST]:HAND.CONTROL
 or FIRST[-LAST]:HAND.CONTROL=VALUES (the frames, counted from 1; HAND left
 or right; CONTROL trigger, grip, stick=X,Y, click, lower, upper, menu,
 aim=YAW,PITCH in degrees, at=X,Y,Z in LOCAL metres), separated by spaces or
-semicolons */
+semicolons; and head.at=X,Y,Z, the head's place (a hand not placed goes
+with it) */
 static void vr_simulate_hands(void)
 {
 	const char *at = config_string("debug.vr_simulate_input");
-	int hand;
+	struct vr_hand head;
+	int placed[VR_HAND_COUNT] = { 0, 0 };
+	int hand, axis;
 
 	for (hand = 0; hand < VR_HAND_COUNT; hand++)
 	{
@@ -1373,6 +1376,7 @@ static void vr_simulate_hands(void)
 		state->grip.orientation[3] = 1.0f;
 		state->aim = state->grip;
 	}
+	memset(&head, 0, sizeof(head));
 	while (at && *at)
 	{
 		long first, last;
@@ -1408,6 +1412,11 @@ static void vr_simulate_hands(void)
 		{
 			state = &vr.frame.hand[VR_HAND_RIGHT];
 			at += 6;
+		}
+		else if (!strncmp(at, "head.", 5))
+		{
+			state = &head;
+			at += 5;
 		}
 		else
 		{
@@ -1454,6 +1463,17 @@ static void vr_simulate_hands(void)
 		{
 			memcpy(state->grip.position, values, sizeof(values));
 			memcpy(state->aim.position, values, sizeof(values));
+			if (state != &head)
+				placed[state == &vr.frame.hand[VR_HAND_LEFT] ? VR_HAND_LEFT : VR_HAND_RIGHT] = 1;
+		}
+	}
+	memcpy(vr.frame.head.position, head.grip.position, sizeof(vr.frame.head.position));
+	for (hand = 0; hand < VR_HAND_COUNT; hand++)
+	{
+		for (axis = 0; axis < 3 && !placed[hand]; axis++)
+		{
+			vr.frame.hand[hand].grip.position[axis] += head.grip.position[axis];
+			vr.frame.hand[hand].aim.position[axis] += head.grip.position[axis];
 		}
 	}
 	for (hand = 0; hand < VR_HAND_COUNT; hand++)
@@ -1493,9 +1513,7 @@ static void vr_simulate_frame(void)
 	lean[3] = (float)cos(roll * 0.5f);
 	vr_quaternion_multiply(turn, tilt, both);
 	vr_quaternion_multiply(both, lean, vr.frame.head.orientation);
-	vr.frame.head.position[0] = 0.0f;
-	vr.frame.head.position[1] = 0.0f;
-	vr.frame.head.position[2] = 0.0f;
+	vr_simulate_hands();
 	for (eye = 0; eye < 2; eye++)
 	{
 		side[0] = eye ? VR_SIMULATED_IPD * 0.5f : -VR_SIMULATED_IPD * 0.5f;
@@ -1510,7 +1528,6 @@ static void vr_simulate_frame(void)
 	vr.frame.stereo = 1;
 	vr.frame_state.shouldRender = XR_TRUE;
 	vr.display_seconds = 1.0 / 90.0;
-	vr_simulate_hands();
 }
 
 /* ---------- images of the headset's frames (debug.vr_dump_frame) */

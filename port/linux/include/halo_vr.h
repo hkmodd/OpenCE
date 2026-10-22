@@ -181,6 +181,10 @@ int vr_render_reticle(void);
 /* in a seat with vr.vehicle_aim "stick": the main hand's stick is the
 pad's right stick, the head looks around freely (vr_input.c) */
 int vr_render_seat_stick(void);
+/* room scale (vr.roomscale), on foot: how far the head has stepped from
+where the body stands (LOCAL x and z), for the body to walk after it
+(vr_input.c); 0 elsewhere */
+int vr_render_room(float offset[2]);
 /* first_person_weapons.c: the unit's weapon is in the aiming hand: it
 neither bobs, sways nor is posed */
 int vr_render_hand_holds(long unit_index);
@@ -220,6 +224,7 @@ int vr_render_zoom_hidden(void);
 #define vr_render_aiming() 0
 #define vr_render_reticle() 0
 #define vr_render_seat_stick() 0
+#define vr_render_room(offset) 0
 #define vr_render_hand_holds(unit_index) 0
 #define vr_render_shot_origin(unit_index, origin) 0
 #define vr_render_shot_from_hand(unit_index) 0

@@ -10,14 +10,18 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from harness import CHECK_FAILED, build, mutated, read, run
 
-CASES = ["gameplay", "move", "menus", "menu-button", "turn", "seat", "gestures", "hands", "ray", "bindings", "swap"]
+CASES = ["gameplay", "move", "menus", "menu-button", "turn", "seat", "room", "gestures", "hands", "ray", "bindings",
+         "swap"]
 CONTROLS = {
     "left-handed-ignored": (("main_index = input->left_handed ? VR_HAND_LEFT : VR_HAND_RIGHT;",
                              "main_index = VR_HAND_RIGHT;"), "gameplay"),
     "grenade-on-fire": (("vr_bind_hand(pad, off_hand, settings->bindings[VR_ROLE_OFF],",
                          "vr_bind_hand(pad, main_hand, settings->bindings[VR_ROLE_OFF],"), "gameplay"),
-    "move-turned-back": (("off_hand->stick[0] * cosine - off_hand->stick[1] * sine",
-                          "off_hand->stick[0] * cosine + off_hand->stick[1] * sine"), "move"),
+    "move-turned-back": (("move[0] * cosine - move[1] * sine", "move[0] * cosine + move[1] * sine"), "move"),
+    "room-no-hysteresis": (("input->room_walking ? VR_ROOM_STOP : VR_ROOM_START", "VR_ROOM_START"), "room"),
+    "room-head-ignored": (("move[0] = (-room[0] * forward[2] + room[1] * forward[0]) * push;",
+                           "move[0] = room[0] * push * length;"), "room"),
+    "room-over-stick": (("move[0] * move[0] + move[1] * move[1] < VR_ROOM_STILL * VR_ROOM_STILL &&", ""), "room"),
     "clicks-on-any-hand": (("if (hand == input->pointer_hand)\n\t\t\t\t\tinput->clicks++;",
                             "if (1)\n\t\t\t\t\tinput->clicks++;"), "menus"),
     "short-press-at-once": (("if (input->menu_seconds > 0.0f && !input->menu_long)",

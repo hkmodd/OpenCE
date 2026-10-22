@@ -51,10 +51,20 @@ be served later with `XR_KHR_D3D11_enable` and `WGL_NV_DX_interop2`.
 - `main_game_render`'s player window becomes the left eye's, the right
   eye's and the HUD's windows (`port/linux/game/vr_view.c`). Each eye's
   camera is the game's camera as the game made it (in a vehicle, dead, in a
-  script), with the head put on it last: its offset, limited to a lean and
-  stopped short of walls, the eye's own offset and the head's orientation,
-  roll included. Its frustum is the eye's off-centre field, which
-  `render_camera_build_frustum` takes as it is.
+  script), with the head put on it last: its offset from where the body
+  stands in the room, stopped short of walls, the eye's own offset and the
+  head's orientation, roll included. Its frustum is the eye's off-centre
+  field, which `render_camera_build_frustum` takes as it is.
+- Room scale (`vr.roomscale`, `vr_room_follow`): the body's place in the
+  room is set under the head as the player stands up, sits, dies or a
+  cinematic's shot begins. On foot, with the off stick still, the unit
+  walks after the head (`vr_input.c` pushes the stick toward it, in the
+  head's axes, from 10 cm until 3 cm), and the game's camera's moves while
+  it walks and coasts carry the body along, so the room stays still around
+  the head: the unit's own physics keeps it out of walls and the network
+  sees only its input. The head reaches 60 cm from the body on foot (the
+  unit held back, or the stick moving it), 35 cm in a seat (a lean), and
+  anywhere in the menus, cinematics and while dead.
 - What moves once a frame (the sky's animation, weather, glows, the
   first-person weapon's pose) moves in the left eye only.
 - The HUD is drawn alone over a clear ground and shown on a quad layer held

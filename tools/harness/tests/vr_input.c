@@ -21,6 +21,8 @@ static struct vr_input_settings settings_of(int left_handed, float snap_angle, i
     settings.gestures = gestures;
     settings.move_turn = 0;
     settings.seat_stick = 0;
+    settings.room = 0;
+    settings.room_offset[0] = settings.room_offset[1] = 0;
     vr_input_bindings_parse("", settings.bindings);
     return settings;
 }
@@ -184,6 +186,54 @@ int main(int argc, char **argv)
         frame.hand[VR_HAND_LEFT].buttons = 0;
         vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
         CHECK(!(pad.buttons & (VR_PAD_START | VR_PAD_BACK)), "let go after a long press, neither");
+        return 0;
+    }
+    CASE("room") {
+        /* room scale: the body walks after the head, in the head's axes, with hysteresis */
+        memset(&input, 0, sizeof(input));
+        settings = settings_of(0, 0.5f, 1);
+        settings.room = 1;
+        frame_of(&frame);
+        settings.room_offset[0] = 0.05f;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(!input.room_walking && pad.thumb[0] == 0 && pad.thumb[1] == 0, "a lean of 5 cm: still");
+        settings.room_offset[0] = 0.3f;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(input.room_walking && pad.thumb[0] > 15000 && abs(pad.thumb[1]) < 100,
+            "a step of 30 cm to the right: walks right (%d %d)", pad.thumb[0], pad.thumb[1]);
+        settings.room_offset[0] = 0.05f;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(input.room_walking && pad.thumb[0] > 0 && pad.thumb[0] < 8000,
+            "walking, 5 cm away: slower, not stopped (%d)", pad.thumb[0]);
+        settings.room_offset[0] = 0.02f;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(!input.room_walking && pad.thumb[0] == 0, "2 cm away: stops");
+        settings.room_offset[0] = 0;
+        settings.room_offset[1] = -0.6f;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(pad.thumb[1] == 32767 && abs(pad.thumb[0]) < 100, "60 cm ahead: walks ahead, at full (%d %d)",
+            pad.thumb[0], pad.thumb[1]);
+        /* the head turned a quarter to the left: a step to the room's left is ahead of it */
+        yawed(1.5707963f, frame.head.orientation);
+        settings.room_offset[0] = -0.6f;
+        settings.room_offset[1] = 0;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(pad.thumb[1] > 32000 && abs(pad.thumb[0]) < 200, "turned left, a step left is ahead (%d %d)",
+            pad.thumb[0], pad.thumb[1]);
+        /* the off stick pushed: it moves, the step waits */
+        frame.hand[VR_HAND_LEFT].stick[0] = 1.0f;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(!input.room_walking && pad.thumb[0] == 32767 && pad.thumb[1] == 0, "the stick's move (%d %d)",
+            pad.thumb[0], pad.thumb[1]);
+        /* without room scale, nothing */
+        frame.hand[VR_HAND_LEFT].stick[0] = 0;
+        settings.room = 0;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(!input.room_walking && pad.thumb[0] == 0 && pad.thumb[1] == 0, "off: still");
+        /* in the menus, never */
+        settings.room = 1;
+        vr_input_update(&input, &frame, &settings, 1, SECONDS, &pad);
+        CHECK(!input.room_walking, "not in the menus");
         return 0;
     }
     CASE("seat") {

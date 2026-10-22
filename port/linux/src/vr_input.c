@@ -74,6 +74,13 @@ the head's yaw, and how near the main hand's grip must be */
 #define VR_SHOULDER_REACH 0.2f
 /* the off hand holds the weapon within this of the main hand */
 #define VR_TWO_HANDED_REACH 0.6f
+/* room scale: the head this far from the body (metres) starts it walking,
+this near stops it, and this far walks it at full speed; the off stick
+pushed less than this is still */
+#define VR_ROOM_START 0.10f
+#define VR_ROOM_STOP 0.03f
+#define VR_ROOM_FULL 0.50f
+#define VR_ROOM_STILL 0.15f
 /* the hands this near (their grips, metres) swap the weapon */
 #define VR_SWAP_REACH 0.15f
 /* the head this far below standing crouches, and back above this rises */
@@ -248,6 +255,32 @@ static float vr_stick_turn(struct vr_input *input, struct vr_input_settings cons
 	return (x > 0.0f ? -push : push) * settings->turn_rate * seconds;
 }
 
+/* room scale: the head stepped `room` (LOCAL x and z) from where the body
+stands; whether the body walks after it, and if so `move`, the push toward
+it in the head's axes, as the off stick's (right, ahead) */
+static int vr_room_walk(struct vr_input const *input, struct vr_frame const *frame, float const room[2],
+	float move[2])
+{
+	static float const local_forward[3] = { 0.0f, 0.0f, -1.0f };
+	float forward[3], length, push;
+	float distance = sqrtf(room[0] * room[0] + room[1] * room[1]);
+
+	if (!(distance > (input->room_walking ? VR_ROOM_STOP : VR_ROOM_START)))
+		return 0;
+	vr_rotate(frame->head.orientation, local_forward, forward);
+	length = sqrtf(forward[0] * forward[0] + forward[2] * forward[2]);
+	if (!(length > 1e-3f))
+		return 0;
+	push = (distance - VR_ROOM_STOP) / VR_ROOM_FULL;
+	if (push > 1.0f)
+		push = 1.0f;
+	push /= distance * length;
+	/* (the head's right is its forward turned a quarter to the right) */
+	move[0] = (-room[0] * forward[2] + room[1] * forward[0]) * push;
+	move[1] = (room[0] * forward[0] + room[1] * forward[2]) * push;
+	return 1;
+}
+
 /* the main hand punched forward this frame */
 static int vr_punched(struct vr_input *input, struct vr_frame const *frame, struct vr_hand const *main_hand,
 	float seconds)
@@ -402,6 +435,7 @@ void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struc
 		}
 		input->snapped = 0;
 		input->melee_seconds = input->tap_seconds = 0.0f;
+		input->room_walking = 0;
 	}
 	else
 	{
@@ -417,10 +451,18 @@ void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struc
 			settings->gestures ? VR_BIND_NONE : settings->bindings[VR_ROLE_OFF][VR_CONTROL_GRIP]);
 		{
 			float cosine = cosf(settings->move_turn), sine = sinf(settings->move_turn);
+			float move[2];
 
+			move[0] = off_hand->stick[0];
+			move[1] = off_hand->stick[1];
+			/* (room scale: with the off stick still, the body walks after the
+			head) */
+			input->room_walking = settings->room &&
+				move[0] * move[0] + move[1] * move[1] < VR_ROOM_STILL * VR_ROOM_STILL &&
+				vr_room_walk(input, frame, settings->room_offset, move);
 			/* (turned to the left by move_turn: ahead of the head) */
-			pad->thumb[0] = vr_thumb(off_hand->stick[0] * cosine - off_hand->stick[1] * sine);
-			pad->thumb[1] = vr_thumb(off_hand->stick[0] * sine + off_hand->stick[1] * cosine);
+			pad->thumb[0] = vr_thumb(move[0] * cosine - move[1] * sine);
+			pad->thumb[1] = vr_thumb(move[0] * sine + move[1] * cosine);
 		}
 		if (settings->seat_stick)
 		{
@@ -624,6 +666,7 @@ static void vr_input_settings_read(struct vr_input_settings *settings)
 	settings->gestures = config_boolean("vr.gestures");
 	settings->move_turn = vr_input_move_turn;
 	settings->seat_stick = vr_render_seat_stick();
+	settings->room = vr_render_room(settings->room_offset);
 }
 
 int vr_input_gamepad(struct vr_pad *pad, int menus)
@@ -667,6 +710,11 @@ void vr_input_rumble(float left, float right)
 void vr_input_aim_turn(float radians)
 {
 	vr_input_move_turn = radians;
+}
+
+int vr_input_room_walking(void)
+{
+	return vr_input_state.room_walking;
 }
 
 float vr_input_turn(void)
