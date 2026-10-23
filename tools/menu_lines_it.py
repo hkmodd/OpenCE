@@ -16,15 +16,26 @@ LINES = {
     "%s\\n%d of %d players\\non %d machines": "%s\\n%d di %d giocatori\\nsu %d computer",
     "%s\\n%s\\n%d of %d players\\n\\n%s": "%s\\n%s\\n%d di %d giocatori\\n\\n%s",
     "%s\\n%s\\nScore to win: %ld": "%s\\n%s\\nPunti per vincere: %ld",
+    "%s\\nFree for all\\nA kill with each weapon": "%s\\nTutti contro tutti\\nUn'uccisione per arma",
+    "%s\\nTeams\\nRound time: %d min": "%s\\nSquadre\\nDurata round: %d min",
+    "%s\\nTeams\\nUntil no human is left": "%s\\nSquadre\\nFino all'ultimo umano",
     "%s\\n\\nThis game is under way.\\n\\n%s": "%s\\n\\nQuesta partita è in corso.\\n\\n%s",
     ", TEAMS": ", SQUADRE",
     ", full or starting": ", piena o in avvio",
     ", under way": ", in corso",
+    "1 SECOND": "1 SECONDO",
+    "10 SECONDS": "10 SECONDI",
+    "15 SECONDS": "15 SECONDI",
+    "3 SECONDS": "3 SECONDI",
+    "30 SECONDS": "30 SECONDI",
+    "5 SECONDS": "5 SECONDI",
     ": under way": ": in corso",
     "A campaign level, played co-op": "Un livello della campagna, in cooperativa",
     "A hundred and fifty kills to win. Only a crowded\\nserver gets there.":
         "Centocinquanta uccisioni per vincere. Ci arriva\\nsolo un server affollato.",
     "A hundred kills to win. Made for big games.": "Cento uccisioni per vincere. Per partite grandi.",
+    "A melee kill takes nothing from the victim.": "Corpo a corpo: la vittima non perde nulla.",
+    "A melee kill takes the victim back a weapon.": "Corpo a corpo: la vittima torna all'arma precedente.",
     "A random primary weapon, of those the map has,\\neach time you spawn.":
         "Un'arma principale a caso, tra quelle della mappa,\\na ogni riapparizione.",
     "A random secondary weapon, of those the map has,\\neach time you spawn.":
@@ -35,6 +46,7 @@ LINES = {
     "AIM ASSIST:": "MIRA ASSISTITA:",
     "ALLIES": "ALLEATI",
     "ALLOWED": "CONSENTITA",
+    "ALLY FRIENDLY FIRE:": "FUOCO AMICO ALLEATI:",
     "ANYONE NEAR": "CHIUNQUE VICINO",
     "ARM SHIELDS:": "SCUDI SULLE BRACCIA:",
     "ASSAULT RIFLE": "FUCILE D'ASSALTO",
@@ -57,12 +69,15 @@ LINES = {
     "CLOSED": "CHIUSA",
     "CO-OP CAMPAIGN": "CAMPAGNA CO-OP",
     "CO-OP OPTIONS:": "OPZIONI CO-OP:",
+    "COUNTDOWN:": "CONTO ALLA ROVESCIA:",
     "CUSTOM MULTIPLAYER": "MULTIGIOCATORE PERSONALIZZATO",
     "CUSTOM SINGLEPLAYER": "CAMPAGNA PERSONALIZZATA",
     "Choose a window or the full\\nscreen, the frame rate and more.\\n\\nProfile:":
         "Scegli finestra o schermo intero,\\nfrequenza fotogrammi e altro.\\n\\nProfilo:",
     "Choose the keys and mouse\\nbuttons for each action.\\n\\nProfile:":
         "Scegli i tasti e i pulsanti\\ndel mouse per ogni azione.\\n\\nProfilo:",
+    "Choose the rules of OpenCE's\\ngametypes: SWAT, Infection,\\nGun Game and Hardcore.\\nThis gametype:":
+        "Scegli le regole delle\\nmodalità di OpenCE: SWAT,\\nInfezione, Gun Game e\\nHardcore. Questa modalità:",
     "Choose what to show, with left and right.": "Scegli cosa mostrare con sinistra e destra.",
     "Classic: plain Xbox buttons. Gems: shaded Xbox\\nbuttons. Dark Gems: the menu's button artwork.":
         "Classico: pulsanti Xbox piatti. Gemme: pulsanti\\nXbox sfumati. Gemme scure: la grafica dei menu.",
@@ -99,6 +114,8 @@ LINES = {
     "EXTRA ENEMIES:": "NEMICI AGGIUNTIVI:",
     "EXTRA PICKUPS:": "OGGETTI AGGIUNTIVI:",
     "EXTRA VEHICLES:": "VEICOLI AGGIUNTIVI:",
+    "Each kill gives the next weapon; a kill with the\\nlast wins. Free for all Slayer only.":
+        "Ogni uccisione dà l'arma successiva; vince chi\\nuccide con l'ultima. Solo Slayer tutti contro tutti.",
     "Each team's vehicles and their respawn time, for\\nthis game.":
         "I veicoli di ogni squadra e il loro tempo di\\nriapparizione, per questa partita.",
     "Echo sounds as the place you are in does, and\\nmuffle those behind walls, as the Xbox did.":
@@ -110,10 +127,14 @@ LINES = {
         "Le squadre nemiche usano 'Moltiplicatore', qualunque\\nsia il numero di giocatori.",
     "Enter sets the key chosen; left and right choose\\nwhich of two. Then press the new key or button.":
         "Invio imposta il tasto scelto; sinistra e destra\\nscelgono quale dei due. Poi premi tasto o pulsante.",
+    "Every vehicle the map places will spawn, as in\\nHalo PC.":
+        "Appariranno tutti i veicoli che la mappa\\nposiziona, come in Halo PC.",
     "Everyone has a limitless supply of grenades, which\\nmakes for loud, explosive and occasionally messy fun.":
         "Tutti hanno granate illimitate, per un divertimento\\nrumoroso, esplosivo e a volte caotico.",
     "Everyone hears everyone in the lobby, before and\\nafter the game.":
         "Nella lobby tutti sentono tutti, prima e dopo\\nla partita.",
+    "Everyone sees the stock game's shields and\\novershield, whatever their own settings.":
+        "Tutti vedono scudi e sovrascudo originali,\\nqualunque siano le loro impostazioni.",
     "Everyone spawns with a assault rifle as their primary\\nweapon (where the map has one).":
         "Tutti riappaiono con un fucile d'assalto come arma\\nprincipale (se la mappa ne ha).",
     "Everyone spawns with a assault rifle as their secondary\\nweapon (where the map has one).":
@@ -148,7 +169,12 @@ LINES = {
         "Tutti riappaiono con un fucile di precisione come\\narma secondaria (se la mappa ne ha).",
     "Everyone starts with the primary and secondary\\nweapons below; the map's weapons are its own.":
         "Tutti iniziano con le armi principale e secondaria\\nsotto; le armi della mappa restano le sue.",
+    "Everyone's shields light their surroundings as\\nthey flare, three times as far (Light Show).":
+        "Gli scudi di tutti illuminano tre volte più\\nlontano quando brillano (Spettacolo di luci).",
+    "Everyone's shields light their surroundings as\\nthey flare.":
+        "Gli scudi di tutti illuminano ciò che li circonda\\nquando brillano.",
     "FAILED": "ERRORE",
+    "FIRST ZOMBIES:": "PRIMI ZOMBIE:",
     "FOV AND VIEWMODELS:": "FOV E MODELLI ARMA:",
     "FRAME RATE LIMIT:": "LIMITE FOTOGRAMMI:",
     "FRIENDLY FIRE OFF": "FUOCO AMICO SPENTO",
@@ -159,16 +185,26 @@ LINES = {
         "I veicoli volanti beccheggiano come gli aerei:\\nspingendo su si scende.",
     "For each player past the first, options set to Per\\nPlayer get this much more (100%: as many again).":
         "Per ogni giocatore oltre il primo, le opzioni su Per\\ngiocatore crescono di tanto (100%: il doppio).",
+    "For everyone, Light Show's shield glow, and the\\novershield rising and staying lit.":
+        "Per tutti, il bagliore di Spettacolo di luci e il\\nsovrascudo che sale e resta acceso.",
+    "For everyone, shields light their surroundings,\\nand the overshield rises and stays lit.":
+        "Per tutti, gli scudi illuminano l'ambiente e il\\nsovrascudo sale e resta acceso.",
+    "For everyone, the overshield rises up the body\\nand stays lit, in its own color.":
+        "Per tutti, il sovrascudo sale lungo il corpo e\\nresta acceso, nel suo colore.",
     "Free for all": "Tutti contro tutti",
     "Friendly fire and team balance, for this game.": "Fuoco amico e bilanciamento squadre, per questa partita.",
     "Friendly fire, the enemies and player collisions,\\nfor this game.":
         "Fuoco amico, nemici e collisioni tra giocatori,\\nper questa partita.",
+    "From the pistol to the rocket launcher.": "Dalla pistola al lanciarazzi.",
+    "From the rocket launcher to the pistol.": "Dal lanciarazzi alla pistola.",
     "Fullscreen takes the display; borderless covers it\\nwith a window. F11 switches to the window.":
         "Schermo intero occupa lo schermo; senza bordi lo\\ncopre con una finestra. F11 passa alla finestra.",
     "GAME NAME:": "NOME PARTITA:",
     "GAME TYPE:": "TIPO PARTITA:",
     "GEMS": "GEMME",
+    "GLOW": "BAGLIORE",
     "GLOW INTENSITY:": "INTENSITÀ BAGLIORE:",
+    "GLOW+OVERSHIELD": "BAGLIORE+SOVRASCUDO",
     "GRAPHICS:": "GRAFICA:",
     "HDR DISPLAY:": "SCHERMO HDR:",
     "HELP SEND MAPS:": "AIUTA A INVIARE:",
@@ -187,11 +223,18 @@ LINES = {
         "Velocità con cui la visuale gira di lato al\\nmovimento del mouse.",
     "How fast the view turns up and down; Same\\nturns it as fast as side to side.":
         "Velocità con cui la visuale gira in alto e in basso;\\nUguale la gira come di lato.",
+    "How fast zombies move, of a human's speed.": "La velocità degli zombie, rispetto a un umano.",
     "How large the players' names are drawn.": "La dimensione dei nomi dei giocatori.",
+    "How long a dead zombie waits to respawn.": "Quanto attende uno zombie ucciso per riapparire.",
+    "How long the round waits, once two players are\\nalive, before the first zombies are chosen.":
+        "Quanto attende il round, con due giocatori in\\nvita, prima di scegliere i primi zombie.",
     "How sounds are converted to the output's rate:\\nsinc is clean; linear is brighter, with aliasing.":
         "Conversione dei suoni alla frequenza d'uscita:\\nsinc è pulito; lineare è più vivo, con aliasing.",
+    "Humans killed join the zombies, who win when\\nno human is left. Team Slayer only.":
+        "Gli umani uccisi diventano zombie, che vincono\\nquando non resta nessun umano. Solo Slayer a squadre.",
     "IN-GAME HELP:": "AIUTO IN GIOCO:",
     "INDICATOR OPTIONS:": "OPZIONI INDICATORE:",
+    "INFECTION": "INFEZIONE",
     "INPUT DEVICE:": "DISPOSITIVO DI INGRESSO:",
     "INSTANT AIM:": "MIRA ISTANTANEA:",
     "INTERNET PLAY IS OFF (SETTINGS)": "INTERNET DISATTIVATO (IMPOSTAZIONI)",
@@ -200,6 +243,7 @@ LINES = {
     "INVERT LOOK:": "INVERTI VISUALE:",
     "INVITE LINK:": "LINK D'INVITO:",
     "ITEM OPTIONS:": "OPZIONI OGGETTI:",
+    "In an order the host draws for each game.": "In un ordine che l'host estrae a ogni partita.",
     "In another's game, send its map to players who\\njoin without it, as a torrent's peers do.":
         "Nella partita di un altro, invia la sua mappa a chi\\nentra senza, come fanno i peer di un torrent.",
     "In first person, turn the view the moment the\\nmouse moves, not up to two ticks later.":
@@ -239,8 +283,8 @@ LINES = {
     "Let internet play ask the router to forward its\\nport, for networks that stop connections.":
         "Il gioco su Internet chiede al router di inoltrare\\nla porta, per le reti che bloccano le connessioni.",
     "Level the view while walking.": "Livella la visuale mentre cammini.",
-    "Light Show: the shield glow three times as far,\\nat full from a third of the flare.":
-        "Spettacolo di luci: bagliore dello scudo tre volte\\npiù ampio, pieno da un terzo del lampo.",
+    "Light Show: three times as far, at full from a\\nthird of the flare. Online: the host's choice.":
+        "Spettacolo di luci: tre volte più ampio, pieno da\\nun terzo del lampo. Online: lo sceglie l'host.",
     "Light models for each pixel, without the facets\\nof the Xbox's lighting for each vertex.":
         "Illumina i modelli per pixel, senza le sfaccettature\\ndell'illuminazione per vertice di Xbox.",
     "Lives, health, shields and respawning, for this game.": "Vite, salute, scudi e riapparizione, per questa partita.",
@@ -253,6 +297,8 @@ LINES = {
     "MAP WEAPONS:": "ARMI DELLA MAPPA:",
     "MATCH TIMER:": "TIMER PARTITA:",
     "MAXIMUM PLAYERS:": "GIOCATORI MAX:",
+    "MELEE DEMOTES:": "CORPO A CORPO RETROCEDE:",
+    "MODE:": "MODALITÀ:",
     "MODEL DETAIL:": "DETTAGLIO MODELLI:",
     "MOVE DOWN": "SPOSTA GIÙ",
     "MOVE UP": "SPOSTA SU",
@@ -265,16 +311,22 @@ LINES = {
     "Native draws at the resolution; Original draws\\nthe Xbox's 640x480 and scales it up.":
         "Nativa disegna alla risoluzione; Originale disegna\\na 640x480 come Xbox e ingrandisce.",
     "New player: press START.": "Nuovo giocatore: premi START.",
+    "No motion sensor, no aim assist, and a kill\\nrestores the killer's health and shields.":
+        "Niente rilevatore né mira assistita; uccidere\\nripristina salute e scudi di chi uccide.",
     "No primary weapon.": "Nessuna arma principale.",
     "No public games found": "Nessuna partita pubblica trovata",
     "No secondary weapon.": "Nessuna arma secondaria.",
+    "No shields, and a shot to the head kills. Slayer only.":
+        "Niente scudi, e un colpo alla testa uccide. Solo Slayer.",
     "No voice chat during the game.": "Nessuna chat vocale durante la partita.",
     "No voice chat in the lobby.": "Nessuna chat vocale nella lobby.",
     "No weapons appear on the map: with a loadout of\\nNONE and NONE, melee and grenades only.":
         "Nessuna arma nella mappa: con dotazione NESSUNO\\ne NESSUNO, solo corpo a corpo e granate.",
     "OPEN MIC": "MICROFONO APERTO",
+    "OPENCE OPTIONS": "OPZIONI OPENCE",
     "ORIGINAL": "ORIGINALE",
     "OUTPUT DEVICE:": "DISPOSITIVO DI USCITA:",
+    "OVERSHIELD": "SOVRASCUDO",
     "OVERSHIELD:": "SOVRASCUDO:",
     "On foot, horizontal at 16:9, in degrees.\\nDefault keeps the stock view.":
         "A piedi, orizzontale in 16:9, in gradi.\\nPredefinito mantiene la visuale originale.",
@@ -326,8 +378,12 @@ LINES = {
         "I giocatori possono subire danni dagli esplosivi\\nutilizzati dagli altri giocatori.",
     "Players can be hurt by weapons or explosives\\nfired by the other players.":
         "I giocatori possono essere colpiti da armi ed esplosivi\\nutilizzati dagli altri giocatori.",
+    "Players can hurt and kill their AI allies, as in\\nthe campaign.":
+        "I giocatori possono ferire e uccidere gli alleati\\nIA, come nella campagna.",
     "Players can not be hurt by weapons and explosives\\nfired by the other players.":
         "I giocatori non possono essere colpiti da armi ed esplosivi\\nutilizzati dagli altri giocatori.",
+    "Players can not hurt their AI allies, so that no\\none can kill Keyes or the Marines a level needs.":
+        "I giocatori non feriscono gli alleati IA: nessuno\\npuò uccidere Keyes o i marine utili al livello.",
     "Players can vote to kick a player, from the\\nscoreboard.":
         "I giocatori possono votare per espellere un\\ngiocatore, dal punteggio.",
     "Players cannot vote to kick anyone.": "I giocatori non possono votare espulsioni.",
@@ -365,10 +421,13 @@ LINES = {
     "SHADOW RESOLUTION:": "RISOLUZIONE OMBRE:",
     "SHARE MAPS:": "CONDIVIDI MAPPE:",
     "SHIELD COLOR:": "COLORE SCUDO:",
+    "SHIELD EFFECTS:": "EFFETTI SCUDO:",
     "SHIELD GLOW:": "BAGLIORE SCUDO:",
     "SHOTGUN": "FUCILE",
+    "SHOW+OVERSHIELD": "LUCI+SOVRASCUDO",
     "SHOW:": "MOSTRA:",
     "SINGLEPLAYER": "GIOCATORE SINGOLO",
+    "SKULL DAMAGE:": "DANNO TESCHIO:",
     "SMOOTH MOTION:": "MOVIMENTO FLUIDO:",
     "SNIPER RIFLE": "FUCILE DI PRECISIONE",
     "SOUND PROCESSING:": "ELABORAZIONE AUDIO:",
@@ -379,6 +438,7 @@ LINES = {
     "STATIC MULTIPLIER": "MOLTIPLICATORE FISSO",
     "STICK LAYOUT:": "DISPOSIZIONE LEVETTE:",
     "STOCK": "ORIGINALE",
+    "STRONGEST FIRST": "DALLA PIÙ FORTE",
     "SWAP A, L TRIGGER": "SCAMBIA A, GRILLETTO SX",
     "SWAP B, L TRIGGER": "SCAMBIA B, GRILLETTO SX",
     "SWAP B, R STICK": "SCAMBIA B, LEVETTA DX",
@@ -391,8 +451,8 @@ LINES = {
         "Imposta sensibilità e disposizione\\ndel controller di questo profilo.\\n\\nProfilo:",
     "Seventy-five kills to win. Settle in for a long\\nfight.":
         "Settantacinque uccisioni per vincere. Preparati a\\nuna lunga battaglia.",
-    "Shields light their surroundings as they flare,\\nin the shield's own color.":
-        "Gli scudi illuminano ciò che li circonda quando\\nbrillano, nel colore dello scudo.",
+    "Shields light their surroundings as they flare.\\nOnline: the host's choice.":
+        "Gli scudi illuminano ciò che li circonda quando\\nbrillano. Online: lo sceglie l'host.",
     "Show the game's hints about its controls.": "Mostra i suggerimenti del gioco sui controlli.",
     "Slow and drag the view along with a target while\\naiming with the mouse, as with a controller.":
         "Rallenta e trascina la visuale col bersaglio mentre\\nmiri col mouse, come con un controller.",
@@ -418,12 +478,14 @@ LINES = {
     "That is not the game's password. Try again.": "Non è la password della partita. Riprova.",
     "The HUD, text, anti-aliasing, shadows,\\nlighting and HDR.":
         "HUD, testo, anti-aliasing, ombre,\\nilluminazione e HDR.",
+    "The damage of a zombie's skull's melee.": "Il danno in corpo a corpo del teschio degli zombie.",
     "The energy shield's flare on your first-person\\narms too, as on your body.":
         "Il lampo dello scudo energetico anche sulle braccia\\nin prima persona, come sul corpo.",
     "The field of view and the first-person\\nweapon. Their defaults keep the stock view.":
         "Il campo visivo e l'arma in prima persona.\\nI predefiniti mantengono la visuale originale.",
     "The game is full.": "La partita è piena.",
     "The game is gone.": "La partita non c'è più.",
+    "The game type's own rules.": "Le regole proprie del tipo di gioco.",
     "The gametype and its rules, for this game.": "Il tipo di partita e le sue regole, per questa partita.",
     "The map's weapons appear where its designers\\nplaced them.":
         "Le armi della mappa appaiono dove i suoi autori\\nle hanno messe.",
@@ -434,6 +496,8 @@ LINES = {
         "Il massimo che invii di mappe agli altri giocatori,\\nperché il gioco tenga il resto del tuo upload.",
     "The most you send of maps, so that the game\\nkeeps the rest of your upload.":
         "Il massimo che invii di mappe, perché il gioco\\ntenga il resto del tuo upload.",
+    "The motion sensor and aim assist as the game\\ntype has them.":
+        "Rilevatore e mira assistita come previsti dal\\ntipo di gioco.",
     "The motion tracker and nav points, for this game.":
         "Rilevatore di movimento e punti di navigazione,\\nper questa partita.",
     "The music's volume.": "Il volume della musica.",
@@ -441,8 +505,8 @@ LINES = {
         "Il nome della partita negli elenchi delle partite.\\nInvio lo cambia.",
     "The new player's profile.": "Il profilo del nuovo giocatore.",
     "The other players' voices.": "Le voci degli altri giocatori.",
-    "The overshield rises up the body as it charges\\nand stays lit, in its own color. Off: stock.":
-        "Il sovrascudo sale lungo il corpo mentre si carica\\ne resta acceso, nel suo colore. Spento: originale.",
+    "The overshield rises up the body and stays lit,\\nin its own color. Online: the host's choice.":
+        "Il sovrascudo sale lungo il corpo e resta acceso,\\nnel suo colore. Online: lo sceglie l'host.",
     "The reverb, and how sounds are converted to the\\noutput's rate.":
         "Il riverbero e la conversione dei suoni alla\\nfrequenza d'uscita.",
     "The server browser is off (network.public_lobby)": "L'elenco server è disattivato (network.public_lobby)",
@@ -455,6 +519,8 @@ LINES = {
     "The weapons follow the weapon set above.": "Le armi seguono il set di armi sopra.",
     "The window's size: 4:3, then 16:10, 16:9 and 21:9\\n(its edges can also be dragged).":
         "La dimensione della finestra: 4:3, poi 16:10, 16:9 e\\n21:9 (si possono anche trascinare i bordi).",
+    "The zombies chosen when the round starts\\n(a human is always left).":
+        "Gli zombie scelti all'inizio del round\\n(resta sempre almeno un umano).",
     "Third-person Warthog and Scorpion passengers in\\nthe campaign and co-op. Weapon zoom is disabled.":
         "Passeggeri di Warthog e Scorpion in terza persona\\nin campagna e co-op. Lo zoom delle armi è disattivato.",
     "This game has a password. Type it, then press\\nEnter to join.":
@@ -496,6 +562,8 @@ LINES = {
         "Voci a 64 kilobit al secondo, nella lobby\\ne in partita.",
     "Voices at 8 kilobits a second, in the lobby\\nand in the game.":
         "Voci a 8 kilobit al secondo, nella lobby\\ne in partita.",
+    "WEAKEST FIRST": "DALLA PIÙ DEBOLE",
+    "WEAPON ORDER:": "ORDINE ARMI:",
     "WEAPONS": "ARMI",
     "WINDOW SIZE:": "DIMENSIONE FINESTRA:",
     "WINDOWED": "FINESTRA",
@@ -520,6 +588,11 @@ LINES = {
         "Le tue gambe in prima persona, guardando in basso,\\nmentre corri. Il tuo corpo come lo vedono gli altri.",
     "Your shield's flare in an armor color, whatever\\nyour armor. Only you see it. Default: its own.":
         "Il lampo dello scudo in un colore armatura, qualunque\\nsia l'armatura. Lo vedi solo tu. Predefinito: il suo.",
+    "ZOMBIE RESPAWN:": "RIAPPARIZIONE ZOMBIE:",
+    "ZOMBIE SHIELDS:": "SCUDI ZOMBIE:",
+    "ZOMBIE SPEED:": "VELOCITÀ ZOMBIE:",
+    "Zombies have no shields.": "Gli zombie non hanno scudi.",
+    "Zombies have shields, as humans do.": "Gli zombie hanno gli scudi, come gli umani.",
     "\\n\\nInvite link copied:\\npaste it to friends": "\\n\\nLink d'invito copiato:\\nincollalo agli amici",
     "\\n\\nJoining from here:": "\\n\\nEntra da qui:",
     "game is": "partita è",
@@ -603,6 +676,7 @@ SAME = {
     "10 MB/S", "16 MB/S", "20 MB/S", "256 KB/S", "4 MB/S", "512 KB/S", "64 KB/S", "8 MB/S", "ANTI-ALIASING:",
     "AUTO", "BUMPER JUMPER", "CO-OP", "FOV:", "FXAA", "HDR:", "MSAA 2X", "MSAA 4X", "MSAA 8X", "PASSWORD", "PASSWORD:",
     "SINC", "SMAA", "SSAA 2X", "V-SYNC:", ", password", "CHAT",
+    "GUN GAME", "HARDCORE:", "OPENCE", "PC", "SWAT",
 }
 
 # the PC version's strings the Italian edition's loc.map says wider than
