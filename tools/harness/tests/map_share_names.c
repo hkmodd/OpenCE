@@ -21,6 +21,8 @@ test_map_share_names.py takes the constants (config.inc) and the code
 #define ustrcpy(destination, source) wcscpy(destination, source)
 #define _strnicmp(first, second, count) strncasecmp(first, second, count)
 #define csprintf sprintf
+/* (the menus' lines, written where they are not shown: menu_text.h) */
+#define MENU_LINE(english) english
 
 /* a map listed (custom_edition_maps.c's, its names alone) */
 struct custom_edition_map
