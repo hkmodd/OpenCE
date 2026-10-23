@@ -1289,6 +1289,8 @@ static void vr_arms_update(
 	pose.off_up = vr_view.grips[off_hand].up;
 	pose.off_on_weapon = vr_two_handed(frame, pose.main_left, orientation) ||
 		first_person_weapon_off_hand_busy(render.local_player_index);
+	pose.off_squeeze = frame->hand[off_hand].squeeze;
+	pose.off_trigger = frame->hand[off_hand].trigger;
 	pose.seconds = frame->display_period;
 	vr_arms_pose(matrices, count, graph, &pose);
 }

@@ -22,6 +22,11 @@ model's node matrices, once posed, are posed again, arm by arm:
   vr_two_handed) and while an animation of its own plays (the weapon
   readied, reloaded, a grenade thrown, a melee: first_person_weapon_off_
   hand_busy), blended there and back over VR_ARMS_BLEND seconds.
+- The free hand's fingers are the controller's: open at rest, closed as
+  its grip is squeezed, the index finger by its trigger (the thumb as
+  animated). Each finger bends at its knuckle and its middle joint toward
+  the palm (the side the animation curls them to), from straight along the
+  hand.
 - Each arm reaches from its shoulder to its wrist with its own bones'
   lengths (vr_arm_elbow), its elbow bent down and out. A wrist beyond the
   arm's reach moves the shoulder after it. Each bone is turned the least
@@ -67,6 +72,12 @@ flashlight) are the weapon's hand's, which keeps its place.
 /* the other hand goes to the weapon, or back to its controller, in this
 long (seconds) */
 #define VR_ARMS_BLEND 0.15f
+/* the free hand's fingers: how far closed at rest (of their whole curl),
+and how far a closed finger bends at its knuckle and at its middle joint
+(radians: 70 and 100 degrees) */
+#define VR_ARMS_CURL_RELAXED 0.15f
+#define VR_ARMS_CURL_KNUCKLE 1.22f
+#define VR_ARMS_CURL_JOINT 1.75f
 
 enum
 {
@@ -83,6 +94,16 @@ enum
 	_vr_finger_middle,
 	_vr_finger_pinky,
 	NUMBER_OF_VR_FINGERS
+};
+
+/* the fingers the controller closes (the thumb stays as animated) */
+enum
+{
+	_vr_bent_index,
+	_vr_bent_middle,
+	_vr_bent_ring,
+	_vr_bent_pinky,
+	NUMBER_OF_VR_BENT_FINGERS
 };
 
 /* the model's arms: its right holds the weapon (the left hand's model is
@@ -123,6 +144,9 @@ static struct
 	short fingers[NUMBER_OF_VR_ARMS][NUMBER_OF_VR_FINGERS];
 	/* the node both upper arms hang from, or NONE */
 	short shoulders;
+	/* each arm's fingers that bend: their knuckles, their middle joints and
+	their tips (NONE where a graph has not one) */
+	short bent[NUMBER_OF_VR_ARMS][NUMBER_OF_VR_BENT_FINGERS][3];
 
 	/* the body's yaw from the heading (LOCAL's) */
 	boolean body_valid;
@@ -202,6 +226,27 @@ static void vr_arms_find_bones(
 				vr_arms_find(graph, count, sides[arm], fingers[index], chain[_vr_arm_wrist]) : NONE;
 			if (vr_arms.fingers[arm][index] == NONE)
 				vr_arms.found = FALSE;
+		}
+	}
+	for (arm = 0; arm < NUMBER_OF_VR_ARMS; arm++)
+	{
+		static char const *const bent[NUMBER_OF_VR_BENT_FINGERS] = { "index", "middle", "ring", "pinky" };
+
+		for (index = 0; index < NUMBER_OF_VR_BENT_FINGERS; index++)
+		{
+			short *joints = vr_arms.bent[arm][index], joint;
+
+			joints[0] = vr_arms.found ? vr_arms_find(graph, count, sides[arm], bent[index], vr_arms.bones[arm][_vr_arm_wrist]) :
+				NONE;
+			for (joint = 1; joint < 3; joint++)
+			{
+				short child = joints[joint - 1] == NONE ? NONE :
+					vr_arms_node_get(graph, joints[joint - 1])->first_child_node_index;
+
+				joints[joint] = child >= 0 && child < count ? child : NONE;
+			}
+			if (joints[2] == NONE)
+				joints[0] = joints[1] = NONE;
 		}
 	}
 	if (vr_arms.found)
@@ -320,6 +365,34 @@ static void vr_arms_partial(
 		out[axis] /= length;
 }
 
+/* the nodes under `root` (it too) turned by `q` about `pivot` */
+static void vr_arms_turn_under(
+	real_matrix4x3 *matrices,
+	struct animation_graph *graph,
+	short count,
+	short root,
+	float const pivot[3],
+	float const q[4])
+{
+	short index;
+
+	for (index = 0; index < count; index++)
+	{
+		real_matrix4x3 *matrix = &matrices[index];
+		float offset[3], turned[3];
+		int axis;
+
+		if (!vr_arms_under(graph, index, root))
+			continue;
+		for (axis = 0; axis < 3; axis++)
+			offset[axis] = (float)matrix->position.n[axis] - pivot[axis];
+		vr_rotate(q, offset, turned);
+		for (axis = 0; axis < 3; axis++)
+			matrix->position.n[axis] = pivot[axis] + turned[axis];
+		vr_arms_turn(matrix, q);
+	}
+}
+
 /* the hand's own axes in the world: from its wrist to its middle finger's
 base, and across its knuckles from the index's to the pinky's */
 static boolean vr_arms_hand_axes(
@@ -421,6 +494,63 @@ static boolean vr_arms_free_hand(
 	}
 	vr_quaternion_from_axes(columns[0], columns[1], columns[2], turn);
 	return vr_finite(turn, 4) && vr_finite(wrist, 3);
+}
+
+/* the free hand's fingers closed `curl` (0 open, 1 a fist; the index's
+`index_curl`), `t` of the way from as they are */
+static void vr_arms_fingers(
+	real_matrix4x3 *matrices,
+	struct animation_graph *graph,
+	short count,
+	short arm,
+	float index_curl,
+	float curl,
+	float t)
+{
+	float hand[3][3], axis[3], tip[3], palm;
+	short finger;
+	int k;
+
+	if (!(t > 0.0f) || !vr_arms_hand_axes(matrices, arm, hand))
+		return;
+	/* (the palm's side of the hand: where the animation curls the middle
+	finger, against the hand's z, which is its back on one hand and its palm
+	on the other) */
+	finger = vr_arms.bent[arm][_vr_bent_middle][0];
+	if (finger == NONE)
+		return;
+	vr_arms_point_offset(&matrices[finger].position, &matrices[vr_arms.bent[arm][_vr_bent_middle][2]].position, tip);
+	palm = tip[0] * hand[2][0] + tip[1] * hand[2][1] + tip[2] * hand[2][2] > 0.0f ? 1.0f : -1.0f;
+	/* (a turn about y by a positive angle takes x toward -z) */
+	for (k = 0; k < 3; k++)
+		axis[k] = -palm * hand[1][k];
+	for (finger = 0; finger < NUMBER_OF_VR_BENT_FINGERS; finger++)
+	{
+		short const *joints = vr_arms.bent[arm][finger];
+		float closed = finger == _vr_bent_index ? index_curl : curl, angle = 0.0f;
+		short joint;
+
+		if (joints[0] == NONE)
+			continue;
+		closed = VR_ARMS_CURL_RELAXED + (1.0f - VR_ARMS_CURL_RELAXED) * PIN(closed, 0.0f, 1.0f);
+		for (joint = 0; joint < 2; joint++)
+		{
+			float was[3], now[3], bend[4], turn[4], partial[4], pivot[3];
+
+			angle += closed * (joint ? VR_ARMS_CURL_JOINT : VR_ARMS_CURL_KNUCKLE);
+			vr_arms_point_offset(&matrices[joints[joint]].position, &matrices[joints[joint + 1]].position, was);
+			if (!vr_arms_normalize(was))
+				break;
+			for (k = 0; k < 3; k++)
+				bend[k] = axis[k] * (float)sin(angle * 0.5f);
+			bend[3] = (float)cos(angle * 0.5f);
+			vr_rotate(bend, hand[0], now);
+			vr_quaternion_between(was, now, turn);
+			vr_arms_partial(turn, t, partial);
+			memcpy(pivot, matrices[joints[joint]].position.n, sizeof(pivot));
+			vr_arms_turn_under(matrices, graph, count, joints[joint], pivot, partial);
+		}
+	}
 }
 
 /* the body's forward (the world's, level) for the head's */
@@ -583,6 +713,8 @@ void vr_arms_pose(
 				matrix->position.n[axis] = place[axis] + turned[axis];
 			vr_arms_turn(matrix, free_turn);
 		}
+		vr_arms_fingers(matrices, graph, count, _vr_arm_off, pose->off_trigger, pose->off_squeeze,
+			1.0f - vr_arms.off_on_weapon);
 	}
 
 	/* the shoulders, either side of the neck */

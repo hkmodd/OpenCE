@@ -31,6 +31,9 @@ struct vr_arms_pose
 	/* the other hand belongs on the weapon: held there with both hands, or
 	in an animation of its own (a reload, a grenade's throw) */
 	boolean off_on_weapon;
+	/* how far the other controller's grip and trigger are pressed (0 to 1):
+	its hand's fingers close with them */
+	real off_squeeze, off_trigger;
 	/* since the last frame */
 	real seconds;
 };

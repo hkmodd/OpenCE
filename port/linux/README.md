@@ -706,7 +706,8 @@ screen, with the cause in the log.
   weapon's hand holds the weapon and the other hand its controller; it
   holds the weapon too while both hands do (the off grip near it) and
   while the weapon is reloaded, readied, put away, swung or a grenade
-  thrown.
+  thrown. The free hand opens and closes with its controller's grip, the
+  index finger with its trigger.
 - A vehicle's seat is seen from the seat (`vr.vehicle_view`), the view
   level and turning with the vehicle, the head looking around freely; the
   eyes blink getting in and out, as the view turns to the seat's forward.

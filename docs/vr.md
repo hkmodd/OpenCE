@@ -174,7 +174,11 @@ What sets the size the world is seen at, each measured or derived:
   a held gun's grip is). That hand goes to the weapon, blended over 0.15 s,
   while both hands hold it (`vr_two_handed`) and while an animation of its
   own plays (readied, put away, reloaded, a grenade thrown, a melee:
-  `first_person_weapon_off_hand_busy`). Each arm reaches its wrist with its
+  `first_person_weapon_off_hand_busy`). The free hand's fingers are the
+  controller's: open at rest, closed as its grip is squeezed, the index by
+  its trigger (so that the grip alone points it), each bending at the
+  knuckle and the middle joint toward the palm; the thumb as animated.
+  Each arm reaches its wrist with its
   own bones' lengths (0.312 and 0.332 m for the stock arms) by two-bone IK
   (`vr_arm_elbow`, the elbow down and out); a wrist out of reach moves the
   shoulder after it; each bone turns the least that takes it there, and the
