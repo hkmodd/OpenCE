@@ -131,6 +131,14 @@ static unsigned char *hud_hires_upscale_pixels(const unsigned char *bgra, unsign
 	return pixels;
 }
 
+/* (a Custom Edition atlas's, up to 512 by 512: the same upscale) */
+static unsigned char *upscale_pixels(const unsigned char *bgra, unsigned long width, unsigned long height,
+	unsigned long maximum)
+{
+	(void)maximum;
+	return hud_hires_upscale_pixels(bgra, width, height);
+}
+
 static void upscale_outline(unsigned char *pixels, const unsigned char *bgra,
 	unsigned long width, unsigned long height, long kind)
 {

@@ -32,7 +32,9 @@ NEGATIVE_CONTROLS = {
 
 def under_test(path, fault=None):
     source = read("port/linux/src/hud_hires.c")
-    text = function(source, "upscale_weights") + "\n\n" + function(source, "hud_hires_upscale_pixels") + "\n"
+    # (the upscale is upscale_pixels, which takes the largest sheet; hud_hires_upscale_pixels its 256s)
+    text = "\n\n".join(function(source, name) for name in
+                       ("upscale_weights", "upscale_pixels", "hud_hires_upscale_pixels")) + "\n"
     if fault:
         text = mutated(text, *fault)
     if PATHS[path]:
