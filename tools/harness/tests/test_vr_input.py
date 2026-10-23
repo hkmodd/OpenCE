@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from harness import CHECK_FAILED, build, mutated, read, run
 
 CASES = ["gameplay", "move", "menus", "menu-button", "turn", "seat", "drive", "room", "gestures", "hands", "ray",
-         "bindings", "swap", "throw"]
+         "bindings", "swap", "throw", "grab", "bare"]
 CONTROLS = {
     "left-handed-ignored": (("main_index = input->left_handed ? VR_HAND_LEFT : VR_HAND_RIGHT;",
                              "main_index = VR_HAND_RIGHT;"), "gameplay"),
@@ -36,7 +36,21 @@ CONTROLS = {
     "punch-any-way": (("along > VR_PUNCH_ALONG * speed", "along > -speed"), "gestures"),
     "crouch-no-hysteresis": (("input->crouched = height < input->standing - VR_CROUCH_RISE;",
                               "input->crouched = height < input->standing - VR_CROUCH_DEPTH;"), "gestures"),
-    "holster-ignored": (("input->holster ? VR_BIND_SWITCH_WEAPON :", "0 ? VR_BIND_SWITCH_WEAPON :"), "hands"),
+    "holster-strikes": (("input->holster || input->grabbing[main_index] ? VR_BIND_NONE :",
+                         "input->grabbing[main_index] ? VR_BIND_NONE :"), "hands"),
+    "shoulder-while-held": (("main_pressed = main_hand->buttons & ~input->held[main_index];",
+                             "main_pressed = main_hand->buttons;"), "hands"),
+    "shoulders-crossed": (("return shoulder ? VR_HAND_RIGHT : VR_HAND_LEFT;", "return shoulder ? VR_HAND_LEFT : VR_HAND_RIGHT;"),
+                          "hands"),
+    "grab-strikes": (("input->holster || input->grabbing[main_index] ? VR_BIND_NONE :", "input->holster ? VR_BIND_NONE :"),
+                     "grab"),
+    "grab-held-on": (("input->grab_seconds[hand] <= VR_GRAB_SECONDS && ", ""), "grab"),
+    "grab-out-of-reach": ((" && settings->grab_reach[hand])\n", ")\n"), "grab"),
+    "taken-stays": (("if (input->grab_pending > 0.0f && (input->grab_hand == VR_HAND_LEFT) != (input->left_handed != 0))",
+                     "if (0)"), "grab"),
+    "taken-any-time": (("\tif (input->grab_pending > 0.0f)\n\t\tinput->grab_pending -= seconds;\n", ""), "grab"),
+    "bare-fires": (("(settings->bare_hands && (action == VR_BIND_FIRE || action == VR_BIND_ZOOM))",
+                    "(settings->bare_hands && action == VR_BIND_ZOOM)"), "bare"),
     "two-hands-backwards": (("z[axis] = (main_hand->grip.position[axis] - off_hand->grip.position[axis]) / length;",
                              "z[axis] = (off_hand->grip.position[axis] - main_hand->grip.position[axis]) / length;"),
                             "hands"),

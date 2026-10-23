@@ -464,7 +464,7 @@ the setting for one start of the game. It has priority over the file.
 | `vr.left_handed` | `false` | `HALO_VR_LEFT_HANDED` | With `display.vr`, the left controller aims and fires and the right moves: the controllers' buttons swap hands, and the weapon, mirrored, is held in the left. |
 | `vr.snap_turn` | `30.0` | `HALO_VR_SNAP_TURN` | With `display.vr`, how far a push of the aiming hand's stick turns, in degrees; `0` turns smoothly instead. |
 | `vr.smooth_turn_speed` | `120.0` | `HALO_VR_SMOOTH_TURN_SPEED` | With `vr.snap_turn` `0`, the stick's turn at full push, in degrees a second. |
-| `vr.gestures` | `true` | `HALO_VR_GESTURES` | With `display.vr`, a punch is a melee attack, the other hand's grip at the head does its action, the flashlight (`false`: the grip alone), and taking the weapon at the aiming hand hands it over if the aiming hand then pulls away (both staying together, both hold it), the aiming hand's grip at a shoulder switches weapons, and lowering the head crouches. |
+| `vr.gestures` | `true` | `HALO_VR_GESTURES` | With `display.vr`, a punch is a melee attack, the other hand's grip at the head does its action, the flashlight (`false`: the grip alone), and taking the weapon at the aiming hand hands it over if the aiming hand then pulls away (both staying together, both hold it), the aiming hand's grip at a shoulder puts the weapon away there (bare hands, which strike but do not fire) or draws the weapon kept there, either hand's grip at a weapon on the ground takes it into that hand, and lowering the head crouches. |
 | `vr.throw_gesture` | `true` | `HALO_VR_THROW_GESTURE` | With `display.vr`, a grenade is thrown with the arm: its button (the other hand's trigger) held takes one, let go with the hand moving faster than 1.5 m/s throws it where the aim points, let go slower keeps it. `false`: the button throws as a gamepad's does. |
 | `vr.aim_pitch` | `0.0` | `HALO_VR_AIM_PITCH` | With `display.vr`, the weapon's barrel from where the hand points, in degrees up, from `-45` to `45`. The hand points along its index finger held straight: the grip pose, which OpenXR defines alike for every controller. Raise it if shots go lower than the hand seems to point, lower it if they go higher. |
 | `vr.bindings` | `""` | `HALO_VR_BINDINGS` | With `display.vr`, controller buttons bound to other actions than those in "VR": items such as `"main.lower=action off.click=none"`, each a hand (`main`, the one that aims, or `off`), a button (`trigger`, `grip`, `lower`, `upper`, `click`) and an action (`fire`, `throw_grenade`, `jump`, `action`, `melee`, `switch_weapon`, `switch_grenade`, `flashlight`, `crouch`, `zoom`, `scoreboard`, `none`), separated by spaces or commas. An item not understood is left out (and logged). |
@@ -747,6 +747,13 @@ screen, with the cause in the log.
   them to other actions. The other hand's grip at the aiming hand takes
   the weapon; if the aiming hand then pulls away, the weapon is handed
   over to the other hand (`vr.gestures`); held together, both hold it.
+  Each shoulder keeps a weapon: the aiming hand's grip there puts the
+  weapon in the hand away (bare hands: they strike, but neither fire nor
+  zoom) if it is the one kept there, else draws the one kept there; the
+  weapon held goes to the other shoulder. Either hand's grip at a weapon
+  on the ground takes it (the action, as the game takes weapons), and the
+  weapon comes to that hand. Bare hands are the headset's alone: the
+  other players see the weapon held.
   A grenade is thrown with the arm (`vr.throw_gesture`): the trigger held
   takes it, let go in a swing throws it where the aim points, let go
   still keeps it.

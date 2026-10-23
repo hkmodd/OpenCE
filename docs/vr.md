@@ -139,8 +139,23 @@ What sets the size the world is seen at, each measured or derived:
   the aiming (main) hand and the other (off) bound to an action
   (`vr.bindings` binds them otherwise), the action pressing the standard
   preset's button for it; mirrored for the left-handed; with the gestures
-  (a punch, the off grip at the head, the head lowered, the main grip at a
-  shoulder) as presses of the same buttons. The off grip pressed at the
+  (a punch, the off grip at the head, the head lowered) as presses of the
+  same buttons. The main grip pressed at a shoulder is the shoulder's
+  (`vr_view.c`'s `vr_shoulders`): each keeps a slot of the inventory (at
+  first the main hand's side the first, the other the second); the weapon
+  held is put away if it is the one kept there (the hands bare: the
+  first-person weapon is not drawn, the arms are, the weapon's hand's
+  fingers its controller's; the trigger and the zoom press nothing), else
+  the one kept there is drawn (`player_control_set_desired_weapon`, as a
+  switch of the player's own, which the action sends), the one held going
+  to the other shoulder. Nothing else changes: the game's player holds its
+  weapon, as the other machines see it. Either grip pressed with a weapon
+  on the ground (no one holds it) within 25 cm of it, along its length
+  (its origin, about its grip, through its middle and as far again: its
+  bounding sphere is far wider), holds the action
+  (0.6 s at most, as long as the grip and the weapon stay), which takes a
+  weapon as the game takes it; one that comes to the player within a
+  second goes to that hand (the hands swap if it was the off hand's). The off grip pressed at the
   main hand takes the weapon there; if within 1.5 s the hands are 25 cm
   apart, the main hand having moved more, the hands swap until
   `vr.left_handed` is changed (a hand-over, after astromaddie's gesture);

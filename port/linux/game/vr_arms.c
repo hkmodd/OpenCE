@@ -22,6 +22,8 @@ model's node matrices, once posed, are posed again, arm by arm:
   vr_two_handed) and while an animation of its own plays (the weapon
   readied, reloaded, a grenade thrown, a melee: first_person_weapon_off_
   hand_busy), blended there and back over VR_ARMS_BLEND seconds.
+- With the weapon put away (the hands bare, vr_view.c) the weapon's hand
+  is free too: where it held the weapon, its fingers its controller's.
 - The free hand's fingers are the controller's: open at rest, closed as
   its grip is squeezed, the index finger by its trigger (the thumb as
   animated). Each finger bends at its knuckle and its middle joint toward
@@ -715,6 +717,8 @@ void vr_arms_pose(
 		vr_arms_fingers(matrices, graph, count, _vr_arm_off, pose->off_trigger, pose->off_squeeze,
 			1.0f - vr_arms.off_on_weapon);
 	}
+	if (pose->main_bare)
+		vr_arms_fingers(matrices, graph, count, _vr_arm_weapon, pose->main_trigger, pose->main_squeeze, 1.0f);
 
 	/* the shoulders, either side of the neck */
 	for (axis = 0; axis < 3; axis++)

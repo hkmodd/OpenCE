@@ -22,8 +22,11 @@ Mixed Reality's trackpads stand in for the face buttons
 (vr_openxr.c's bindings).
 
 The gestures (vr.gestures). The main hand punched forward, faster than
-VR_PUNCH_SPEED, is a melee attack; its grip at a shoulder (a holster)
-switches weapons, not its action; the off hand's grip does its action (the
+VR_PUNCH_SPEED, is a melee attack; its grip pressed at a shoulder (a
+holster) puts the weapon away there or draws the one there (vr_view.c), not
+its action; either hand's grip pressed with a weapon on the ground within
+its reach (vr_view.c) holds the action, which takes it (VR_GRAB_SECONDS at
+most), and the weapon that comes goes to that hand; the off hand's grip does its action (the
 flashlight) only at the head; taking the weapon at the main hand, it is
 handed over if the main hand then pulls away while the off holds on (the
 hands swap: after astromaddie's VR port), and stays with the main hand if
@@ -100,6 +103,9 @@ let go, its fastest of late, which falls by VR_THROW_FALL a second (a
 throw's hand slows as it lets go) */
 #define VR_THROW_SPEED 1.5f
 #define VR_THROW_FALL 8.0f
+/* a hand's grip takes a weapon within its reach by holding the action this
+long at most (seconds: long enough for the game's swap) */
+#define VR_GRAB_SECONDS 0.6f
 /* the head this far below standing crouches, and back above this rises */
 #define VR_CROUCH_DEPTH 0.30f
 #define VR_CROUCH_RISE 0.25f
@@ -360,7 +366,8 @@ static int vr_thrown(struct vr_input *input, struct vr_hand const *hand, int ind
 	return was_held && !held && input->throw_speed[index] > VR_THROW_SPEED;
 }
 
-/* the main hand at either shoulder, about the head's yaw */
+/* the shoulder the hand is at, about the head's yaw: VR_HAND_LEFT or
+VR_HAND_RIGHT (the head's sides), or -1 */
 static int vr_at_shoulder(struct vr_frame const *frame, struct vr_hand const *hand)
 {
 	static float const local_forward[3] = { 0.0f, 0.0f, -1.0f };
@@ -368,11 +375,11 @@ static int vr_at_shoulder(struct vr_frame const *frame, struct vr_hand const *ha
 	int shoulder;
 
 	if (!hand->tracked)
-		return 0;
+		return -1;
 	vr_rotate(frame->head.orientation, local_forward, forward);
 	length = sqrtf(forward[0] * forward[0] + forward[2] * forward[2]);
 	if (length < 1e-3f)
-		return 0;
+		return -1;
 	forward[0] /= length;
 	forward[2] /= length;
 	for (shoulder = 0, side = -VR_SHOULDER_SIDE; shoulder < 2; shoulder++, side = VR_SHOULDER_SIDE)
@@ -384,9 +391,20 @@ static int vr_at_shoulder(struct vr_frame const *frame, struct vr_hand const *ha
 		place[1] = frame->head.position[1] - VR_SHOULDER_DOWN;
 		place[2] = frame->head.position[2] + forward[0] * side - forward[2] * VR_SHOULDER_BACK;
 		if (vr_distance(hand->grip.position, place) < VR_SHOULDER_REACH)
-			return 1;
+			return shoulder ? VR_HAND_RIGHT : VR_HAND_LEFT;
 	}
-	return 0;
+	return -1;
+}
+
+/* the hand's grip takes the weapon within its reach: the action held (to
+VR_GRAB_SECONDS), and the weapon that comes goes to the hand
+(vr_input_weapon_taken) */
+static void vr_grab(struct vr_input *input, int hand)
+{
+	input->grabbing[hand] = 1;
+	input->grab_seconds[hand] = 0.0f;
+	input->grab_hand = hand;
+	input->grab_pending = VR_GRAB_SECONDS + 0.5f;
 }
 
 /* the head lowered from standing */
@@ -415,7 +433,7 @@ void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struc
 {
 	int main_index, off_index, menu_held, hand;
 	struct vr_hand const *main_hand, *off_hand;
-	unsigned long off_pressed;
+	unsigned long off_pressed, main_pressed;
 	unsigned char bindings[VR_ROLE_COUNT][VR_CONTROL_COUNT];
 	int role, control;
 
@@ -432,12 +450,15 @@ void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struc
 	main_hand = &frame->hand[main_index];
 	off_hand = &frame->hand[off_index];
 	off_pressed = off_hand->buttons & ~input->held[off_index];
+	main_pressed = main_hand->buttons & ~input->held[main_index];
 	memset(pad, 0, sizeof(*pad));
 	input->turn = 0.0f;
 	if (!(seconds > 0.0f && seconds < 1.0f))
 		seconds = 0.0f;
 	if (input->melee_wait > 0.0f)
 		input->melee_wait -= seconds;
+	if (input->grab_pending > 0.0f)
+		input->grab_pending -= seconds;
 
 	/* the menu button: Start for a short press, Back held after a long one */
 	menu_held = ((main_hand->buttons | off_hand->buttons) & VR_BUTTON_MENU) != 0;
@@ -490,6 +511,7 @@ void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struc
 		input->snapped = 0;
 		input->melee_seconds = input->tap_seconds = input->throw_seconds = 0.0f;
 		input->room_walking = 0;
+		input->grabbing[VR_HAND_LEFT] = input->grabbing[VR_HAND_RIGHT] = 0;
 		/* (the hands' speeds start again after the menus, from where the
 		hands are then) */
 		input->main_position_valid = 0;
@@ -501,24 +523,44 @@ void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struc
 	}
 	else
 	{
-		/* (the grip at a shoulder draws the other weapon from its holster) */
-		if ((main_hand->buttons & VR_BUTTON_GRIP) && settings->gestures && vr_at_shoulder(frame, main_hand))
-			input->holster = 1;
+		/* (the main grip pressed at a shoulder puts the weapon away there or
+		draws the one there, vr_view.c; by a weapon on the ground, takes it;
+		held on, it strikes nothing) */
+		if ((main_pressed & VR_BUTTON_GRIP) && settings->gestures)
+		{
+			int side = vr_at_shoulder(frame, main_hand);
+
+			if (side >= 0)
+			{
+				input->holster = 1;
+				input->shoulder_side = side;
+				input->shoulder_grabs++;
+			}
+			else if (settings->grab_reach[main_index])
+			{
+				vr_grab(input, main_index);
+			}
+		}
 		if (!(main_hand->buttons & VR_BUTTON_GRIP))
 			input->holster = 0;
 		/* (a grenade thrown with the arm: its buttons held press nothing,
-		the throw presses it) */
+		the throw presses it; bare hands neither fire nor zoom) */
 		memcpy(bindings, settings->bindings, sizeof(bindings));
-		for (role = 0; role < VR_ROLE_COUNT && settings->throw_gesture; role++)
+		for (role = 0; role < VR_ROLE_COUNT; role++)
 		{
 			for (control = 0; control < VR_CONTROL_COUNT; control++)
 			{
-				if (bindings[role][control] == VR_BIND_THROW_GRENADE)
+				int action = bindings[role][control];
+
+				if ((settings->throw_gesture && action == VR_BIND_THROW_GRENADE) ||
+					(settings->bare_hands && (action == VR_BIND_FIRE || action == VR_BIND_ZOOM)))
+				{
 					bindings[role][control] = VR_BIND_NONE;
+				}
 			}
 		}
 		vr_bind_hand(pad, main_hand, bindings[VR_ROLE_MAIN],
-			input->holster ? VR_BIND_SWITCH_WEAPON : bindings[VR_ROLE_MAIN][VR_CONTROL_GRIP]);
+			input->holster || input->grabbing[main_index] ? VR_BIND_NONE : bindings[VR_ROLE_MAIN][VR_CONTROL_GRIP]);
 		/* (with the gestures the off grip's action is at the head alone) */
 		vr_bind_hand(pad, off_hand, bindings[VR_ROLE_OFF],
 			settings->gestures ? VR_BIND_NONE : bindings[VR_ROLE_OFF][VR_CONTROL_GRIP]);
@@ -593,6 +635,22 @@ void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struc
 					memcpy(input->handover_main, main_hand->grip.position, sizeof(input->handover_main));
 					memcpy(input->handover_off, off_hand->grip.position, sizeof(input->handover_off));
 				}
+				else if (settings->grab_reach[off_index])
+				{
+					vr_grab(input, off_index);
+				}
+			}
+			/* (a weapon taken: the action held while the grip is, there) */
+			for (hand = 0; hand < VR_HAND_COUNT; hand++)
+			{
+				if (!(frame->hand[hand].buttons & VR_BUTTON_GRIP))
+					input->grabbing[hand] = 0;
+				if (input->grabbing[hand])
+				{
+					input->grab_seconds[hand] += seconds;
+					if (input->grab_seconds[hand] <= VR_GRAB_SECONDS && settings->grab_reach[hand])
+						vr_bind(pad, VR_BIND_ACTION, 1.0f);
+				}
 			}
 			/* (the hand-over: the main hand pulls away from the weapon the off
 			holds, the hands swap; held together, both hold it) */
@@ -623,6 +681,7 @@ void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struc
 			input->main_position_valid = 0;
 			input->standing_valid = 0;
 			input->handover = 0;
+			input->grabbing[VR_HAND_LEFT] = input->grabbing[VR_HAND_RIGHT] = 0;
 		}
 		if (input->melee_seconds > 0.0f)
 		{
@@ -643,6 +702,20 @@ void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struc
 	input->menus = menus;
 	input->held[VR_HAND_LEFT] = frame->hand[VR_HAND_LEFT].buttons;
 	input->held[VR_HAND_RIGHT] = frame->hand[VR_HAND_RIGHT].buttons;
+}
+
+void vr_input_weapon_taken(struct vr_input *input)
+{
+	/* (the left hand takes it to aim with, or the right) */
+	if (input->grab_pending > 0.0f && (input->grab_hand == VR_HAND_LEFT) != (input->left_handed != 0))
+	{
+		input->left_handed = !input->left_handed;
+		input->swaps++;
+		input->main_position_valid = 0;
+		input->holster = 0;
+		input->handover = 0;
+	}
+	input->grab_pending = 0.0f;
 }
 
 void vr_hand_pointing(struct vr_hand const *hand, float pitch, float orientation[4])
@@ -782,6 +855,9 @@ static void vr_input_settings_read(struct vr_input_settings *settings)
 	settings->aim_pitch = vr_render_aim_pitch();
 	settings->pistol_grip = vr_render_pistol_grip();
 	settings->throw_gesture = config_boolean("vr.throw_gesture");
+	settings->bare_hands = vr_render_bare_hands();
+	settings->grab_reach[VR_HAND_LEFT] = vr_render_grab_reach(VR_HAND_LEFT);
+	settings->grab_reach[VR_HAND_RIGHT] = vr_render_grab_reach(VR_HAND_RIGHT);
 }
 
 int vr_input_gamepad(struct vr_pad *pad, int menus)
@@ -834,6 +910,17 @@ void vr_input_rumble(float left, float right)
 void vr_input_weapon_hands(int both)
 {
 	vr_input_both_hands = both != 0;
+}
+
+unsigned long vr_input_shoulder_grabs(int *side)
+{
+	*side = vr_input_state.shoulder_side;
+	return vr_input_state.shoulder_grabs;
+}
+
+void vr_input_weapon_came(void)
+{
+	vr_input_weapon_taken(&vr_input_state);
 }
 
 void vr_input_aim_turn(float radians)

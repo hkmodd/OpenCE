@@ -131,6 +131,12 @@ struct vr_input_settings
 	takes it, let go with the hand moving fast throws it, let go slowly
 	keeps it */
 	int throw_gesture;
+	/* the weapon is put away, the hands bare (vr_view.c): it neither fires
+	nor zooms */
+	int bare_hands;
+	/* a weapon lies within each hand's reach (vr_view.c): the hand's grip
+	pressed there takes it */
+	int grab_reach[VR_HAND_COUNT];
 };
 
 struct vr_input
@@ -158,8 +164,20 @@ struct vr_input
 	float main_position[3];
 	int main_position_valid;
 	float melee_seconds, melee_wait, tap_seconds;
-	/* the main grip was pressed at a shoulder: weapons, not a melee */
+	/* the main grip was pressed at a shoulder: weapons, not a melee; how
+	many times, and the last's shoulder (VR_HAND_LEFT or VR_HAND_RIGHT, the
+	head's sides) */
 	int holster;
+	unsigned long shoulder_grabs;
+	int shoulder_side;
+	/* each hand's grip took a weapon within its reach: the action held
+	while it is held there, VR_GRAB_SECONDS at most, and for how long; the
+	last hand to take one, and the seconds since (a weapon that comes to
+	the player then goes to that hand) */
+	int grabbing[VR_HAND_COUNT];
+	float grab_seconds[VR_HAND_COUNT];
+	int grab_hand;
+	float grab_pending;
 	/* the grenade's throw (vr.throw_gesture): each hand's last position and
 	its speed of late (its fastest, falling by VR_THROW_FALL a second), the
 	throw's press in seconds, and the throws and the last hand to throw */
@@ -194,6 +212,10 @@ struct vr_input
 seconds since the last frame */
 void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struct vr_input_settings const *settings,
 	int menus, float seconds, struct vr_pad *pad);
+
+/* a weapon came to the player's hand (vr_view.c): one a hand's grip took
+just now goes to that hand, which then aims */
+void vr_input_weapon_taken(struct vr_input *input);
 
 /* each hand's buttons' actions: the defaults (the table of vr_input.c), with
 each item of `text` in place of its default ("main.lower=action
@@ -246,6 +268,11 @@ void vr_input_rumble(float left, float right);
 int vr_input_left_handed(void);
 /* vr_view.c: the weapon is held with both hands this frame (the rumble) */
 void vr_input_weapon_hands(int both);
+/* vr_view.c: the main grip's presses at a shoulder (vr.gestures), and the
+last's shoulder (VR_HAND_LEFT or VR_HAND_RIGHT) */
+unsigned long vr_input_shoulder_grabs(int *side);
+/* vr_view.c: a weapon came to the player's hand (vr_input_weapon_taken) */
+void vr_input_weapon_came(void);
 /* vr_view.c: the turn the stick made this frame (radians to the left),
 taken */
 float vr_input_turn(void);

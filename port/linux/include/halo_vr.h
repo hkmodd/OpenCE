@@ -211,9 +211,15 @@ neither bobs, sways nor is posed */
 int vr_render_hand_holds(long unit_index);
 /* vr_input.c: the weapon's barrel from the grip's pointing (vr.aim_pitch,
 radians up), and whether the weapon in the hand is held as a pistol (by
-its label: the other hand supports it at the main hand) */
+its tag's name or label: the other hand supports it at the main hand) */
 float vr_render_aim_pitch(void);
 int vr_render_pistol_grip(void);
+/* first_person_weapons.c, vr_input.c: the weapon is put away at a shoulder,
+the hands bare (it is not drawn, fires nor zooms) */
+int vr_render_bare_hands(void);
+/* vr_input.c: a weapon lies on the ground within the hand's (VR_HAND_*)
+reach, for its grip to take */
+int vr_render_grab_reach(int hand);
 /* first_person_legs.c: in an eye's pass on foot, where the legs' hips go
 (the world's, under the head) and the way they face (the body's, level, as
 the arms' shoulders: vr_arms_body); 0 elsewhere */
@@ -261,6 +267,8 @@ int vr_render_zoom_hidden(void);
 #define vr_render_hand_holds(unit_index) 0
 #define vr_render_aim_pitch() 0.0f
 #define vr_render_pistol_grip() 0
+#define vr_render_bare_hands() 0
+#define vr_render_grab_reach(hand) 0
 #define vr_render_legs(under, forward) 0
 #define vr_render_shot_origin(unit_index, origin) 0
 #define vr_render_shot_from_hand(unit_index) 0

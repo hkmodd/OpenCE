@@ -526,8 +526,11 @@ void first_person_weapon_draw(
 						model_effect.type= _render_model_effect_type_none;
 					}
 
+					/* port: not the weapon in a headset's bare hands, put away at a
+					shoulder (vr_view.c) */
 					if (first_person_weapon->weapon_node_remapping_table_valid &&
-						weapon_definition->weapon.interface_definition.first_person_model.index!=NONE)
+						weapon_definition->weapon.interface_definition.first_person_model.index!=NONE &&
+						!vr_render_bare_hands())
 					{
 						model_remap_node_matrices_to_match_animation_graph(
 							weapon_definition->weapon.interface_definition.first_person_model.index,

@@ -328,8 +328,10 @@ static const struct config_setting config_settings[] =
 		"The hands' and head's motions: a punch is a melee attack, the other\n"
 		"hand's grip at the head its action, the flashlight (else the grip\n"
 		"alone), and taking the weapon at the aiming hand, which then pulls\n"
-		"away, hands it over; the aiming hand's grip at a shoulder switches\n"
-		"weapons; the head lowered crouches." },
+		"away, hands it over; the aiming hand's grip at a shoulder puts the\n"
+		"weapon away there (the hands bare, which strike) or draws the one kept\n"
+		"there; either hand's grip at a weapon on the ground takes it, into\n"
+		"that hand; the head lowered crouches." },
 	{ "vr.throw_gesture", _config_boolean, "true", "HALO_VR_THROW_GESTURE", _environment_value, _platform_desktop,
 		"With display.vr, a grenade is thrown with the arm: its button (the\n"
 		"off trigger) held takes one, let go with the hand moving fast (1.5\n"

@@ -36,6 +36,10 @@ struct vr_arms_pose
 	/* how far the other controller's grip and trigger are pressed (0 to 1):
 	its hand's fingers close with them */
 	real off_squeeze, off_trigger;
+	/* the weapon is put away, the hands bare: the weapon's hand's fingers
+	are its controller's too */
+	boolean main_bare;
+	real main_squeeze, main_trigger;
 	/* since the last frame */
 	real seconds;
 };
