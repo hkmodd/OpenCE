@@ -114,6 +114,16 @@ units) or turned more (radians); and the eyes' blink at a cut (seconds) */
 #define VR_CUT_DISTANCE 1.5f
 #define VR_CUT_TURN 0.5236f
 #define VR_CUT_BLINK 0.1f
+/* the comfort vignette (vr.vignette): closed fully at this speed of the
+view's own (metres a second) or this turn (radians a second), in this long
+(seconds) and opened again in this long; a frame's move past this far
+(metres) or turn past this (radians: a snap turn) is a jump, not motion */
+#define VR_VIGNETTE_SPEED 3.0f
+#define VR_VIGNETTE_TURN 1.5f
+#define VR_VIGNETTE_CLOSE 0.1f
+#define VR_VIGNETTE_OPEN 0.3f
+#define VR_VIGNETTE_JUMP 1.0f
+#define VR_VIGNETTE_SNAP 0.35f
 
 /* a turn of the head in a frame (radians) that counts as looking around,
 more than its tremor: about 15 degrees a second at 60 frames */
@@ -244,6 +254,14 @@ static struct
 	boolean room_scale;
 	boolean eye_height_player;
 	boolean arms_free;
+	real vignette_strength;
+
+	/* the comfort vignette: where LOCAL's origin was in the world and the
+	heading, the last frame, and how far it is closed */
+	boolean vignette_valid;
+	real_point3d vignette_origin;
+	real vignette_heading;
+	real vignette;
 
 	/* vr.eye_height "player": the unit's crouch at the last two ticks
 	(blended as the drawn camera is) and the tick of the later */
@@ -301,6 +319,8 @@ static void vr_settings_read(
 	vr_view.room_scale = config_boolean("vr.roomscale");
 	vr_view.eye_height_player = strcmp(config_string("vr.eye_height"), "game") != 0;
 	vr_view.arms_free = strcmp(config_string("vr.arms"), "weapon") != 0;
+	vr_view.vignette_strength = (real)config_real("vr.vignette");
+	vr_view.vignette_strength = PIN(vr_view.vignette_strength, 0.0f, 1.0f);
 }
 
 /* the hand that aims the weapon it holds: the main controller, tracked,
@@ -978,6 +998,56 @@ static boolean vr_scope_window(
 	return TRUE;
 }
 
+/* the comfort vignette this frame (vr.vignette): closed as the view moves
+and turns by itself (the stick, a vehicle, a fall), not as the head does.
+`head` is the head's offset in LOCAL space as the eyes are placed */
+static void vr_comfort(
+	struct vr_frame const *frame,
+	real_point3d const *anchor,
+	real heading,
+	float const head[3])
+{
+	struct render_camera origin;
+	float offset[3];
+	real target = 0.0f, period = frame->display_period, rate;
+	int axis;
+
+	if (!(vr_view.vignette_strength > 0.0f) || !(period > 0.0f))
+	{
+		vr_view.vignette_valid = FALSE;
+		vr_view.vignette = 0.0f;
+		vr_vignette(0.0f);
+		return;
+	}
+	/* (LOCAL's origin in the world: it stays put while only the head moves) */
+	for (axis = 0; axis < 3; axis++)
+		offset[axis] = head[axis] - frame->head.position[axis];
+	vr_camera_from_pose(&origin, &frame->head, offset, anchor, heading);
+	if (vr_view.vignette_valid)
+	{
+		real moved = distance3d(&origin.position, &vr_view.vignette_origin) / VR_UNITS_PER_METRE;
+		real turned = (real)fabs(vr_wrap_angle(heading - vr_view.vignette_heading));
+
+		if (moved < VR_VIGNETTE_JUMP && turned < VR_VIGNETTE_SNAP)
+		{
+			target = moved / period / VR_VIGNETTE_SPEED;
+			if (turned / period / VR_VIGNETTE_TURN > target)
+				target = turned / period / VR_VIGNETTE_TURN;
+			target = PIN(target, 0.0f, 1.0f);
+		}
+		else
+		{
+			target = vr_view.vignette;
+		}
+	}
+	vr_view.vignette_valid = TRUE;
+	vr_view.vignette_origin = origin.position;
+	vr_view.vignette_heading = heading;
+	rate = period / (target > vr_view.vignette ? VR_VIGNETTE_CLOSE : VR_VIGNETTE_OPEN);
+	vr_view.vignette += (target - vr_view.vignette) * (rate < 1.0f ? rate : 1.0f);
+	vr_vignette(vr_view.vignette * vr_view.vignette_strength);
+}
+
 short vr_render_windows(
 	struct render_window *windows,
 	short window_count)
@@ -1006,6 +1076,9 @@ short vr_render_windows(
 	{
 		vr_view.cinematic = FALSE;
 		vr_view.room = FALSE;
+		vr_view.vignette_valid = FALSE;
+		vr_view.vignette = 0.0f;
+		vr_vignette(0.0f);
 		return window_count;
 	}
 	player = windows[0];
@@ -1042,6 +1115,17 @@ short vr_render_windows(
 	aspect = (real)(player.render_camera.viewport_bounds.x1 - player.render_camera.viewport_bounds.x0) /
 		(real)(player.render_camera.viewport_bounds.y1 - player.render_camera.viewport_bounds.y0);
 	vr_head_offset(frame, &anchor, heading, vr_room_follow(frame, player.local_player_index, &anchor, heading), head);
+	/* (none in a cinematic: its shots are the head's to look around) */
+	if (cinematic_in_progress())
+	{
+		vr_view.vignette_valid = FALSE;
+		vr_view.vignette = 0.0f;
+		vr_vignette(0.0f);
+	}
+	else
+	{
+		vr_comfort(frame, &anchor, heading, head);
+	}
 	for (eye = 0; eye < 2; eye++)
 	{
 		struct render_camera *camera = &windows[eye].rasterizer_camera;
@@ -1616,6 +1700,7 @@ void vr_view_reset(
 	vr_view.seat_view = FALSE;
 	vr_view.driving = FALSE;
 	vr_view.eye_crouch_tick = NONE;
+	vr_view.vignette_valid = FALSE;
 	vr_view.cinematic = FALSE;
 	vr_arms_reset();
 	vr_view.room = FALSE;

@@ -449,6 +449,7 @@ the setting for one start of the game. It has priority over the file.
 | `vr.resolution_scale` | `1.0` | `HALO_VR_RESOLUTION_SCALE` | With `display.vr`, the eyes' resolution as a multiple of the runtime's recommended one, from `0.5` to `2.0`. Read at start. |
 | `vr.arms` | `"free"` | `HALO_VR_ARMS` | With `display.vr` and the weapon in the hand: `"free"`, each arm its own, from the shoulder: the weapon's hand holds the weapon, the other its controller, until it holds the weapon too (grip near it) or the weapon is reloaded, readied or a grenade thrown; `"weapon"`, both arms on the weapon as the game animates them, moved with the hand. |
 | `vr.eye_height` | `"player"` | `HALO_VR_EYE_HEIGHT` | With `display.vr`, on foot: `"player"` puts the eyes as high over the ground as the player's are over the floor (where the runtime knows it: its STAGE space), so that the world is seen at its size; `"game"` at the Master Chief's, 1.89 m. A crouch lowers the eyes only as far as the head goes. The game's view and shots are unchanged. |
+| `vr.vignette` | `0.0` | `HALO_VR_VIGNETTE` | With `display.vr`, a comfort vignette: the eyes' field darkens from its edges while the view moves or turns by itself (the stick, a vehicle, a fall, smooth turning), not as the head moves, nor at a snap turn. From `0`, none, to `1`: at a run (3 m/s) or a turn of 86 degrees a second, the clear field closes from 85 degrees about the eyes' middle to 35, the dark 20 degrees past it, in a tenth of a second, and opens again in 0.3 s. |
 | `vr.image_rows` | `"auto"` | `HALO_VR_IMAGE_ROWS` | With `display.vr`, how the OpenXR runtime takes the rows of the game's images: `"bottom"` first (OpenGL's and OpenXR's way), `"top"` first, or `"auto"`: from the top for SteamVR, which otherwise shows the game upside down, from the bottom for any other runtime. Read at start. |
 | `vr.hud_distance` | `15.0` | `HALO_VR_HUD_DISTANCE` | With `display.vr`, how far before the head the HUD's panel is held, in metres, from `0.5` to `100`. |
 | `vr.hud_width` | `10.0` | `HALO_VR_HUD_WIDTH` | With `display.vr`, the HUD panel's width in metres, from `0.2` to `100`. |
@@ -708,6 +709,9 @@ screen, with the cause in the log.
   while the weapon is reloaded, readied, put away, swung or a grenade
   thrown. The free hand opens and closes with its controller's grip, the
   index finger with its trigger.
+- A comfort vignette (`vr.vignette`, off by default) darkens the edges of
+  the eyes' field while the view moves or turns without the head: walking
+  by the stick, a vehicle, a fall, smooth turning.
 - A vehicle's seat is seen from the seat (`vr.vehicle_view`), the view
   level and turning with the vehicle, the head looking around freely; the
   eyes blink getting in and out, as the view turns to the seat's forward.

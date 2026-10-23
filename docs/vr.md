@@ -102,6 +102,15 @@ What sets the size the world is seen at, each measured or derived:
   sees only its input. The head reaches 60 cm from the body on foot (the
   unit held back, or the stick moving it), 35 cm in a seat (a lean), and
   anywhere in the menus, cinematics and while dead.
+- The comfort vignette (`vr.vignette`, `vr_comfort`): each frame the
+  world's place of LOCAL's origin (the head's place less the head's own
+  offset in the room) and the heading are compared with the last frame's:
+  their speed (against 3 m/s) and turn (against 1.5 radians a second)
+  close it, in 0.1 s, and it opens in 0.3 s. A move past 1 m or a turn past
+  0.35 radians in a frame (a teleport, a snap turn) is not counted, and
+  none is drawn in a cinematic. `vr_resolve_eye` darkens each eye's image
+  after the copy, in the eye's own field: the clear part is a cone about
+  the eye's axis, from 85 degrees to 35, the dark 20 degrees beyond.
 - What moves once a frame (the sky's animation, weather, glows, the
   first-person weapon's pose) moves in the left eye only.
 - The HUD is drawn alone over a clear ground and shown on a quad layer held
@@ -259,5 +268,5 @@ check of the flat picture:
    stock biped for the VR players near it. Everything received is checked
    (finite, within reach, the sender's unit, rate, sequence), and
    `HALO_PORT_NETWORK_VERSION` is raised.
-6. Comfort: a vignette and height calibration (snap and smooth turning,
-   and the settings screen, are in this branch).
+6. Comfort: height calibration (snap and smooth turning, the vignette, the
+   eyes at the player's height and the settings screen are in this branch).

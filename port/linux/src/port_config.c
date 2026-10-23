@@ -264,6 +264,11 @@ static const struct config_setting config_settings[] =
 		"from the shoulder, the other hand at its controller until it holds the\n"
 		"weapon too; \"weapon\", both arms on the weapon as the game animates\n"
 		"them, moved with the hand." },
+	{ "vr.vignette", _config_real, "0.0", "HALO_VR_VIGNETTE", _environment_value, _platform_desktop,
+		"With display.vr, a comfort vignette: the eyes' field darkens at its\n"
+		"edges while the view moves or turns by itself (the stick, a vehicle, a\n"
+		"fall), not when the head does. 0 none, to 1, the field closed to 35\n"
+		"degrees about the eyes' middle at a run." },
 	{ "vr.hud_distance", _config_real, "15.0", "HALO_VR_HUD_DISTANCE", _environment_value, _platform_desktop,
 		"How far ahead of the head the HUD's panel is held, in metres (0.5 to\n"
 		"100)." },

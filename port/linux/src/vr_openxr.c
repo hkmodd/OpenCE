@@ -207,6 +207,11 @@ static struct
 	GLuint mirror;
 	long mirror_width, mirror_height;
 	GLuint panel_program, vertex_array;
+	/* the comfort vignette's program (0 without one), its uniforms, and this
+	frame's amount (vr_vignette) */
+	GLuint vignette_program;
+	GLint vignette_bounds, vignette_radii;
+	float vignette;
 
 	/* this frame */
 	XrFrameState frame_state;
@@ -649,18 +654,23 @@ the game's glClipControl(GL_UPPER_LEFT) (d3d8_gl.c), which puts clip space's
 top in the image's row 0: so the picture's row 0, its top, is sampled for
 the image's last row, the top as OpenGL and the runtime keep it (`rows`
 -1 turns it over, for a runtime that takes the rows from the top). */
+/* the panel's and the vignette's vertices: a triangle over the whole image,
+`position` the picture's place in it (0 to 1, from its bottom left) */
+static const char *const vr_image_vertex_text =
+	"#version 330 core\n"
+	"uniform float rows;\n"
+	"out vec2 position;\n"
+	"void main()\n"
+	"{\n"
+	"	vec2 corner = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));\n"
+	"	position = corner;\n"
+	"	gl_Position = vec4(corner.x * 2.0 - 1.0, (corner.y * 2.0 - 1.0) * rows, 0.0, 1.0);\n"
+	"}\n";
+
+static GLuint vr_image_program(const char *fragment_text, const char *what);
+
 static GLuint vr_panel_program(void)
 {
-	static const char *const vertex_text =
-		"#version 330 core\n"
-		"uniform float rows;\n"
-		"out vec2 position;\n"
-		"void main()\n"
-		"{\n"
-		"	vec2 corner = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));\n"
-		"	position = corner;\n"
-		"	gl_Position = vec4(corner.x * 2.0 - 1.0, (corner.y * 2.0 - 1.0) * rows, 0.0, 1.0);\n"
-		"}\n";
 	static const char *const fragment_text =
 		"#version 330 core\n"
 		"uniform sampler2D picture;\n"
@@ -671,7 +681,47 @@ static GLuint vr_panel_program(void)
 		"	vec3 c = texture(picture, position).rgb;\n"
 		"	colour = vec4(c, max(c.r, max(c.g, c.b)));\n"
 		"}\n";
-	const char *const texts[2] = { vertex_text, fragment_text };
+	GLuint program = vr_image_program(fragment_text, "the panel's");
+
+	if (!program)
+		return 0;
+	glUseProgram(program);
+	glUniform1i(glGetUniformLocation(program, "picture"), 0);
+	glUseProgram(0);
+	return program;
+}
+
+/* the comfort vignette over an eye's image: black, as dense as the slope
+of a pixel's ray from the eye's axis (its tangents, from the eye's field:
+`bounds` left, right, down, up) is past the clear field's (`radii`, its
+edge and the dark's) */
+static GLuint vr_vignette_program(void)
+{
+	static const char *const fragment_text =
+		"#version 330 core\n"
+		"uniform vec4 bounds;\n"
+		"uniform vec2 radii;\n"
+		"in vec2 position;\n"
+		"out vec4 colour;\n"
+		"void main()\n"
+		"{\n"
+		"	vec2 slope = vec2(mix(bounds.x, bounds.y, position.x), mix(bounds.z, bounds.w, position.y));\n"
+		"	colour = vec4(0.0, 0.0, 0.0, smoothstep(radii.x, radii.y, length(slope)));\n"
+		"}\n";
+	GLuint program = vr_image_program(fragment_text, "the vignette's");
+
+	if (!program)
+		return 0;
+	vr.vignette_bounds = glGetUniformLocation(program, "bounds");
+	vr.vignette_radii = glGetUniformLocation(program, "radii");
+	return program;
+}
+
+/* a program of vr_image_vertex_text's vertices and `fragment_text`, its
+rows as the runtime takes them; 0 when it does not build */
+static GLuint vr_image_program(const char *fragment_text, const char *what)
+{
+	const char *const texts[2] = { vr_image_vertex_text, fragment_text };
 	const GLenum types[2] = { GL_VERTEX_SHADER, GL_FRAGMENT_SHADER };
 	GLuint program = glCreateProgram(), shaders[2];
 	GLint status = 0;
@@ -688,7 +738,7 @@ static GLuint vr_panel_program(void)
 			char log[512];
 
 			glGetShaderInfoLog(shaders[index], sizeof(log), NULL, log);
-			platform_log("vr: the panel's shader: %s", log);
+			platform_log("vr: %s shader: %s", what, log);
 		}
 		glAttachShader(program, shaders[index]);
 	}
@@ -698,11 +748,10 @@ static GLuint vr_panel_program(void)
 	glGetProgramiv(program, GL_LINK_STATUS, &status);
 	if (!status)
 	{
-		platform_log("vr: the panel's program does not link");
+		platform_log("vr: %s program does not link", what);
 		return 0;
 	}
 	glUseProgram(program);
-	glUniform1i(glGetUniformLocation(program, "picture"), 0);
 	glUniform1f(glGetUniformLocation(program, "rows"), vr.rows_from_top ? -1.0f : 1.0f);
 	glUseProgram(0);
 	return program;
@@ -959,6 +1008,8 @@ static int vr_create_drawing(long width, long height)
 	vr.mirror_width = width;
 	vr.mirror_height = height;
 	vr.panel_program = vr_panel_program();
+	/* (without it, no vignette) */
+	vr.vignette_program = vr_vignette_program();
 	xgpu_gl_state_invalidate();
 	return vr.panel_program != 0;
 }
@@ -2148,6 +2199,53 @@ static void vr_copy(GLuint source, long source_width, long source_height, GLuint
 	glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
 }
 
+/* the comfort vignette (vr.vignette) over an eye's image: from a clear
+field 85 degrees from the eye's axis at rest to 35 at its fullest, the dark
+20 degrees beyond */
+static void vr_draw_vignette(int eye, GLuint image)
+{
+	float clear, dark, bounds[4];
+
+	if (!vr.vignette_program || !(vr.vignette > 0.01f))
+		return;
+	clear = (85.0f - 50.0f * (vr.vignette < 1.0f ? vr.vignette : 1.0f)) * VR_DEGREES;
+	dark = clear + 20.0f * VR_DEGREES;
+	if (dark > 89.0f * VR_DEGREES)
+		dark = 89.0f * VR_DEGREES;
+	glBindFramebuffer(GL_FRAMEBUFFER, vr.framebuffers[1]);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, image, 0);
+	glViewport(0, 0, (GLsizei)vr.eyes[eye].width, (GLsizei)vr.eyes[eye].height);
+	glDisable(GL_SCISSOR_TEST);
+	glDisable(GL_DEPTH_TEST);
+	glDisable(GL_STENCIL_TEST);
+	glDisable(GL_CULL_FACE);
+	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+	glEnable(GL_BLEND);
+	glBlendEquation(GL_FUNC_ADD);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glUseProgram(vr.vignette_program);
+	bounds[0] = (float)tan(vr.frame.fov[eye].left);
+	bounds[1] = (float)tan(vr.frame.fov[eye].right);
+	bounds[2] = (float)tan(vr.frame.fov[eye].down);
+	bounds[3] = (float)tan(vr.frame.fov[eye].up);
+	glUniform4fv(vr.vignette_bounds, 1, bounds);
+	glUniform2f(vr.vignette_radii, (float)tan(clear), (float)tan(dark));
+	glBindVertexArray(vr.vertex_array);
+	glDrawArrays(GL_TRIANGLES, 0, 3);
+	glDisable(GL_BLEND);
+	glUseProgram(0);
+	if (vr.dumping)
+		vr_dump_texture(image, vr.eyes[eye].width, vr.eyes[eye].height, eye ? "vignette1" : "vignette0",
+			vr.rows_from_top, 0);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+void vr_vignette(float amount)
+{
+	vr.vignette = amount > 0.0f && amount <= 1.0f ? amount : amount > 1.0f ? 1.0f : 0.0f;
+}
+
 void vr_resolve_eye(int eye, unsigned int texture, int width, int height)
 {
 	GLuint image;
@@ -2172,6 +2270,7 @@ void vr_resolve_eye(int eye, unsigned int texture, int width, int height)
 		else
 		{
 			vr_copy(texture, width, height, image, vr.eyes[eye].width, vr.eyes[eye].height, 1);
+			vr_draw_vignette(eye, image);
 		}
 		vr_release(&vr.eyes[eye]);
 		vr.eyes_drawn[eye] = 1;

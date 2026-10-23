@@ -149,6 +149,9 @@ over a target the game would aim at */
 void vr_reticle_place(const float position[3], int target);
 /* the eyes black for this long (a cinematic's cut, vr_view.c) */
 void vr_blink(float seconds);
+/* the comfort vignette this frame: 0 none, 1 the eyes' field closed to
+its middle (vr.vignette, vr_view.c) */
+void vr_vignette(float amount);
 
 /* ---------- the game side (vr_view.c) */
 
