@@ -734,6 +734,59 @@ struct real_matrix4x3 *first_person_weapon_get_node_matrices(
 	return first_person_weapon->node_matrices;
 }
 
+/* port: the first-person animations the weapon was last posed with, while
+it is drawn: the headset finds the arms' bones in them
+(port/linux/game/vr_arms.c) */
+struct animation_graph *first_person_weapon_get_animation_graph(
+	short local_player_index)
+{
+	struct first_person_weapon *first_person_weapon= first_person_weapon_get(local_player_index);
+	struct weapon_datum *weapon= first_person_weapon->visible && first_person_weapon->weapon_index!=NONE ?
+		weapon_try_and_get(first_person_weapon->weapon_index) : NULL;
+	struct weapon_definition *weapon_definition;
+
+	if (!weapon)
+	{
+		return NULL;
+	}
+	weapon_definition= weapon_definition_get(weapon->definition_index);
+	if (weapon_definition->weapon.interface_definition.first_person_animations.index==NONE)
+	{
+		return NULL;
+	}
+	return animation_graph_definition_get(weapon_definition->weapon.interface_definition.first_person_animations.index);
+}
+
+/* port: an animation of the off hand's own plays: the headset holds that
+hand to the weapon as animated, not to its controller
+(port/linux/game/vr_arms.c) */
+boolean first_person_weapon_off_hand_busy(
+	short local_player_index)
+{
+	struct first_person_weapon *first_person_weapon= first_person_weapon_get(local_player_index);
+
+	if (!first_person_weapon->visible)
+	{
+		return FALSE;
+	}
+	switch (first_person_weapon->state)
+	{
+	case _first_person_weapon_state_melee:
+	case _first_person_weapon_state_reload_while_empty:
+	case _first_person_weapon_state_reload_while_full:
+	case _first_person_weapon_state_shotgun_enter_reload:
+	case _first_person_weapon_state_shotgun_exit_reload_empty:
+	case _first_person_weapon_state_shotgun_exit_reload_full:
+	case _first_person_weapon_state_put_away:
+	case _first_person_weapon_state_ready:
+	case _first_person_weapon_state_throw_grenade:
+	case _first_person_weapon_state_throw_grenade_overheated:
+		return TRUE;
+	default:
+		return FALSE;
+	}
+}
+
 void first_person_weapon_center_flashlight(
 	long unit_index,
 	real_point3d *position,

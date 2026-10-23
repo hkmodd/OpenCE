@@ -168,6 +168,81 @@ int vr_limit_reach(float offset[3], float reach)
 	return 1;
 }
 
+int vr_arm_elbow(float shoulder[3], const float wrist[3], float upper, float lower, const float bend[3],
+	float elbow[3])
+{
+	float along[3], across[3], length, nearest, farthest, reach, out, off, dot;
+	int axis, moved = 0;
+
+	if (!(upper > 0.0f) || !(lower > 0.0f) || !vr_finite(shoulder, 3) || !vr_finite(wrist, 3) ||
+		!vr_finite(bend, 3) || !vr_finite(&upper, 1) || !vr_finite(&lower, 1))
+	{
+		return -1;
+	}
+	for (axis = 0; axis < 3; axis++)
+		along[axis] = wrist[axis] - shoulder[axis];
+	length = (float)sqrt(along[0] * along[0] + along[1] * along[1] + along[2] * along[2]);
+	if (length > 1e-6f)
+	{
+		for (axis = 0; axis < 3; axis++)
+			along[axis] /= length;
+	}
+	else
+	{
+		along[0] = 1.0f;
+		along[1] = along[2] = 0.0f;
+	}
+	/* (a little short of straight and of folded, where the elbow's place
+	still moves steadily with the wrist's) */
+	farthest = (upper + lower) * 0.999f;
+	nearest = (float)fabs(upper - lower) + (upper + lower) * 0.05f;
+	reach = length < nearest ? nearest : length > farthest ? farthest : length;
+	if (reach != length)
+	{
+		for (axis = 0; axis < 3; axis++)
+			shoulder[axis] = wrist[axis] - along[axis] * reach;
+		moved = 1;
+	}
+	/* the elbow's distance from the shoulder along the line, and off it
+	(the cosine rule) */
+	out = (upper * upper + reach * reach - lower * lower) / (2.0f * reach);
+	off = upper * upper - out * out;
+	off = off > 0.0f ? (float)sqrt(off) : 0.0f;
+	dot = bend[0] * along[0] + bend[1] * along[1] + bend[2] * along[2];
+	for (axis = 0; axis < 3; axis++)
+		across[axis] = bend[axis] - along[axis] * dot;
+	length = (float)sqrt(across[0] * across[0] + across[1] * across[1] + across[2] * across[2]);
+	if (length < 1e-6f)
+	{
+		/* (bent along the line: any way across it, the least along it of the
+		axes') */
+		static float const axes[3][3] = { { 1.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f, 1.0f } };
+		int least = 0;
+
+		for (axis = 1; axis < 3; axis++)
+		{
+			if (fabs(along[axis]) < fabs(along[least]))
+				least = axis;
+		}
+		dot = along[least];
+		for (axis = 0; axis < 3; axis++)
+			across[axis] = axes[least][axis] - along[axis] * dot;
+		length = (float)sqrt(across[0] * across[0] + across[1] * across[1] + across[2] * across[2]);
+	}
+	for (axis = 0; axis < 3; axis++)
+		elbow[axis] = shoulder[axis] + along[axis] * out + across[axis] / length * off;
+	return moved;
+}
+
+float vr_twist_about(const float q[4], const float axis[3])
+{
+	float along = q[0] * axis[0] + q[1] * axis[1] + q[2] * axis[2];
+
+	if (!vr_finite(q, 4) || !vr_finite(axis, 3) || (along == 0.0f && q[3] == 0.0f))
+		return 0.0f;
+	return vr_wrap_angle(2.0f * (float)atan2(along, q[3]));
+}
+
 int vr_finite(const float *values, int count)
 {
 	int index;

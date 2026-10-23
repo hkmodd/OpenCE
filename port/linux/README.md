@@ -447,6 +447,7 @@ the setting for one start of the game. It has priority over the file.
 | `display.hdr_output` | `false` | `HALO_HDR_OUTPUT` | Not on Android or in a browser. With `display.hdr`, `true`: the window asks for floating-point pixels (scRGB). On a display that has HDR on (on Windows, "Use HDR"), the tone mapping then goes up to the display's headroom over SDR white, and the light past white is shown brighter than white. Without an HDR display the picture is as with `false`; if the driver has no such window, the game makes an 8-bit one. Read at start. With NVIDIA's driver on Windows, the NVIDIA Control Panel's "Vulkan/OpenGL present method" must be "Prefer layered on DXGI Swapchain": otherwise a fullscreen or borderless window turns black, then oversaturated. Experimental. |
 | `display.vr` | `false` | `HALO_VR` | Not on Android or in a browser. `true`: play in a VR headset through its OpenXR runtime. `false`: nothing of OpenXR is loaded. Read at start. Refer to "VR". |
 | `vr.resolution_scale` | `1.0` | `HALO_VR_RESOLUTION_SCALE` | With `display.vr`, the eyes' resolution as a multiple of the runtime's recommended one, from `0.5` to `2.0`. Read at start. |
+| `vr.arms` | `"free"` | `HALO_VR_ARMS` | With `display.vr` and the weapon in the hand: `"free"`, each arm its own, from the shoulder: the weapon's hand holds the weapon, the other its controller, until it holds the weapon too (grip near it) or the weapon is reloaded, readied or a grenade thrown; `"weapon"`, both arms on the weapon as the game animates them, moved with the hand. |
 | `vr.eye_height` | `"player"` | `HALO_VR_EYE_HEIGHT` | With `display.vr`, on foot: `"player"` puts the eyes as high over the ground as the player's are over the floor (where the runtime knows it: its STAGE space), so that the world is seen at its size; `"game"` at the Master Chief's, 1.89 m. A crouch lowers the eyes only as far as the head goes. The game's view and shots are unchanged. |
 | `vr.image_rows` | `"auto"` | `HALO_VR_IMAGE_ROWS` | With `display.vr`, how the OpenXR runtime takes the rows of the game's images: `"bottom"` first (OpenGL's and OpenXR's way), `"top"` first, or `"auto"`: from the top for SteamVR, which otherwise shows the game upside down, from the bottom for any other runtime. Read at start. |
 | `vr.hud_distance` | `15.0` | `HALO_VR_HUD_DISTANCE` | With `display.vr`, how far before the head the HUD's panel is held, in metres, from `0.5` to `100`. |
@@ -701,6 +702,11 @@ screen, with the cause in the log.
   crosshair. A zoomed weapon shows its zoom in a scope held on it, not in
   the eyes. With `vr.aim = "head"` the head aims. The off stick moves
   where the head faces.
+- Each arm is its own (`vr.arms`): from the player's shoulders, the
+  weapon's hand holds the weapon and the other hand its controller; it
+  holds the weapon too while both hands do (the off grip near it) and
+  while the weapon is reloaded, readied, put away, swung or a grenade
+  thrown.
 - A vehicle's seat is seen from the seat (`vr.vehicle_view`), the view
   level and turning with the vehicle, the head looking around freely; the
   eyes blink getting in and out, as the view turns to the seat's forward.

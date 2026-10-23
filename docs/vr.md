@@ -161,6 +161,28 @@ What sets the size the world is seen at, each measured or derived:
   game's own) meets the world, facing the head and as wide to the eye at any
   distance, red when the game's crosshair would be; the HUD draws no
   crosshair. The prompts' button icons are the controllers' buttons.
+- Each arm is its own (`vr.arms`, `port/linux/game/vr_arms.c`). The game
+  poses its first-person model, both arms and the weapon, from the camera
+  behind the aiming hand; the model's node matrices are then posed again:
+  the shoulders are the player's (22 cm under the eyes, 11 cm behind them,
+  18 cm either side of a body that turns after the head once it is 35
+  degrees off), the weapon's hand stays where the game holds the weapon
+  (its fingers and the weapon as animated), and the other hand holds its
+  controller as the weapon's hand holds the weapon's grip, mirrored (its
+  place and its palm's way, from the wrist to the middle finger and across
+  the knuckles, against the main controller's grip pose: OpenXR's is where
+  a held gun's grip is). That hand goes to the weapon, blended over 0.15 s,
+  while both hands hold it (`vr_two_handed`) and while an animation of its
+  own plays (readied, put away, reloaded, a grenade thrown, a melee:
+  `first_person_weapon_off_hand_busy`). Each arm reaches its wrist with its
+  own bones' lengths (0.312 and 0.332 m for the stock arms) by two-bone IK
+  (`vr_arm_elbow`, the elbow down and out); a wrist out of reach moves the
+  shoulder after it; each bone turns the least that takes it there, and the
+  forearm takes half the wrist's twist about it (`vr_twist_about`). The
+  arms' root goes between the shoulders, so that the skin it shares with
+  the upper arms does not stretch to the weapon's camera. HaloCEVR
+  (LivingFray's) draws the hands alone, at the controllers; here the arms
+  are whole.
 - A zoomed weapon in the hand stays in it, and draws one window more,
   before the HUD's: the world from the muzzle with the zoom's field (without
   the weapon), in a square of the back buffer, copied into the scope's

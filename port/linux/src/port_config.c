@@ -259,6 +259,11 @@ static const struct config_setting config_settings[] =
 		"ground as the player's are over the floor (where the runtime knows the\n"
 		"floor), so that the world is seen at its size; \"game\" at the Master\n"
 		"Chief's, 1.89 m. The game's own view and shots are the same either way." },
+	{ "vr.arms", _config_string, "\"free\"", "HALO_VR_ARMS", _environment_value, _platform_desktop,
+		"With display.vr and the weapon in the hand: \"free\", each arm its own,\n"
+		"from the shoulder, the other hand at its controller until it holds the\n"
+		"weapon too; \"weapon\", both arms on the weapon as the game animates\n"
+		"them, moved with the hand." },
 	{ "vr.hud_distance", _config_real, "15.0", "HALO_VR_HUD_DISTANCE", _environment_value, _platform_desktop,
 		"How far ahead of the head the HUD's panel is held, in metres (0.5 to\n"
 		"100)." },

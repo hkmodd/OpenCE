@@ -285,6 +285,77 @@ int main(int argc, char **argv)
         CHECK(vr_drive_steer(NAN, 30.0f, -30.0f, 0) == 0.0f && vr_drive_steer(1.0f, 30.0f, INFINITY, 0) == 0.0f,
             "not a number, straight");
     }
+    CASE("elbow") {
+        /* the right arm of the first-person model: 0.312 and 0.332 m */
+        float shoulder[3] = {0.19f, -0.22f, 0.1f}, wrist[3] = {0.25f, -0.45f, -0.4f}, bend[3] = {0.6f, -1, 0};
+        float elbow[3], start[3], upper, lower, side;
+        int moved;
+
+        memcpy(start, shoulder, sizeof(start));
+        moved = vr_arm_elbow(shoulder, wrist, 0.312f, 0.332f, bend, elbow);
+        upper = sqrtf((elbow[0] - shoulder[0]) * (elbow[0] - shoulder[0]) + (elbow[1] - shoulder[1]) *
+            (elbow[1] - shoulder[1]) + (elbow[2] - shoulder[2]) * (elbow[2] - shoulder[2]));
+        lower = sqrtf((wrist[0] - elbow[0]) * (wrist[0] - elbow[0]) + (wrist[1] - elbow[1]) * (wrist[1] - elbow[1]) +
+            (wrist[2] - elbow[2]) * (wrist[2] - elbow[2]));
+        CHECK(moved == 0 && same3(shoulder, start[0], start[1], start[2]), "a wrist in reach: the shoulder stays");
+        CHECK(close_to(upper, 0.312f, 1e-4f) && close_to(lower, 0.332f, 1e-4f), "the bones keep their lengths (%f %f)",
+            (double)upper, (double)lower);
+        /* (the elbow on the bend's side of the shoulder-wrist line) */
+        {
+            float along[3] = {wrist[0] - shoulder[0], wrist[1] - shoulder[1], wrist[2] - shoulder[2]};
+            float to_elbow[3] = {elbow[0] - shoulder[0], elbow[1] - shoulder[1], elbow[2] - shoulder[2]};
+            float length = sqrtf(along[0] * along[0] + along[1] * along[1] + along[2] * along[2]), t;
+            int axis;
+            t = (to_elbow[0] * along[0] + to_elbow[1] * along[1] + to_elbow[2] * along[2]) / (length * length);
+            side = 0;
+            for (axis = 0; axis < 3; axis++)
+                side += (to_elbow[axis] - along[axis] * t) * bend[axis];
+            CHECK(side > 0.05f, "bent toward the bend (%f)", (double)side);
+        }
+        /* a wrist out of reach: the shoulder follows it, the arm near straight */
+        {
+            float far_wrist[3] = {0.19f, -0.22f, -1.2f};
+            memcpy(shoulder, start, sizeof(shoulder));
+            moved = vr_arm_elbow(shoulder, far_wrist, 0.312f, 0.332f, bend, elbow);
+            CHECK(moved == 1, "out of reach: the shoulder moves");
+            CHECK(close_to(shoulder[2], -1.2f + 0.644f * 0.999f, 1e-4f) && close_to(shoulder[0], 0.19f, 1e-5f),
+                "toward the wrist, by the arm's length (%f)", (double)shoulder[2]);
+            CHECK(close_to(elbow[2], shoulder[2] - 0.312f, 2e-2f), "the arm near straight (%f)", (double)elbow[2]);
+        }
+        /* a wrist at the shoulder: pushed out to the folded length */
+        {
+            float same[3] = {0, 0, 0};
+            float origin[3] = {0, 0, 0};
+            moved = vr_arm_elbow(origin, same, 0.312f, 0.332f, bend, elbow);
+            CHECK(moved == 1 && vr_finite(elbow, 3), "folded: the shoulder moves, the elbow is a place");
+        }
+        CHECK(vr_arm_elbow(shoulder, wrist, 0.0f, 0.332f, bend, elbow) == -1, "no bone, no arm");
+        CHECK(vr_arm_elbow(shoulder, wrist, NAN, 0.332f, bend, elbow) == -1, "not a number, no arm");
+        /* bent straight along the arm: still an elbow off the line */
+        {
+            float along_bend[3] = {0, 0, -1}, straight_wrist[3] = {0, 0, -0.5f}, origin[3] = {0, 0, 0};
+            moved = vr_arm_elbow(origin, straight_wrist, 0.312f, 0.332f, along_bend, elbow);
+            CHECK(moved == 0 && vr_finite(elbow, 3) && (fabsf(elbow[0]) > 0.05f || fabsf(elbow[1]) > 0.05f),
+                "a bend along the line: off it all the same");
+        }
+    }
+    CASE("twist") {
+        float axis[3] = {0, 0, 1}, turn[4], about_z[4] = {0, 0, sinf(0.4f), cosf(0.4f)};
+        float about_x[4] = {sinf(0.3f), 0, 0, cosf(0.3f)};
+        CHECK(close_to(vr_twist_about(about_z, axis), 0.8f, 1e-5f), "about the axis: all twist");
+        CHECK(close_to(vr_twist_about(about_x, axis), 0.0f, 1e-6f), "across it: none");
+        vr_quaternion_multiply(about_x, about_z, turn);
+        CHECK(close_to(vr_twist_about(turn, axis), 0.8f, 0.05f), "a swing then a twist: the twist (%f)",
+            (double)vr_twist_about(turn, axis));
+        {
+            float negated[4] = {-about_z[0], -about_z[1], -about_z[2], -about_z[3]};
+            CHECK(close_to(vr_twist_about(negated, axis), 0.8f, 1e-5f), "the same turn written negated");
+        }
+        {
+            float back[4] = {0, 0, -sinf(0.4f), cosf(0.4f)};
+            CHECK(close_to(vr_twist_about(back, axis), -0.8f, 1e-5f), "the other way, negative");
+        }
+    }
     CASE("between") {
         float from[3] = {0.36f, 0.48f, -0.8f}, to[3] = {0, 0, -1}, turn[4], turned[3];
         float pairs[][2][3] = {

@@ -77,5 +77,16 @@ wheels' limits as the vehicle's definition has them (degrees, left positive
 and right negative); mirrored while the vehicle backs, as the game turns the
 wheels against the facing then, so that they turn as the stick does */
 float vr_drive_steer(float x, float left_limit, float right_limit, int backing);
+/* a two-bone arm (in any one frame of axes): the elbow of an arm from
+`shoulder` to `wrist`, its bones `upper` and `lower` long, bent toward
+`bend` (a direction off the line between them). A wrist beyond the arm's
+reach, or nearer than its folded length, moves the shoulder along that
+line until it is reached. 1 when the shoulder moved, 0 when not, -1 for
+what makes no arm (nothing changed) */
+int vr_arm_elbow(float shoulder[3], const float wrist[3], float upper, float lower, const float bend[3],
+	float elbow[3]);
+/* the angle (radians, -pi to pi) the rotation `q` turns about the unit
+`axis`: its twist, the part of it about that axis */
+float vr_twist_about(const float q[4], const float axis[3]);
 
 #endif

@@ -52,6 +52,7 @@ cutscenes are drawn as always, onto the flat screen held in the room.
 #ifndef HALO_GLES
 
 #include "cseries.h"
+#include "vr_arms.h"
 #include "vr_input.h"
 #include "camera/director.h"
 #include "cutscene/cinematics.h"
@@ -59,7 +60,9 @@ cutscenes are drawn as always, onto the flat screen held in the room.
 #include "game/game.h"
 #include "interface/first_person_weapons.h"
 #include "interface/hud.h"
+#include "items/weapon_definitions.h"
 #include "items/weapons.h"
+#include "models/model_animation_definitions.h"
 #include "objects/objects.h"
 #include "interface/hud_definitions.h"
 #include "physics/collisions.h"
@@ -239,11 +242,18 @@ static struct
 	boolean immersive_cinematics;
 	boolean room_scale;
 	boolean eye_height_player;
+	boolean arms_free;
 
 	/* vr.eye_height "player": the unit's crouch at the last two ticks
 	(blended as the drawn camera is) and the tick of the later */
 	real eye_crouch[2];
 	long eye_crouch_tick;
+
+	/* this frame's heading and the controllers' grips in the world, for
+	the arms (vr_arms.c) */
+	real frame_heading;
+	boolean grip_valid[VR_HAND_COUNT];
+	struct render_camera grips[VR_HAND_COUNT];
 
 	/* in a seat seen from it (vr.vehicle_view "first_person"): the vehicle
 	and the seat, the view's yaw from the vehicle's (the seat's own turn, less
@@ -289,6 +299,7 @@ static void vr_settings_read(
 	vr_view.immersive_cinematics = strcmp(config_string("vr.cinematics"), "screen") != 0;
 	vr_view.room_scale = config_boolean("vr.roomscale");
 	vr_view.eye_height_player = strcmp(config_string("vr.eye_height"), "game") != 0;
+	vr_view.arms_free = strcmp(config_string("vr.arms"), "weapon") != 0;
 }
 
 /* the hand that aims the weapon it holds: the main controller, tracked,
@@ -976,7 +987,7 @@ short vr_render_windows(
 	float head[3], offset[3];
 	real heading, aspect;
 	short window_index;
-	int eye;
+	int eye, hand_index;
 
 	vr_view.stereo = FALSE;
 	vr_view.weapon_in_hand = FALSE;
@@ -1046,6 +1057,19 @@ short vr_render_windows(
 	/* the head between the eyes: the HUD's view and the weapon's */
 	vr_view.head_camera = player.rasterizer_camera;
 	vr_camera_from_pose(&vr_view.head_camera, &frame->head, head, &anchor, heading);
+	/* the controllers' grips, for the arms (vr_arms.c) */
+	vr_view.frame_heading = heading;
+	for (hand_index = 0; hand_index < VR_HAND_COUNT; hand_index++)
+	{
+		struct vr_hand const *grip = &frame->hand[hand_index];
+		int axis;
+
+		vr_view.grip_valid[hand_index] = frame->controllers && grip->tracked;
+		for (axis = 0; axis < 3; axis++)
+			offset[axis] = head[axis] + grip->grip.position[axis] - frame->head.position[axis];
+		vr_view.grips[hand_index] = player.rasterizer_camera;
+		vr_camera_from_pose(&vr_view.grips[hand_index], &grip->grip, offset, &anchor, heading);
+	}
 	/* the weapon's camera, behind the aiming hand: the grip's place less
 	VR_WEAPON_GRIP along the axes of the aim, turned so that the model's
 	barrel lies along it (vr_weapon_in_hand) */
@@ -1234,6 +1258,40 @@ static void vr_weapon_mirror(
 	}
 }
 
+/* each arm its own (vr.arms "free"): from its shoulder, the weapon's hand
+holding the weapon, the other its controller (vr_arms.c) */
+static void vr_arms_update(
+	void)
+{
+	struct vr_frame const *frame = vr_frame_get();
+	struct animation_graph *graph = first_person_weapon_get_animation_graph(render.local_player_index);
+	struct vr_arms_pose pose;
+	real_matrix4x3 *matrices;
+	short count, main_hand = vr_view.main_hand, off_hand = main_hand == VR_HAND_LEFT ? VR_HAND_RIGHT : VR_HAND_LEFT;
+	float orientation[4];
+
+	if (!vr_view.arms_free || !graph)
+		return;
+	matrices = first_person_weapon_get_node_matrices(render.local_player_index, &count);
+	pose.head = vr_view.head_camera.position;
+	pose.head_forward = vr_view.head_camera.forward;
+	pose.head_up = vr_view.head_camera.up;
+	pose.heading = vr_view.frame_heading;
+	pose.main_left = main_hand == VR_HAND_LEFT;
+	pose.main_valid = vr_view.grip_valid[main_hand];
+	pose.main_grip = vr_view.grips[main_hand].position;
+	pose.main_forward = vr_view.grips[main_hand].forward;
+	pose.main_up = vr_view.grips[main_hand].up;
+	pose.off_valid = vr_view.grip_valid[off_hand];
+	pose.off_grip = vr_view.grips[off_hand].position;
+	pose.off_forward = vr_view.grips[off_hand].forward;
+	pose.off_up = vr_view.grips[off_hand].up;
+	pose.off_on_weapon = vr_two_handed(frame, pose.main_left, orientation) ||
+		first_person_weapon_off_hand_busy(render.local_player_index);
+	pose.seconds = frame->display_period;
+	vr_arms_pose(matrices, count, graph, &pose);
+}
+
 void vr_render_weapon_posed(
 	void)
 {
@@ -1242,6 +1300,7 @@ void vr_render_weapon_posed(
 	vr_weapon_learn();
 	if (vr_view.main_hand == VR_HAND_LEFT)
 		vr_weapon_mirror();
+	vr_arms_update();
 }
 
 void vr_render_weapon_drawing(
@@ -1545,6 +1604,7 @@ void vr_view_reset(
 	vr_view.driving = FALSE;
 	vr_view.eye_crouch_tick = NONE;
 	vr_view.cinematic = FALSE;
+	vr_arms_reset();
 	vr_view.room = FALSE;
 	vr_view.room_valid = FALSE;
 	vr_view.room_anchor_valid = FALSE;

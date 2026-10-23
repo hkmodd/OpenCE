@@ -8,7 +8,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from harness import CHECK_FAILED, build, enum_with, function, mutated, read, run, structure
 
-CASES = ["bounds", "pose", "helpers", "between", "axes", "steer"]
+CASES = ["bounds", "pose", "helpers", "between", "axes", "steer", "elbow", "twist"]
 CONTROLS = {
     "bottom-is-top": (("bounds[2] = (float)tan(fov->down);", "bounds[2] = (float)tan(fov->up);"), "bounds"),
     "no-aspect": (("bounds[0] = (float)tan(fov->left) / aspect;", "bounds[0] = (float)tan(fov->left);"), "bounds"),
@@ -36,6 +36,16 @@ CONTROLS = {
     "steer-one-limit": (("limit = (float)fabs(x > 0.0f ? right_limit : left_limit);", "limit = (float)fabs(left_limit);"),
                         "steer"),
     "steer-backing-unmirrored": (("return backing ? -angle : angle;", "return angle;"), "steer"),
+    "elbow-cosine-rule-swapped": (("out = (upper * upper + reach * reach - lower * lower) / (2.0f * reach);",
+                                   "out = (lower * lower + reach * reach - upper * upper) / (2.0f * reach);"), "elbow"),
+    "elbow-away-from-bend": (("elbow[axis] = shoulder[axis] + along[axis] * out + across[axis] / length * off;",
+                              "elbow[axis] = shoulder[axis] + along[axis] * out - across[axis] / length * off;"), "elbow"),
+    "elbow-shoulder-stays": (("\t\tmoved = 1;\n\t}\n\t/* the elbow's", "\t\tmoved = 0;\n\t}\n\t/* the elbow's"),
+                             "elbow"),
+    "twist-halved": (("return vr_wrap_angle(2.0f * (float)atan2(along, q[3]));",
+                      "return vr_wrap_angle((float)atan2(along, q[3]));"), "twist"),
+    "twist-unwrapped": (("return vr_wrap_angle(2.0f * (float)atan2(along, q[3]));",
+                         "return 2.0f * (float)atan2(along, q[3]);"), "twist"),
 }
 
 

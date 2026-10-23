@@ -84,6 +84,14 @@ with, and their count (port/linux/game/vr_view.c) */
 struct real_matrix4x3 *first_person_weapon_get_node_matrices(
 	short local_player_index,
 	short *node_count);
+/* port: the first-person animations those matrices were posed with, or NULL
+(port/linux/game/vr_arms.c) */
+struct animation_graph *first_person_weapon_get_animation_graph(
+	short local_player_index);
+/* port: an animation of the off hand's own plays: the weapon readied or put
+away, reloaded, a grenade thrown, a melee (port/linux/game/vr_arms.c) */
+boolean first_person_weapon_off_hand_busy(
+	short local_player_index);
 
 /* ---------- globals */
 
