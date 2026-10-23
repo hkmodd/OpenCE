@@ -88,6 +88,7 @@ void platform_log(char const *format, ...);
 the back buffer's picture into an eye's image */
 void halo_vr_clear_transparent(void);
 void halo_vr_mirror_winding(int mirrored);
+void halo_vr_two_sided(int two_sided);
 void halo_vr_resolve_eye(int eye);
 /* ... and a rectangle of it (the screen's coordinates) into the scope's */
 void halo_vr_resolve_scope(short x0, short y0, short x1, short y1);
@@ -1306,14 +1307,24 @@ void vr_render_weapon_posed(
 void vr_render_weapon_drawing(
 	int drawing)
 {
-	static boolean mirrored;
+	static boolean mirrored, both_faces;
 	boolean mirror = drawing && VR_RENDER_WORLD() && vr_view.stereo && vr_view.weapon_in_hand &&
 		vr_view.main_hand == VR_HAND_LEFT;
+	/* (the arms posed from the player's shoulders show sides of them the
+	stock view never shows, which the model has no faces for: their backs
+	are drawn too) */
+	boolean two_sided = drawing && VR_RENDER_WORLD() && vr_view.stereo && vr_view.weapon_in_hand &&
+		vr_view.arms_free;
 
 	if (mirror != mirrored)
 	{
 		mirrored = mirror;
 		halo_vr_mirror_winding(mirror);
+	}
+	if (two_sided != both_faces)
+	{
+		both_faces = two_sided;
+		halo_vr_two_sided(two_sided);
 	}
 }
 

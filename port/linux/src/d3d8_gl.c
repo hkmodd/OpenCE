@@ -2295,6 +2295,9 @@ int halo_scoreboard_pointer_update(int offered, struct halo_ui_pointer *pointer)
 /* the triangles' winding turned over: the headset's first-person weapon
 drawn mirrored, in the left hand (halo_vr_mirror_winding) */
 static int vr_mirror_winding;
+/* both faces of the triangles drawn: the headset's first-person arms, seen
+from where the stock view never sees them (halo_vr_two_sided) */
+static int vr_two_sided;
 
 /* a headset's controller pointing at the panel the menus are on, in place
 of the mouse (vr_input.c): where it points, and its trigger's clicks there */
@@ -4102,7 +4105,11 @@ static void apply_raster_state(BOOL has_depth)
 
 	/* the cull mode names the winding to discard; FRONTFACE names the
 	front winding */
+#ifndef HALO_GLES
+	state_enable(&gl_state.cull_face, GL_CULL_FACE, rs[D3DRS_CULLMODE] != D3DCULL_NONE && !vr_two_sided);
+#else
 	state_enable(&gl_state.cull_face, GL_CULL_FACE, rs[D3DRS_CULLMODE] != D3DCULL_NONE);
+#endif
 	if (rs[D3DRS_CULLMODE] != D3DCULL_NONE)
 	{
 #ifdef HALO_GLES
@@ -6800,6 +6807,11 @@ static void front_buffer_take(void)
 void halo_vr_mirror_winding(int mirrored)
 {
 	vr_mirror_winding = mirrored != 0;
+}
+
+void halo_vr_two_sided(int two_sided)
+{
+	vr_two_sided = two_sided != 0;
 }
 
 /* the headset's HUD pass starts on a clear ground (port/linux/game/vr_view.c) */
