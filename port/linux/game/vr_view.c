@@ -257,8 +257,10 @@ static struct
 	real vignette_strength;
 
 	/* the comfort vignette: where LOCAL's origin was in the world and the
-	heading, the last frame, and how far it is closed */
+	heading, the last frame, the runtime's recentres then, and how far it is
+	closed */
 	boolean vignette_valid;
+	unsigned long vignette_recentres;
 	real_point3d vignette_origin;
 	real vignette_heading;
 	real vignette;
@@ -1023,7 +1025,8 @@ static void vr_comfort(
 	for (axis = 0; axis < 3; axis++)
 		offset[axis] = head[axis] - frame->head.position[axis];
 	vr_camera_from_pose(&origin, &frame->head, offset, anchor, heading);
-	if (vr_view.vignette_valid)
+	/* (a recentre moves LOCAL's origin: not the view's own move) */
+	if (vr_view.vignette_valid && vr_view.vignette_recentres == frame->recentres)
 	{
 		real moved = distance3d(&origin.position, &vr_view.vignette_origin) / VR_UNITS_PER_METRE;
 		real turned = (real)fabs(vr_wrap_angle(heading - vr_view.vignette_heading));
@@ -1041,6 +1044,7 @@ static void vr_comfort(
 		}
 	}
 	vr_view.vignette_valid = TRUE;
+	vr_view.vignette_recentres = frame->recentres;
 	vr_view.vignette_origin = origin.position;
 	vr_view.vignette_heading = heading;
 	rate = period / (target > vr_view.vignette ? VR_VIGNETTE_CLOSE : VR_VIGNETTE_OPEN);
