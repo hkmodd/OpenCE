@@ -95,6 +95,10 @@ struct vr_frame
 	struct vr_fov fov[2];
 	/* counts the runtime's recentres (its LOCAL space moved) */
 	unsigned long recentres;
+	/* how high LOCAL's origin is over the floor, in metres (the runtime's
+	STAGE space), once `floor_known` */
+	int floor_known;
+	float floor_height;
 	/* the controllers, for the frame's display time; `controllers` is set
 	once the runtime has given any of their input */
 	int controllers;

@@ -254,6 +254,11 @@ static const struct config_setting config_settings[] =
 		"\"top\" first, or \"auto\": from the top for SteamVR, which otherwise\n"
 		"shows the game upside down, from the bottom for any other runtime. Taken\n"
 		"up when the game starts." },
+	{ "vr.eye_height", _config_string, "\"player\"", "HALO_VR_EYE_HEIGHT", _environment_value, _platform_desktop,
+		"With display.vr, on foot: \"player\" puts the eyes as high over the\n"
+		"ground as the player's are over the floor (where the runtime knows the\n"
+		"floor), so that the world is seen at its size; \"game\" at the Master\n"
+		"Chief's, 1.89 m. The game's own view and shots are the same either way." },
 	{ "vr.hud_distance", _config_real, "15.0", "HALO_VR_HUD_DISTANCE", _environment_value, _platform_desktop,
 		"How far ahead of the head the HUD's panel is held, in metres (0.5 to\n"
 		"100)." },

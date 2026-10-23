@@ -184,6 +184,8 @@ static struct
 	XrSystemId system;
 	XrSession session;
 	XrSpace local, view;
+	/* the floor's space (STAGE), where the runtime has one */
+	XrSpace stage;
 
 	/* the controllers' actions (vr_create_actions): each per hand */
 	XrActionSet action_set;
@@ -708,6 +710,7 @@ static GLuint vr_panel_program(void)
 
 static int vr_create_drawing(long width, long height);
 static int vr_create_actions(void);
+static void vr_locate_floor(XrTime time);
 static void vr_pose_of(const XrPosef *pose, struct vr_pose *out);
 
 static int vr_create_session(void)
@@ -782,6 +785,13 @@ static int vr_create_session(void)
 	space.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_VIEW;
 	if (!vr_check(xrCreateReferenceSpace(vr.session, &space, &vr.view), "creating the VIEW space"))
 		return 0;
+	/* (the floor, for the eyes' height over it: vr.eye_height) */
+	space.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_STAGE;
+	if (!XR_SUCCEEDED(xrCreateReferenceSpace(vr.session, &space, &vr.stage)))
+	{
+		vr.stage = XR_NULL_HANDLE;
+		platform_log("vr: the runtime knows no floor (STAGE): the eyes at the game's height");
+	}
 	/* (without them the headset still works, with the pad or the keyboard) */
 	if (!vr_create_actions())
 	{
@@ -1362,6 +1372,9 @@ wider toward the nose's far side, 64 mm apart */
 #define VR_SIMULATED_WIDTH 1328
 #define VR_SIMULATED_HEIGHT 1584
 #define VR_SIMULATED_IPD 0.064f
+/* the simulated head's LOCAL origin over the floor: a standing player's
+eyes (an adult's average, 1.75 m tall) */
+#define VR_SIMULATED_FLOOR 1.63f
 
 static GLuint vr_simulated_image(long width, long height)
 {
@@ -1617,6 +1630,8 @@ static void vr_simulate_frame(void)
 	}
 	vr.frame.display_period = 1.0f / 90.0f;
 	vr.frame.focused = 1;
+	vr.frame.floor_known = 1;
+	vr.frame.floor_height = VR_SIMULATED_FLOOR;
 	vr.frame.stereo = 1;
 	vr.frame_state.shouldRender = XR_TRUE;
 	vr.display_seconds = 1.0 / 90.0;
@@ -1735,6 +1750,8 @@ void vr_dispose(void)
 			xrDestroySpace(vr.local);
 		if (vr.view != XR_NULL_HANDLE)
 			xrDestroySpace(vr.view);
+		if (vr.stage != XR_NULL_HANDLE)
+			xrDestroySpace(vr.stage);
 		xrDestroySession(vr.session);
 	}
 	if (vr.instance != XR_NULL_HANDLE && xrDestroyInstance)
@@ -1981,6 +1998,7 @@ int vr_frame_begin(void)
 		return 0;
 	}
 	vr_pose_of(&head.pose, &vr.frame.head);
+	vr_locate_floor(vr.frame_state.predictedDisplayTime);
 	for (eye = 0; eye < 2; eye++)
 	{
 		vr_pose_of(&vr.views[eye].pose, &vr.frame.eye[eye]);
@@ -2017,6 +2035,28 @@ int vr_frame_begin(void)
 	vr.stereo_frames++;
 	vr.dumping = vr_dump_due();
 	return 1;
+}
+
+/* the floor under LOCAL's origin (the last known while the runtime loses
+it: a guardian not set, the sensors covered) */
+static void vr_locate_floor(XrTime time)
+{
+	XrSpaceLocation floor;
+
+	if (vr.stage == XR_NULL_HANDLE)
+		return;
+	memset(&floor, 0, sizeof(floor));
+	floor.type = XR_TYPE_SPACE_LOCATION;
+	if (!XR_SUCCEEDED(xrLocateSpace(vr.local, vr.stage, time, &floor)) ||
+		!(floor.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT) || !vr_finite(&floor.pose.position.y, 1) ||
+		!(floor.pose.position.y > 0.3f && floor.pose.position.y < 2.5f))
+	{
+		return;
+	}
+	if (!vr.frame.floor_known)
+		platform_log("vr: the floor %.2f m under LOCAL's origin", (double)floor.pose.position.y);
+	vr.frame.floor_known = 1;
+	vr.frame.floor_height = floor.pose.position.y;
 }
 
 struct vr_frame const *vr_frame_get(void)

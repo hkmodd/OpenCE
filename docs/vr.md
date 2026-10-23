@@ -49,6 +49,32 @@ The session draws on the game's own context with `XR_KHR_opengl_enable`
 Virtual Desktop's runtimes give Direct3D and Vulkan images only; they could
 be served later with `XR_KHR_D3D11_enable` and `WGL_NV_DX_interop2`.
 
+## The world's size
+
+What sets the size the world is seen at, each measured or derived:
+
+- A world unit is 10 feet, 3.048 m (`VR_UNITS_PER_METRE` 0.328): the
+  Master Chief, 2.08 m tall in armour, has his eyes at 0.62 units (1.893 m
+  over the ground, measured in Blood Gulch). LivingFray's HaloCEVR and
+  astromaddie's port take the same unit.
+- The eyes are the runtime's, apart by its IPD in those units: the stereo
+  gives distances and sizes in metres.
+- Each eye's projection is its own off-centre field, the runtime's angles:
+  `render_camera_build_frustum` with a 90-degree field and bounds of the
+  angles' tangents (`vr_fov_bounds`) scales x by 2 / (tan right - tan
+  left) and y by 2 / (tan up - tan down), the OpenXR projection.
+  `display.fov` is not applied to the eyes.
+- The eyes' height (`vr.eye_height`): at the Chief's 1.89 m a player of
+  average height (eyes at 1.63 m) stands 26 cm taller than they are, and
+  the world looks some 14% smaller than its metres. "player" puts them at
+  the player's height over the floor, the runtime's STAGE space. The game's
+  crouch lowers them in proportion (its crouching camera is 57% of its
+  standing one), less what the head has gone down already: the button's
+  crouch to 0.92 m for that player, a real crouch no further than that or
+  than the head goes (checked in a simulated game: 1.632, 0.922, 0.922
+  and, the head 0.9 m down, 0.732 m). On foot the body follows the head
+  across the room, not up and down.
+
 ## A frame
 
 - `xrWaitFrame` at the top of the main loop paces the game in place of the

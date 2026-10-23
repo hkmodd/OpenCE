@@ -66,6 +66,8 @@ cutscenes are drawn as always, onto the flat screen held in the room.
 #include "rasterizer/rasterizer.h"
 #include "render/render.h"
 #include "render/render_cameras.h"
+#include "units/biped_definitions.h"
+#include "units/bipeds.h"
 #include "units/unit_definitions.h"
 #include "units/units.h"
 #include "units/vehicle_datum.h"
@@ -236,6 +238,12 @@ static struct
 	boolean drive;
 	boolean immersive_cinematics;
 	boolean room_scale;
+	boolean eye_height_player;
+
+	/* vr.eye_height "player": the unit's crouch at the last two ticks
+	(blended as the drawn camera is) and the tick of the later */
+	real eye_crouch[2];
+	long eye_crouch_tick;
 
 	/* in a seat seen from it (vr.vehicle_view "first_person"): the vehicle
 	and the seat, the view's yaw from the vehicle's (the seat's own turn, less
@@ -280,6 +288,7 @@ static void vr_settings_read(
 	vr_view.drive = strcmp(config_string("vr.vehicle_steering"), "aim") != 0;
 	vr_view.immersive_cinematics = strcmp(config_string("vr.cinematics"), "screen") != 0;
 	vr_view.room_scale = config_boolean("vr.roomscale");
+	vr_view.eye_height_player = strcmp(config_string("vr.eye_height"), "game") != 0;
 }
 
 /* the hand that aims the weapon it holds: the main controller, tracked,
@@ -711,7 +720,21 @@ static void vr_head_offset(
 	offset[0] = frame->head.position[0] - vr_view.room_body[0];
 	offset[1] = frame->head.position[1];
 	offset[2] = frame->head.position[2] - vr_view.room_body[1];
-	vr_limit_reach(offset, reach);
+	/* (on foot the body follows the head across the room, not up and down:
+	a crouch, however deep, is the head's own, and the walls test below
+	keeps it off the floor) */
+	if (reach == VR_ROOM_REACH)
+	{
+		float height = offset[1];
+
+		offset[1] = 0.0f;
+		vr_limit_reach(offset, reach);
+		offset[1] = height;
+	}
+	else
+	{
+		vr_limit_reach(offset, reach);
+	}
 	vr_local_to_world(offset, heading, world);
 	vector.i = world[0] * VR_UNITS_PER_METRE;
 	vector.j = world[1] * VR_UNITS_PER_METRE;
@@ -732,6 +755,54 @@ static void vr_head_offset(
 		offset[1] *= scale;
 		offset[2] *= scale;
 	}
+}
+
+/* vr.eye_height "player": on foot, the eyes as high over the unit's feet
+as the player's are over the floor (the runtime's STAGE), not at the unit's
+camera height: the cyborg's 0.62 world units are 1.89 m, a head taller than
+most players, so that the world looks smaller than its metres. The unit's
+crouch lowers the eyes as it lowers the game's camera, in proportion to the
+player's height (the cyborg's crouching camera is 57% of its standing one),
+less what the head has already gone down: a crouch of the button lowers
+them all the way, the player's own crouch (vr_input.c makes it the unit's)
+no further than either. The game's own camera, its shots and its collision
+are unchanged */
+static void vr_eye_height(
+	struct vr_frame const *frame,
+	short local_player_index,
+	real_point3d *anchor)
+{
+	long unit_index = player_control_get_unit_index(local_player_index);
+	struct biped_datum *biped = unit_index == NONE ? NULL : biped_try_and_get(unit_index);
+	struct biped_definition const *definition;
+	real crouch, height, lowered, ducked;
+	long tick;
+
+	if (!vr_view.eye_height_player || !frame->floor_known || !biped ||
+		biped->object.parent_object_index != NONE || TEST_FLAG(biped->object.damage_flags, _object_dead_bit) ||
+		director_get_perspective(local_player_index) != _director_perspective_first_person)
+	{
+		vr_view.eye_crouch_tick = NONE;
+		return;
+	}
+	definition = biped_definition_get(biped->definition_index);
+	tick = game_time_get();
+	if (tick != vr_view.eye_crouch_tick)
+	{
+		vr_view.eye_crouch[0] = vr_view.eye_crouch_tick == NONE ? biped->biped.crouch : vr_view.eye_crouch[1];
+		vr_view.eye_crouch[1] = biped->biped.crouch;
+		vr_view.eye_crouch_tick = tick;
+	}
+	crouch = vr_view.eye_crouch[0] + (vr_view.eye_crouch[1] - vr_view.eye_crouch[0]) * render_interpolation_fraction();
+	height = (1.0f - crouch) * definition->biped.standing_camera_height +
+		crouch * definition->biped.crouching_camera_height;
+	if (!(definition->biped.standing_camera_height > 0.0f) || !(height > 0.0f))
+		return;
+	/* (in metres: how far the unit's crouch lowers the player's eyes, and
+	how far the head is below where it stood as the runtime last centred) */
+	lowered = frame->floor_height * (1.0f - height / definition->biped.standing_camera_height);
+	ducked = frame->head.position[1] < 0.0f ? -frame->head.position[1] : 0.0f;
+	anchor->z += (frame->floor_height - (lowered > ducked ? lowered - ducked : 0.0f)) * VR_UNITS_PER_METRE - height;
 }
 
 /* a view from `pose` (its offset taken as `offset` from the anchor) */
@@ -941,6 +1012,8 @@ short vr_render_windows(
 			anchor = marker.matrix.position;
 		}
 	}
+	if (!vr_view.seat_view && !cinematic_in_progress())
+		vr_eye_height(frame, player.local_player_index, &anchor);
 	/* (in a cinematic the head looks around its shot, without a letterbox;
 	back in the game, a blink too) */
 	if (cinematic_in_progress())
@@ -1470,6 +1543,7 @@ void vr_view_reset(
 	vr_view.seat_aiming = FALSE;
 	vr_view.seat_view = FALSE;
 	vr_view.driving = FALSE;
+	vr_view.eye_crouch_tick = NONE;
 	vr_view.cinematic = FALSE;
 	vr_view.room = FALSE;
 	vr_view.room_valid = FALSE;
