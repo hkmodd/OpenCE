@@ -122,6 +122,15 @@ struct vr_input_settings
 	after while the off stick is still */
 	int room;
 	float room_offset[2];
+	/* the weapon's barrel from the grip pose's pointing (vr.aim_pitch,
+	radians, up positive), and whether the weapon in the hand is held as a
+	pistol: the other hand supports it at the main hand, not ahead of it */
+	float aim_pitch;
+	int pistol_grip;
+	/* a grenade is thrown with the arm (vr.throw_gesture): its button held
+	takes it, let go with the hand moving fast throws it, let go slowly
+	keeps it */
+	int throw_gesture;
 };
 
 struct vr_input
@@ -151,6 +160,21 @@ struct vr_input
 	float melee_seconds, melee_wait, tap_seconds;
 	/* the main grip was pressed at a shoulder: weapons, not a melee */
 	int holster;
+	/* the grenade's throw (vr.throw_gesture): each hand's last position and
+	its speed of late (its fastest, falling by VR_THROW_FALL a second), the
+	throw's press in seconds, and the throws and the last hand to throw */
+	float throw_position[VR_HAND_COUNT][3];
+	int throw_position_valid[VR_HAND_COUNT];
+	float throw_speed[VR_HAND_COUNT];
+	float throw_seconds;
+	unsigned long throws;
+	int throw_hand;
+	/* the off grip took the weapon at the main hand: the weapon goes to it
+	if the main hand pulls away from it while it holds on (a hand-over);
+	for how long, and where both hands were as it took it */
+	int handover;
+	float handover_seconds;
+	float handover_main[3], handover_off[3];
 	/* the head's height standing (the highest since the runtime last
 	recentred), and the crouch it makes */
 	float standing;
@@ -178,10 +202,30 @@ commas or semicolons); the count of items not understood, which are left
 out */
 int vr_input_bindings_parse(char const *text, unsigned char bindings[VR_ROLE_COUNT][VR_CONTROL_COUNT]);
 
-/* the weapon held with both hands: the off hand's grip held near the main
-hand, ahead of it and away from the head; the orientation (-z from the main
-hand to the off, up as the main hand's) the weapon aims along then */
-int vr_two_handed(struct vr_frame const *frame, int left_handed, float orientation[4]);
+/* where a hand points a weapon: its grip pose (the OpenXR specification's,
+the same for every controller: -z along the index finger held straight),
+its barrel turned `pitch` up (radians) about the grip's x */
+void vr_hand_pointing(struct vr_hand const *hand, float pitch, float orientation[4]);
+
+/* the weapon held with both hands: the off hand's grip held away from the
+head, at the main hand (VR_HELD_SUPPORT: the weapon points as the main hand
+does) or, unless it is held as a pistol, ahead of it (VR_HELD_BOTH: -z from
+the main hand to the off, up as the main hand's); the orientation the
+weapon aims along then, or VR_HELD_ONE */
+enum
+{
+	VR_HELD_ONE,
+	VR_HELD_SUPPORT,
+	VR_HELD_BOTH
+};
+
+int vr_two_handed(struct vr_frame const *frame, int left_handed, int pistol_grip, float pitch,
+	float orientation[4]);
+
+/* each hand's vibration (0 to 1) for the game's motors: the weapon's hand
+feels both, the other the left (heavy: hits, blasts) and, while it holds
+the weapon too, the right (light: the shots) */
+void vr_rumble_hands(float left, float right, int left_handed, int both, float amplitude[VR_HAND_COUNT]);
 
 /* where a hand's ray (its aim pose, -z along the ray) meets a panel (width
 by height metres, centred on `panel`, its face toward +z), as fractions of
@@ -200,6 +244,8 @@ motor's speed 0 to 1, felt in the hand on its side */
 void vr_input_rumble(float left, float right);
 /* vr_view.c: the left hand aims (vr.left_handed, or the hands swapped) */
 int vr_input_left_handed(void);
+/* vr_view.c: the weapon is held with both hands this frame (the rumble) */
+void vr_input_weapon_hands(int both);
 /* vr_view.c: the turn the stick made this frame (radians to the left),
 taken */
 float vr_input_turn(void);

@@ -18,8 +18,10 @@ struct vr_arms_pose
 	real_point3d head;
 	real_vector3d head_forward, head_up;
 	/* the heading the eyes turn from (radians: LOCAL's forward in the
-	world's yaw), which a turn of the stick turns */
+	world's yaw), which a turn of the stick turns, and the body's forward
+	(the world's, level: vr_arms_body) */
 	real heading;
+	real_vector3d body_forward;
 	/* the weapon is in the player's left hand: the model is mirrored, its
 	right arm the left */
 	boolean main_left;
@@ -43,6 +45,10 @@ from the weapon's camera): each arm from its shoulder, the weapon's hand
 where the game holds the weapon, the other at its controller */
 void vr_arms_pose(real_matrix4x3 *matrices, short count, struct animation_graph *graph,
 	struct vr_arms_pose const *pose);
+/* the body's forward (the world's, level) this frame, for the head's: it
+follows the head once that has turned more than VR_ARMS_BODY_TURN from it
+(vr_view.c, once a frame: the arms and the legs face it) */
+void vr_arms_body(real_vector3d const *head_forward, real heading, float forward[3]);
 /* a new map, a new view: the body faces the head again */
 void vr_arms_reset(void);
 

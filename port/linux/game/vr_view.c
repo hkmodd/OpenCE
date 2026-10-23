@@ -23,16 +23,19 @@ respawn, a script), move the heading. Pitch is the aim's alone.
 
 The weapon in the hand. While the hand aims, the first-person weapon is
 posed from a camera behind the hand (vr_weapon_grip: where the weapon's
-grip sits from the game's own camera), along its aim, so that it is held
-where the controller is; and in place of the HUD's crosshair a reticle is
-held in the world where the shot's ray (weapon_get_projectile_ray: the
-game's own, from the muzzle) meets it, red when the game's crosshair would
-be (vr_reticle).
+grip sits from the game's own camera), along where the hand points (its
+grip pose, which the OpenXR specification defines alike for every
+controller: along the index finger held straight; vr.aim_pitch turns it),
+so that it is held where the controller is; and in place of the HUD's crosshair a reticle is
+held in the world where the barrel, as the hand holds it this frame, meets
+it: the weapon's own crosshair, drawn alone by the HUD (vr_render_hud_begin),
+red over a target as in the game (vr_reticle).
 
 The scope. While the hand's weapon is zoomed, a window more is drawn
-before the HUD's: the world from the muzzle along the aim with the zoom's
-field, into a square of the back buffer, whose picture is held on the
-weapon (vr_openxr.c), where the eye looks along it; the eyes are not
+before the HUD's: the world from the muzzle along the aim, into a square of
+the back buffer, whose picture is the lens of a sight held on the weapon
+(vr_openxr.c), its field the lens's as the eyes see it by the zoom's
+magnification, so that it shows the world magnified; the eyes are not
 zoomed, and the HUD's zoomed view (the sniper's ticks and numbers) is left
 out of the HUD (hud_weapon.c).
 
@@ -65,9 +68,11 @@ cutscenes are drawn as always, onto the flat screen held in the room.
 #include "models/model_animation_definitions.h"
 #include "objects/objects.h"
 #include "interface/hud_definitions.h"
+#include "interface/hud_weapon.h"
 #include "physics/collisions.h"
 #include "rasterizer/rasterizer.h"
 #include "render/render.h"
+#include "tag_files/tag_files.h"
 #include "render/render_cameras.h"
 #include "units/biped_definitions.h"
 #include "units/bipeds.h"
@@ -90,8 +95,14 @@ void halo_vr_clear_transparent(void);
 void halo_vr_mirror_winding(int mirrored);
 void halo_vr_two_sided(int two_sided);
 void halo_vr_resolve_eye(int eye);
-/* ... and a rectangle of it (the screen's coordinates) into the scope's */
+/* ... and a rectangle of it (the screen's coordinates) into the scope's,
+or the reticle's picture */
 void halo_vr_resolve_scope(short x0, short y0, short x1, short y1);
+void halo_vr_resolve_reticle(short x0, short y0, short x1, short y1);
+
+/* the legs' hips under the head: this far behind it, along the body
+(metres) */
+#define VR_LEGS_BACK 0.10f
 
 /* how far the head may lean the view from the game's camera, in metres
 (in a seat, or anywhere without room scale), and how far short of a wall
@@ -133,12 +144,15 @@ more than its tremor: about 15 degrees a second at 60 frames */
 metres: right, up and back (the aim's axes); and its muzzle from the grip */
 static float const vr_weapon_grip[3] = { 0.10f, -0.12f, -0.20f };
 static float const vr_weapon_muzzle[3] = { 0.0f, 0.04f, -0.25f };
-/* the scope's picture: where it is held from the grip (on the line the eye
-looks along, ahead of the weapon's camera), its width in metres, and its
-side in the back buffer's pixels */
-static float const vr_scope_offset[3] = { -0.10f, 0.12f, -0.10f };
-#define VR_SCOPE_WIDTH 0.07f
+/* the scope's lens: where it is held from the grip (on the weapon, above
+it and a little ahead: its sight), its width in metres, and its side in the
+back buffer's pixels */
+static float const vr_scope_offset[3] = { 0.0f, 0.10f, -0.06f };
+#define VR_SCOPE_WIDTH 0.05f
 #define VR_SCOPE_PIXELS 512
+/* the reticle: the game's crosshair drawn alone, its square about the
+HUD's middle (half its side, in the HUD's 640 by 480) */
+#define VR_CROSSHAIR_HALF 64
 
 /* where a first-person model's barrel is, learnt while the weapon is idle
 (vr_render_weapon_posed): its muzzle (the "primary trigger" marker) as the
@@ -237,6 +251,12 @@ static struct
 	/* the models' barrels, the next replaced */
 	struct vr_weapon_fit fits[VR_WEAPON_FITS];
 	short next_fit;
+	/* the reticle is placed this frame (vr_reticle), and the game's
+	crosshair is being drawn for it (vr_render_hud_begin); the barrel's
+	direction in the world, as the hand holds it this frame */
+	boolean reticle_placed;
+	boolean drawing_reticle;
+	real_vector3d barrel;
 	/* the scope's window this frame, and its field */
 	boolean scope;
 	rectangle2d scope_window;
@@ -255,6 +275,10 @@ static struct
 	boolean eye_height_player;
 	boolean arms_free;
 	real vignette_strength;
+	real aim_pitch;
+
+	/* the weapon in the hand is held as a pistol (vr_pistol_grip) */
+	boolean pistol_grip;
 
 	/* the comfort vignette: where LOCAL's origin was in the world and the
 	heading, the last frame, the runtime's recentres then, and how far it is
@@ -265,10 +289,17 @@ static struct
 	real vignette_heading;
 	real vignette;
 
-	/* vr.eye_height "player": the unit's crouch at the last two ticks
-	(blended as the drawn camera is) and the tick of the later */
+	/* vr.eye_height: the unit's crouch at the last two ticks (blended as
+	the drawn camera is) and the tick of the later; the head's highest
+	since the runtime last recentred (LOCAL's y) and the recentres then */
 	real eye_crouch[2];
 	long eye_crouch_tick;
+	boolean head_top_valid;
+	real head_top;
+	unsigned long head_top_recentres;
+
+	/* the body's forward this frame (the world's, level: vr_arms_body) */
+	real_vector3d body_forward;
 
 	/* this frame's heading and the controllers' grips in the world, for
 	the arms (vr_arms.c) */
@@ -319,8 +350,12 @@ static void vr_settings_read(
 	vr_view.drive = strcmp(config_string("vr.vehicle_steering"), "aim") != 0;
 	vr_view.immersive_cinematics = strcmp(config_string("vr.cinematics"), "screen") != 0;
 	vr_view.room_scale = config_boolean("vr.roomscale");
-	vr_view.eye_height_player = strcmp(config_string("vr.eye_height"), "game") != 0;
+	vr_view.eye_height_player = strcmp(config_string("vr.eye_height"), "player") == 0;
 	vr_view.arms_free = strcmp(config_string("vr.arms"), "weapon") != 0;
+	vr_view.aim_pitch = (real)config_real("vr.aim_pitch");
+	vr_view.aim_pitch = PIN(vr_view.aim_pitch, -45.0f, 45.0f) * (_pi / 180.0f);
+	if (!(vr_view.aim_pitch == vr_view.aim_pitch))
+		vr_view.aim_pitch = 0.0f;
 	vr_view.vignette_strength = (real)config_real("vr.vignette");
 	vr_view.vignette_strength = PIN(vr_view.vignette_strength, 0.0f, 1.0f);
 }
@@ -538,8 +573,11 @@ static void vr_hand_aim(
 	struct vr_hand const *hand,
 	float orientation[4])
 {
-	if (!vr_two_handed(frame, vr_view.main_hand == VR_HAND_LEFT, orientation))
-		memcpy(orientation, hand->aim.orientation, sizeof(hand->aim.orientation));
+	if (!vr_two_handed(frame, vr_view.main_hand == VR_HAND_LEFT, vr_view.pistol_grip, vr_view.aim_pitch,
+		orientation))
+	{
+		vr_hand_pointing(hand, vr_view.aim_pitch, orientation);
+	}
 }
 
 /* ---------- the weapon in the hand */
@@ -553,6 +591,41 @@ static long vr_held_weapon(
 	if (!unit || unit->unit.current_weapon_index < 0)
 		return NONE;
 	return unit_inventory_get_weapon(vr_view.unit_index, unit->unit.current_weapon_index);
+}
+
+/* `text` (at most `length` characters) names a pistol or the needler, in
+any case */
+static boolean vr_names_pistol(
+	char const *text,
+	short length)
+{
+	char lower[256];
+	short index;
+
+	for (index = 0; index < length && index < (short)sizeof(lower) - 1 && text[index]; index++)
+		lower[index] = text[index] >= 'A' && text[index] <= 'Z' ? (char)(text[index] - 'A' + 'a') : text[index];
+	lower[index] = 0;
+	return strstr(lower, "pistol") != NULL || strstr(lower, "needler") != NULL;
+}
+
+/* the weapon in the hand is held as a pistol: its tag's name (the stock
+maps' "weapons\pistol\pistol", "weapons\plasma pistol\plasma pistol",
+"weapons\needler\mp_needler") or its label names a pistol or the needler;
+the other hand supports it at the main hand */
+static boolean vr_pistol_grip(
+	void)
+{
+	long weapon_index = vr_held_weapon();
+	long definition_index;
+	char const *name;
+
+	if (weapon_index == NONE)
+		return FALSE;
+	definition_index = weapon_get(weapon_index)->definition_index;
+	name = tag_get_name(definition_index);
+	return (name && vr_names_pistol(name, 255)) ||
+		vr_names_pistol(weapon_definition_get(definition_index)->weapon.label,
+			(short)sizeof(weapon_definition_get(definition_index)->weapon.label));
 }
 
 /* an offset (LOCAL metres, right, up and back) on the side of the hand
@@ -791,16 +864,20 @@ static void vr_head_offset(
 	}
 }
 
-/* vr.eye_height "player": on foot, the eyes as high over the unit's feet
-as the player's are over the floor (the runtime's STAGE), not at the unit's
-camera height: the cyborg's 0.62 world units are 1.89 m, a head taller than
-most players, so that the world looks smaller than its metres. The unit's
-crouch lowers the eyes as it lowers the game's camera, in proportion to the
-player's height (the cyborg's crouching camera is 57% of its standing one),
-less what the head has already gone down: a crouch of the button lowers
-them all the way, the player's own crouch (vr_input.c makes it the unit's)
-no further than either. The game's own camera, its shots and its collision
-are unchanged */
+/* vr.eye_height, on foot: where the eyes are over the unit's feet.
+"chief": at the game's camera (the Master Chief's eyes, 0.62 world units,
+1.89 m, its crouch included) while the head is as high as it has been since
+the runtime last recentred (standing, or a seated player sitting), and as
+much lower as the head is below that: the button's crouch and the player's
+own (vr_input.c makes it the unit's) do not add up, the eyes going to the
+lower of the two. The eyes and the body the player sees (the legs, the
+arms' shoulders) are then the cyborg's, whatever the player's height.
+"player": as high over the ground as the player's eyes are over the floor
+(the runtime's STAGE): the cyborg is a head taller than most players, whose
+eyes then sit at its chest; the unit's crouch lowers them as it lowers the
+game's camera, in proportion to the player's height (the crouching camera
+is 57% of the standing one), less what the head has already gone down. The
+game's own camera, its shots and its collision are unchanged either way */
 static void vr_eye_height(
 	struct vr_frame const *frame,
 	short local_player_index,
@@ -812,7 +889,14 @@ static void vr_eye_height(
 	real crouch, height, lowered, ducked;
 	long tick;
 
-	if (!vr_view.eye_height_player || !frame->floor_known || !biped ||
+	if (!vr_view.head_top_valid || vr_view.head_top_recentres != frame->recentres ||
+		frame->head.position[1] > vr_view.head_top)
+	{
+		vr_view.head_top = frame->head.position[1];
+		vr_view.head_top_valid = TRUE;
+		vr_view.head_top_recentres = frame->recentres;
+	}
+	if ((vr_view.eye_height_player && !frame->floor_known) || !biped ||
 		biped->object.parent_object_index != NONE || TEST_FLAG(biped->object.damage_flags, _object_dead_bit) ||
 		director_get_perspective(local_player_index) != _director_perspective_first_person)
 	{
@@ -832,6 +916,15 @@ static void vr_eye_height(
 		crouch * definition->biped.crouching_camera_height;
 	if (!(definition->biped.standing_camera_height > 0.0f) || !(height > 0.0f))
 		return;
+	if (!vr_view.eye_height_player)
+	{
+		/* (world units: how far the unit's crouch has lowered the camera,
+		and how far the head is below its highest) */
+		lowered = definition->biped.standing_camera_height - height;
+		ducked = (vr_view.head_top - frame->head.position[1]) * VR_UNITS_PER_METRE;
+		anchor->z += lowered - (ducked > lowered ? ducked : lowered) - vr_view.head_top * VR_UNITS_PER_METRE;
+		return;
+	}
 	/* (in metres: how far the unit's crouch lowers the player's eyes, and
 	how far the head is below where it stood as the runtime last centred) */
 	lowered = frame->floor_height * (1.0f - height / definition->biped.standing_camera_height);
@@ -909,7 +1002,9 @@ static void vr_hud_bounds(
 
 /* the reticle: where the held weapon's shot meets the world, in LOCAL
 space (the eyes' mapping of it reversed), red when the game's crosshair
-would be (the aim assist's target fully in the aim) */
+would be (the aim assist's target fully in the aim). A weapon in the hand
+shoots from its muzzle along its barrel as the hand holds it this frame
+(the shot's own ray is the last tick's); in a seat, the shot's ray */
 static void vr_reticle(
 	struct vr_frame const *frame,
 	short local_player_index,
@@ -926,8 +1021,17 @@ static void vr_reticle(
 	long ignored = vr_view.unit_index;
 	int axis;
 
-	if (weapon_index == NONE || !weapon_get_projectile_ray(weapon_index, 0, &origin, &forward))
+	if (weapon_index == NONE)
 		return;
+	if (vr_view.weapon_in_hand)
+	{
+		origin = vr_view.muzzle;
+		forward = vr_view.barrel;
+	}
+	else if (!weapon_get_projectile_ray(weapon_index, 0, &origin, &forward))
+	{
+		return;
+	}
 	/* (in a seat, the vehicle is not in the way) */
 	if (unit && unit->object.parent_object_index != NONE)
 		ignored = unit->object.parent_object_index;
@@ -943,11 +1047,15 @@ static void vr_reticle(
 	for (axis = 0; axis < 3; axis++)
 		position[axis] = frame->head.position[axis] - head[axis] + local[axis];
 	vr_reticle_place(position, player_control_get_autoaim_level(local_player_index) >= 1.0f);
+	vr_view.reticle_placed = TRUE;
 }
 
 /* the scope's window, while the aiming hand's weapon is zoomed: from its
-muzzle along the aim, with the zoom's field, in a square of the back
-buffer's pixels at its top left; and where its picture is held */
+muzzle along the aim, in a square of the back buffer's pixels at its top
+left; and its lens, held on the weapon (vr_scope_offset). The field is the
+lens's as the eyes see it, by the zoom's magnification
+(weapon_get_zoom_magnification): a 2x zoom shows the world twice as large
+as around the lens */
 static boolean vr_scope_window(
 	struct vr_frame const *frame,
 	struct render_window const *player,
@@ -961,16 +1069,19 @@ static boolean vr_scope_window(
 	struct render_camera camera = player->rasterizer_camera;
 	struct vr_pose aim = hand->aim, place;
 	struct vr_fov field;
-	float offset[3], along[3], model[4];
-	long width, height;
-	real aspect, half;
+	float offset[3], along[3], model[4], to_eye[3];
+	long width, height, weapon_index = vr_held_weapon();
+	real aspect, half, magnification, distance;
 	int axis;
 
-	if (!unit || unit->unit.current_zoom_level == NONE || !vr_screen_size(&width, &height) || width <= 0 ||
-		height <= 0 || !(player->render_camera.vertical_field_of_view > 0.0f))
+	if (!unit || unit->unit.current_zoom_level == NONE || weapon_index == NONE || !vr_screen_size(&width, &height) ||
+		width <= 0 || height <= 0)
 	{
 		return FALSE;
 	}
+	magnification = weapon_get_zoom_magnification(weapon_index, unit->unit.current_zoom_level);
+	if (!(magnification >= 1.0f && magnification <= 100.0f))
+		magnification = 1.0f;
 	vr_hand_aim(frame, hand, aim.orientation);
 	vr_weapon_in_hand(aim.orientation, model, along);
 	for (axis = 0; axis < 3; axis++)
@@ -982,21 +1093,28 @@ static boolean vr_scope_window(
 	camera.viewport_bounds.y1 = (short)(VR_SCOPE_PIXELS * 480L / height);
 	camera.window_bounds = camera.viewport_bounds;
 	vr_view.scope_window = camera.viewport_bounds;
+	/* (the lens, on the weapon, facing back along it) */
+	vr_weapon_side(vr_scope_offset, offset);
+	vr_rotate(aim.orientation, offset, along);
+	for (axis = 0; axis < 3; axis++)
+	{
+		place.position[axis] = hand->grip.position[axis] + along[axis];
+		to_eye[axis] = place.position[axis] - frame->head.position[axis];
+	}
+	memcpy(place.orientation, aim.orientation, sizeof(place.orientation));
+	vr_scope_place(&place, VR_SCOPE_WIDTH);
+	/* (the lens's half width as the head sees it, shown magnified) */
+	distance = (real)sqrt(to_eye[0] * to_eye[0] + to_eye[1] * to_eye[1] + to_eye[2] * to_eye[2]);
+	if (distance < 0.05f)
+		distance = 0.05f;
+	half = (real)atan(VR_SCOPE_WIDTH * 0.5f / distance / magnification);
 	aspect = (real)camera.viewport_bounds.x1 / (real)camera.viewport_bounds.y1;
-	half = player->render_camera.vertical_field_of_view * 0.5f;
 	field.left = field.down = -half;
 	field.right = field.up = half;
 	vr_fov_bounds(&field, aspect, vr_view.scope_bounds.n);
 	*window = *player;
 	window->rasterizer_camera = camera;
 	window->render_camera = camera;
-
-	vr_weapon_side(vr_scope_offset, offset);
-	vr_rotate(aim.orientation, offset, along);
-	for (axis = 0; axis < 3; axis++)
-		place.position[axis] = hand->grip.position[axis] + along[axis];
-	memcpy(place.orientation, aim.orientation, sizeof(place.orientation));
-	vr_scope_place(&place, VR_SCOPE_WIDTH);
 	return TRUE;
 }
 
@@ -1067,6 +1185,7 @@ short vr_render_windows(
 	vr_view.stereo = FALSE;
 	vr_view.weapon_in_hand = FALSE;
 	vr_view.scope = FALSE;
+	vr_view.reticle_placed = FALSE;
 	for (window_index = 0; window_index < MAXIMUM_WINDOWS + 1; window_index++)
 		vr_view.pass_of_window[window_index] = _vr_render_pass_none;
 	frame = vr_frame_get();
@@ -1083,6 +1202,7 @@ short vr_render_windows(
 		vr_view.vignette_valid = FALSE;
 		vr_view.vignette = 0.0f;
 		vr_vignette(0.0f);
+		vr_input_weapon_hands(FALSE);
 		return window_count;
 	}
 	player = windows[0];
@@ -1148,6 +1268,14 @@ short vr_render_windows(
 	vr_camera_from_pose(&vr_view.head_camera, &frame->head, head, &anchor, heading);
 	/* the controllers' grips, for the arms (vr_arms.c) */
 	vr_view.frame_heading = heading;
+	{
+		float body[3];
+
+		vr_arms_body(&vr_view.head_camera.forward, heading, body);
+		vr_view.body_forward.i = body[0];
+		vr_view.body_forward.j = body[1];
+		vr_view.body_forward.k = body[2];
+	}
 	for (hand_index = 0; hand_index < VR_HAND_COUNT; hand_index++)
 	{
 		struct vr_hand const *grip = &frame->hand[hand_index];
@@ -1163,6 +1291,13 @@ short vr_render_windows(
 	VR_WEAPON_GRIP along the axes of the aim, turned so that the model's
 	barrel lies along it (vr_weapon_in_hand) */
 	vr_view.weapon_in_hand = vr_view.hand_aiming && !vr_view.cinematic;
+	vr_view.pistol_grip = vr_view.weapon_in_hand && vr_pistol_grip();
+	{
+		float both[4];
+
+		vr_input_weapon_hands(vr_view.weapon_in_hand &&
+			vr_two_handed(frame, vr_view.main_hand == VR_HAND_LEFT, vr_view.pistol_grip, vr_view.aim_pitch, both));
+	}
 	if (vr_view.weapon_in_hand)
 	{
 		struct vr_hand const *hand = &frame->hand[vr_view.main_hand];
@@ -1185,6 +1320,7 @@ short vr_render_windows(
 			offset[axis] = head[axis] + hand->grip.position[axis] + along[axis] - frame->head.position[axis];
 		vr_camera_from_pose(&muzzle, &aim, offset, &anchor, heading);
 		vr_view.muzzle = muzzle.position;
+		vr_view.barrel = muzzle.forward;
 	}
 	if (vr_view.weapon_in_hand || (vr_view.seat_aiming && !vr_view.cinematic))
 		vr_reticle(frame, player.local_player_index, &anchor, heading, head);
@@ -1290,9 +1426,11 @@ static void vr_weapon_learn(
 		fit->definition_index = object_get(weapon_index)->definition_index;
 		memcpy(fit->muzzle, muzzle, sizeof(muzzle));
 		memcpy(fit->forward, forward, sizeof(forward));
-		platform_log("vr: weapon %lx's barrel at %.3f %.3f %.3f, along %.3f %.3f %.3f", fit->definition_index,
-			(double)muzzle[0], (double)muzzle[1], (double)muzzle[2], (double)forward[0], (double)forward[1],
-			(double)forward[2]);
+		platform_log("vr: weapon %lx (%s, %.32s%s)'s barrel at %.3f %.3f %.3f, along %.3f %.3f %.3f",
+			fit->definition_index, tag_get_name(fit->definition_index),
+			weapon_definition_get(fit->definition_index)->weapon.label,
+			vr_pistol_grip() ? ", a pistol's grip" : "", (double)muzzle[0], (double)muzzle[1], (double)muzzle[2],
+			(double)forward[0], (double)forward[1], (double)forward[2]);
 		return;
 	}
 	for (axis = 0; axis < 3; axis++)
@@ -1366,6 +1504,7 @@ static void vr_arms_update(
 	pose.head_forward = vr_view.head_camera.forward;
 	pose.head_up = vr_view.head_camera.up;
 	pose.heading = vr_view.frame_heading;
+	pose.body_forward = vr_view.body_forward;
 	pose.main_left = main_hand == VR_HAND_LEFT;
 	pose.main_valid = vr_view.grip_valid[main_hand];
 	pose.main_grip = vr_view.grips[main_hand].position;
@@ -1375,7 +1514,7 @@ static void vr_arms_update(
 	pose.off_grip = vr_view.grips[off_hand].position;
 	pose.off_forward = vr_view.grips[off_hand].forward;
 	pose.off_up = vr_view.grips[off_hand].up;
-	pose.off_on_weapon = vr_two_handed(frame, pose.main_left, orientation) ||
+	pose.off_on_weapon = vr_two_handed(frame, pose.main_left, vr_view.pistol_grip, vr_view.aim_pitch, orientation) ||
 		first_person_weapon_off_hand_busy(render.local_player_index);
 	pose.off_squeeze = frame->hand[off_hand].squeeze;
 	pose.off_trigger = frame->hand[off_hand].trigger;
@@ -1418,10 +1557,30 @@ void vr_render_weapon_drawing(
 	}
 }
 
-/* the HUD's ground: nothing, so that the panel shows only the HUD */
+/* the HUD's ground: nothing, so that the panel shows only the HUD. Before
+it, where a reticle is placed, the game's crosshair is drawn alone at the
+HUD's middle (hud_weapon_port_draw_crosshairs: the weapon's own, red over a
+target, as the game draws it), its square taken for the reticle's picture
+(vr_openxr.c), and cleared again; the HUD then draws none (passenger_camera.c) */
 void vr_render_hud_begin(
 	void)
 {
+	long player_index = render.local_player_index == NONE ? NONE :
+		local_player_get_player_index(render.local_player_index);
+
+	halo_vr_clear_transparent();
+	if (!vr_view.reticle_placed || player_index == NONE || player_get(player_index)->unit_index == NONE ||
+		!hud_scripted_globals->show_hud)
+	{
+		return;
+	}
+	vr_view.drawing_reticle = TRUE;
+	rasterizer_hud_begin();
+	hud_weapon_port_draw_crosshairs(player_get(player_index));
+	rasterizer_hud_end();
+	vr_view.drawing_reticle = FALSE;
+	halo_vr_resolve_reticle(320 - VR_CROSSHAIR_HALF, 240 - VR_CROSSHAIR_HALF, 320 + VR_CROSSHAIR_HALF,
+		240 + VR_CROSSHAIR_HALF);
 	halo_vr_clear_transparent();
 }
 
@@ -1574,7 +1733,7 @@ int vr_render_zoom_hidden(
 int vr_render_reticle(
 	void)
 {
-	return (vr_view.aiming && vr_view.hand_aiming) || vr_view.seat_aiming;
+	return !vr_view.drawing_reticle && ((vr_view.aiming && vr_view.hand_aiming) || vr_view.seat_aiming);
 }
 
 int vr_render_seat_stick(
@@ -1609,6 +1768,34 @@ int vr_render_room(
 	offset[0] = frame->head.position[0] - vr_view.room_body[0];
 	offset[1] = frame->head.position[2] - vr_view.room_body[1];
 	return 1;
+}
+
+int vr_render_legs(
+	float under[3],
+	float forward[3])
+{
+	if (!VR_RENDER_WORLD() || !vr_view.stereo || vr_view.seat_view || vr_view.cinematic)
+		return FALSE;
+	forward[0] = (float)vr_view.body_forward.i;
+	forward[1] = (float)vr_view.body_forward.j;
+	forward[2] = 0.0f;
+	under[0] = (float)vr_view.head_camera.position.x - forward[0] * VR_LEGS_BACK * VR_UNITS_PER_METRE;
+	under[1] = (float)vr_view.head_camera.position.y - forward[1] * VR_LEGS_BACK * VR_UNITS_PER_METRE;
+	under[2] = (float)vr_view.head_camera.position.z;
+	return TRUE;
+}
+
+float vr_render_aim_pitch(
+	void)
+{
+	vr_settings_read();
+	return vr_view.aim_pitch;
+}
+
+int vr_render_pistol_grip(
+	void)
+{
+	return vr_view.pistol_grip;
 }
 
 int vr_render_hand_holds(
@@ -1704,6 +1891,8 @@ void vr_view_reset(
 	vr_view.seat_view = FALSE;
 	vr_view.driving = FALSE;
 	vr_view.eye_crouch_tick = NONE;
+	vr_view.head_top_valid = FALSE;
+	vr_view.pistol_grip = FALSE;
 	vr_view.vignette_valid = FALSE;
 	vr_view.cinematic = FALSE;
 	vr_arms_reset();

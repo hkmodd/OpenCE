@@ -254,11 +254,13 @@ static const struct config_setting config_settings[] =
 		"\"top\" first, or \"auto\": from the top for SteamVR, which otherwise\n"
 		"shows the game upside down, from the bottom for any other runtime. Taken\n"
 		"up when the game starts." },
-	{ "vr.eye_height", _config_string, "\"player\"", "HALO_VR_EYE_HEIGHT", _environment_value, _platform_desktop,
-		"With display.vr, on foot: \"player\" puts the eyes as high over the\n"
-		"ground as the player's are over the floor (where the runtime knows the\n"
-		"floor), so that the world is seen at its size; \"game\" at the Master\n"
-		"Chief's, 1.89 m. The game's own view and shots are the same either way." },
+	{ "vr.eye_height", _config_string, "\"chief\"", "HALO_VR_EYE_HEIGHT", _environment_value, _platform_desktop,
+		"With display.vr, on foot: \"chief\" puts the eyes at the Master\n"
+		"Chief's, 1.89 m, with the head as high as it has been since the last\n"
+		"recentre (standing, or sitting), lower as the head goes lower; \"player\"\n"
+		"as high over the ground as the player's are over the floor (where the\n"
+		"runtime knows the floor). The game's own view and shots are the same\n"
+		"either way." },
 	{ "vr.arms", _config_string, "\"free\"", "HALO_VR_ARMS", _environment_value, _platform_desktop,
 		"With display.vr and the weapon in the hand: \"free\", each arm its own,\n"
 		"from the shoulder, the other hand at its controller until it holds the\n"
@@ -325,9 +327,19 @@ static const struct config_setting config_settings[] =
 	{ "vr.gestures", _config_boolean, "true", "HALO_VR_GESTURES", _environment_value, _platform_desktop,
 		"The hands' and head's motions: a punch is a melee attack, the other\n"
 		"hand's grip at the head its action, the flashlight (else the grip\n"
-		"alone), and with the palms together it takes the weapon into that\n"
-		"hand; the aiming hand's grip at a shoulder switches weapons; the head\n"
-		"lowered crouches." },
+		"alone), and taking the weapon at the aiming hand, which then pulls\n"
+		"away, hands it over; the aiming hand's grip at a shoulder switches\n"
+		"weapons; the head lowered crouches." },
+	{ "vr.throw_gesture", _config_boolean, "true", "HALO_VR_THROW_GESTURE", _environment_value, _platform_desktop,
+		"With display.vr, a grenade is thrown with the arm: its button (the\n"
+		"off trigger) held takes one, let go with the hand moving fast (1.5\n"
+		"m/s) throws it where the aim points, let go slowly keeps it; false,\n"
+		"the button throws as a pad's does." },
+	{ "vr.aim_pitch", _config_real, "0.0", "HALO_VR_AIM_PITCH", _environment_value, _platform_desktop,
+		"With display.vr, the weapon's barrel from where the hand points (along\n"
+		"the index finger held straight, as OpenXR defines it for every\n"
+		"controller), in degrees up (-45 to 45): raise it if shots go lower\n"
+		"than the hand seems to point, lower it if they go higher." },
 	{ "vr.bindings", _config_string, "\"\"", "HALO_VR_BINDINGS", _environment_value, _platform_desktop,
 		"With display.vr, controller buttons bound to other actions than their\n"
 		"own, as \"main.lower=action off.click=none\": the hand (main, the one\n"

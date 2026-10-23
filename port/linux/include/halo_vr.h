@@ -144,6 +144,10 @@ void vr_resolve_scope(unsigned int texture, int width, int height, int x0, int y
 /* where the scope's image is held this frame (LOCAL space, facing +z) and
 its width in metres */
 void vr_scope_place(const struct vr_pose *pose, float width);
+/* the game's crosshair, drawn alone at the HUD's middle: the back buffer's
+square (x0, y0 to x1, y1 in its pixels, rows from the top) is the reticle's
+picture this frame, in place of the ring */
+void vr_resolve_reticle(unsigned int texture, int width, int height, int x0, int y0, int x1, int y1);
 /* the aiming reticle this frame: where the shot lands (LOCAL space), red
 over a target the game would aim at */
 void vr_reticle_place(const float position[3], int target);
@@ -205,6 +209,15 @@ int vr_render_room(float offset[2]);
 /* first_person_weapons.c: the unit's weapon is in the aiming hand: it
 neither bobs, sways nor is posed */
 int vr_render_hand_holds(long unit_index);
+/* vr_input.c: the weapon's barrel from the grip's pointing (vr.aim_pitch,
+radians up), and whether the weapon in the hand is held as a pistol (by
+its label: the other hand supports it at the main hand) */
+float vr_render_aim_pitch(void);
+int vr_render_pistol_grip(void);
+/* first_person_legs.c: in an eye's pass on foot, where the legs' hips go
+(the world's, under the head) and the way they face (the body's, level, as
+the arms' shoulders: vr_arms_body); 0 elsewhere */
+int vr_render_legs(float under[3], float forward[3]);
 /* unit_adjust_projectile_ray: with no other machine in the game, the shot
 of the unit the hand aims for starts at the weapon in the hand (its
 muzzle), unless a wall stands between it and the unit's eye; 0 to fire as
@@ -246,6 +259,9 @@ int vr_render_zoom_hidden(void);
 #define vr_render_seat_weapon_hidden() 0
 #define vr_render_room(offset) 0
 #define vr_render_hand_holds(unit_index) 0
+#define vr_render_aim_pitch() 0.0f
+#define vr_render_pistol_grip() 0
+#define vr_render_legs(under, forward) 0
 #define vr_render_shot_origin(unit_index, origin) 0
 #define vr_render_shot_from_hand(unit_index) 0
 #define vr_render_prompt_icon(icon) (icon)

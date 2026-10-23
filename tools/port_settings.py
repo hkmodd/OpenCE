@@ -38,7 +38,8 @@ VOLUMES = [(str(step), f"{step / 10:g}") for step in range(11)]
 # menu opens), its header (widget, bitmap), the row spacing, and its rows:
 # (label, setting, [(shown, value)], help, platform[, key]): platform is None
 # for every platform, else the platforms the row is for, separated by spaces
-# ("desktop", "android", "web": the menus' platform attribute,
+# ("desktop", "android", "web", or "vr", the desktop's with display.vr on as
+# the menus are read: the menus' platform attribute,
 # port/linux/src/menu_files.c); key names the row's widgets where two rows set
 # one setting (one for each platform), else the setting's name does
 SCREENS = {
@@ -358,37 +359,60 @@ SCREENS["network_setup/in_game"] = {
 }
 
 # the headset's settings (display.vr, port/linux/game/vr_view.c): a screen of
-# its own, a category of Gamepad Setup's (the controllers) and of the pause
-# menu's SETTINGS (in the headset, the menus a hand points at), the desktop's
-# alone
-_vr_category = ("VR HEADSET:", "gamepad_setup/vr",
-                "The headset: aiming, the weapon's hand, turning,\nthe room, vehicles and cinematics.", "desktop")
+# its own, a category of Gamepad Setup's (the controllers), the desktop's
+# alone, and of the pause menu's SETTINGS (in the headset, the menus a hand
+# points at), the headset's alone. Without the headset the screen has its
+# switch alone ("vr": menu_files.c), and the body's screen is not there
+_vr_help = "The headset: aiming, the weapon's hand, turning,\nthe room and vehicles."
+_vr_body_category = ("HANDS AND BODY:", "gamepad_setup/vr_body",
+                     "The height, the arms, the aim's angle, gestures,\ngrenades, comfort and cinematics.", "vr")
 SCREENS["gamepad_setup/vr"] = {
     "screen": "vr_settings_screen", "header": SCREENS["gamepad_setup"]["header"], "spacing": 30,
     "rows": [
         ("VR HEADSET:", "display.vr", ON_OFF,
          "Play in an OpenXR headset (Oculus, SteamVR,\nMonado). From the next start.", None),
         ("AIM WITH:", "vr.aim", [("HAND", "hand"), ("HEAD", "head")],
-         "On foot: the controller, the weapon held in it,\nor the head.", None),
+         "On foot: the controller, the weapon held in it,\nor the head.", "vr"),
         ("WEAPON HAND:", "vr.left_handed", [("RIGHT", "false"), ("LEFT", "true")],
-         "The hand that holds the weapon. Palms together\nwith the other's grip swap it in play.", None),
+         "The hand that holds the weapon. In play, take it\nwith the other hand and pull away to swap.", "vr"),
         ("TURNING:", "vr.snap_turn", [("SMOOTH", "0"), ("15", "15"), ("30", "30"), ("45", "45"), ("90", "90")],
-         "The aiming stick turns by snaps of so many\ndegrees, or smoothly.", None),
+         "The aiming stick turns by snaps of so many\ndegrees, or smoothly.", "vr"),
         ("ROOM SCALE:", "vr.roomscale", ON_OFF,
-         "Step in the room and the player follows; off,\nthe head leans 35 cm at most.", None),
+         "Step in the room and the player follows; off,\nthe head leans 35 cm at most.", "vr"),
         ("VEHICLE VIEW:", "vr.vehicle_view", [("SEAT", "first_person"), ("CHASE", "chase")],
-         "Ride in the seat, the view level with the\nvehicle, or behind it as the game does.", None),
+         "Ride in the seat, the view level with the\nvehicle, or behind it as the game does.", "vr"),
         ("VEHICLE AIM:", "vr.vehicle_aim", [("HAND", "hand"), ("STICK", "stick"), ("HEAD", "head")],
-         "What aims guns and flies a Banshee in a seat:\nthe controller, its stick or the head.", None),
+         "What aims guns and flies a Banshee in a seat:\nthe controller, its stick or the head.", "vr"),
         ("STEERING:", "vr.vehicle_steering", [("STICK", "drive"), ("AIM", "aim")],
          "A Warthog's or Ghost's driver steers with the\nother stick, or toward the aim as the game does.",
+         "vr"),
+    ],
+    "categories": [_vr_body_category],
+}
+SCREENS["gamepad_setup/vr_body"] = {
+    "screen": "vr_body_settings_screen", "header": SCREENS["gamepad_setup"]["header"], "spacing": 30,
+    "rows": [
+        ("EYE HEIGHT:", "vr.eye_height", [("CHIEF", "chief"), ("PLAYER", "player")],
+         "CHIEF: the Master Chief's eyes, 1.89 m, as high\nas the head stands. PLAYER: the player's own.", None),
+        ("ARMS:", "vr.arms", [("FREE", "free"), ("ON WEAPON", "weapon")],
+         "FREE: each arm its own, the other hand free\nuntil it holds the weapon. ON WEAPON: the game's.",
          None),
+        ("AIM ANGLE:", "vr.aim_pitch", [(f"{value}", f"{value}") for value in range(-20, 25, 5)],
+         "The barrel from where the hand points, degrees\nup: raise it if shots go lower than it points.",
+         None),
+        ("GESTURES:", "vr.gestures", ON_OFF,
+         "A punch strikes, a grip at the head is the\nflashlight, at a shoulder it switches weapons.", None),
+        ("GRENADES:", "vr.throw_gesture", [("THROWN", "true"), ("BUTTON", "false")],
+         "THROWN: hold the trigger, throw with the arm.\nBUTTON: the trigger throws at once.", None),
+        ("VIGNETTE:", "vr.vignette", [("OFF", "0"), ("LOW", "0.35"), ("MEDIUM", "0.65"), ("HIGH", "1")],
+         "The view's edges darken while it moves or\nturns by itself, not with the head.", None),
         ("CINEMATICS:", "vr.cinematics", [("AROUND", "immersive"), ("SCREEN", "screen")],
          "Cinematics around the head, a blink at each cut,\nor on a screen ahead.", None),
     ],
 }
-SCREENS["gamepad_setup"]["categories"] = [_vr_category]
-SCREENS["network_setup/in_game"]["categories"] = _network["categories"] + [_vr_category]
+SCREENS["gamepad_setup"]["categories"] = [("VR HEADSET:", "gamepad_setup/vr", _vr_help, "desktop")]
+SCREENS["network_setup/in_game"]["categories"] = _network["categories"] + [
+    ("VR HEADSET:", "gamepad_setup/vr", _vr_help, "vr")]
 
 # Controls Setup: the keyboard and mouse's actions, in groups (the order of
 # port/linux/game/menu_functions.c's table of them)
@@ -521,10 +545,31 @@ def _placed(row: str, platform, members: list, places: dict) -> list:
     return [(row, " ".join(names) if len(names) < len(places) else None, place) for place, names in groups.items()]
 
 
+# (the platforms whose places a platform's rows take: the headset's are the
+# desktop's)
+PLACE_OF = {"vr": "desktop"}
+
+
+def _members(platform, places: dict) -> list:
+    """the platforms whose places a row for `platform` takes"""
+    if not platform:
+        return list(places)
+    return list(dict.fromkeys(PLACE_OF.get(name, name) for name in platform.split()))
+
+
 def _setting_screen(folder: str, spec: dict) -> list:
     base = f"{PE}/{folder}"
     rows, extra = [], []
     place = -1
+    # (the headset's rows come after the desktop's others, so that without
+    # the headset they leave no gap)
+    headset = False
+    for platform in [row[4] for row in spec["rows"]] + [(category[3:] or [None])[0]
+                                                        for category in spec.get("categories", ())]:
+        names = platform.split() if platform else ["desktop", "android", "web"]
+        if headset and "desktop" in names:
+            raise ValueError(f"{folder}: a row of the desktop's after the headset's")
+        headset = headset or "vr" in names
     # (platform_places: each platform's rows in places of their own, with
     # no gap where the others' are; a row in one place for all its
     # platforms, else a child for each place)
@@ -534,7 +579,7 @@ def _setting_screen(folder: str, spec: dict) -> list:
         row = f"{base}/op_{key}"
         shares = setting in spec.get("same_place", ()) or key in spec.get("same_place", ())
         if spec.get("platform_places"):
-            members = platform.split() if platform else list(places)
+            members = _members(platform, places)
             for name in members:
                 if not shares:
                     places[name] += 1
@@ -572,7 +617,7 @@ def _setting_screen(folder: str, spec: dict) -> list:
         target = f"{PE}/{category_folder}/{SCREENS[category_folder]['screen']}"
         platform = category_platform[0] if category_platform else None
         if spec.get("platform_places"):
-            members = platform.split() if platform else list(places)
+            members = _members(platform, places)
             for name in members:
                 places[name] += 1
             rows += _placed(row, platform, members, places)

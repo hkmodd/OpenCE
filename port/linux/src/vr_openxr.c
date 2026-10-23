@@ -80,6 +80,11 @@ a second at 90 a second) is placed again ahead of the head */
 /* the aiming reticle's, and how wide it looks (radians across) */
 #define VR_RETICLE_SIZE 64
 #define VR_RETICLE_ANGLE 0.035f
+/* the reticle's image, and how wide the game's crosshair in it looks: the
+tangent of half its width (its square, 128 of the HUD's 640 pixels across,
+in the game's 70-degree field) */
+#define VR_CROSSHAIR_SIZE 256
+#define VR_CROSSHAIR_TANGENT 0.14f
 /* the menus' pointing beam: its image, how thick it is (metres), how far it
 reaches when it meets no panel, and how far short of the panel it stops
 (layers have no depth: one through another is hidden in it) */
@@ -194,13 +199,18 @@ static struct
 	XrSpace grip_spaces[VR_HAND_COUNT], aim_spaces[VR_HAND_COUNT];
 	/* the buttons held last frame, for the triggers' and grips' hysteresis */
 	unsigned long held[VR_HAND_COUNT];
+	/* each hand's aim pose was logged against its grip's pointing */
+	int aim_logged[VR_HAND_COUNT];
 	XrSessionState state;
 	int running, exiting, lost;
 	int64_t format;
 
 	struct vr_swapchain eyes[2], panel, scope, reticle, beam;
-	/* the reticle's pictures, white and red (vr_reticle_pictures) */
+	/* the reticle's pictures, white and red (vr_reticle_pictures), and the
+	game's crosshair this frame (vr_resolve_reticle), in place of them */
 	GLuint reticle_pictures[2];
+	GLuint crosshair;
+	int crosshair_drawn;
 	/* the beam's picture (vr_beam_picture) */
 	GLuint beam_picture;
 	GLuint framebuffers[2];
@@ -760,6 +770,7 @@ static GLuint vr_image_program(const char *fragment_text, const char *what)
 static int vr_create_drawing(long width, long height);
 static int vr_create_actions(void);
 static void vr_locate_floor(XrTime time);
+static void vr_draw_picture(GLuint source, GLuint destination, GLsizei width, GLsizei height);
 static void vr_pose_of(const XrPosef *pose, struct vr_pose *out);
 
 static int vr_create_session(void)
@@ -902,7 +913,7 @@ static int vr_create_session(void)
 	}
 	if (!vr_create_swapchain(&vr.panel, VR_PANEL_WIDTH, VR_PANEL_HEIGHT) ||
 		!vr_create_swapchain(&vr.scope, VR_SCOPE_SIZE, VR_SCOPE_SIZE) ||
-		!vr_create_swapchain(&vr.reticle, VR_RETICLE_SIZE, VR_RETICLE_SIZE) ||
+		!vr_create_swapchain(&vr.reticle, VR_CROSSHAIR_SIZE, VR_CROSSHAIR_SIZE) ||
 		!vr_create_swapchain(&vr.beam, VR_BEAM_WIDTH, VR_BEAM_LENGTH))
 	{
 		return 0;
@@ -998,6 +1009,13 @@ static int vr_create_drawing(long width, long height)
 	glGenFramebuffers(2, vr.framebuffers);
 	vr_reticle_pictures();
 	vr_beam_picture();
+	glGenTextures(1, &vr.crosshair);
+	glBindTexture(GL_TEXTURE_2D, vr.crosshair);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, VR_CROSSHAIR_SIZE, VR_CROSSHAIR_SIZE, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+		NULL);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glBindTexture(GL_TEXTURE_2D, 0);
 	glGenVertexArrays(1, &vr.vertex_array);
 	glGenTextures(1, &vr.mirror);
 	glBindTexture(GL_TEXTURE_2D, vr.mirror);
@@ -1312,6 +1330,28 @@ static int vr_pressed(float value, int was)
 
 /* the controllers' input and poses for the frame (the session focused:
 else nothing is held) */
+/* (the runtime's aim pose, which the weapon does not follow, against the
+grip's pointing (vr_hand_pointing), which it does: for the log) */
+static void vr_log_aim(int hand, struct vr_hand const *state)
+{
+	static float const axes[3][3] = { { 1.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f, -1.0f } };
+	float aim[3], grip[3][3], along[3];
+	int axis, k;
+
+	vr_rotate(state->aim.orientation, axes[2], aim);
+	for (axis = 0; axis < 3; axis++)
+	{
+		vr_rotate(state->grip.orientation, axes[axis], grip[axis]);
+		along[axis] = 0.0f;
+		for (k = 0; k < 3; k++)
+			along[axis] += aim[k] * grip[axis][k];
+	}
+	platform_log("vr: the %s hand's aim pose points %.1f degrees above its grip's pointing, %.1f to its left",
+		hand == VR_HAND_LEFT ? "left" : "right", (double)(atan2f(along[1], along[2]) / VR_DEGREES),
+		(double)(atan2f(-along[0], along[2]) / VR_DEGREES));
+	vr.aim_logged[hand] = 1;
+}
+
 static void vr_read_controllers(XrTime time)
 {
 	XrActiveActionSet active;
@@ -1363,6 +1403,8 @@ static void vr_read_controllers(XrTime time)
 		vr.held[hand] = state->buttons;
 		state->tracked = vr_locate_hand(vr.grip_spaces[hand], time, &state->grip);
 		state->tracked &= vr_locate_hand(vr.aim_spaces[hand], time, &state->aim);
+		if (state->tracked && !vr.aim_logged[hand])
+			vr_log_aim(hand, state);
 		if (state->tracked || state->buttons || state->trigger > 0.0f || state->stick[0] != 0.0f ||
 			state->stick[1] != 0.0f)
 		{
@@ -1472,9 +1514,9 @@ static int vr_simulate_create(void)
 	vr.scope.width = vr.scope.height = VR_SCOPE_SIZE;
 	vr.scope.image_count = 1;
 	vr.scope.images[0] = vr_simulated_image(VR_SCOPE_SIZE, VR_SCOPE_SIZE);
-	vr.reticle.width = vr.reticle.height = VR_RETICLE_SIZE;
+	vr.reticle.width = vr.reticle.height = VR_CROSSHAIR_SIZE;
 	vr.reticle.image_count = 1;
-	vr.reticle.images[0] = vr_simulated_image(VR_RETICLE_SIZE, VR_RETICLE_SIZE);
+	vr.reticle.images[0] = vr_simulated_image(VR_CROSSHAIR_SIZE, VR_CROSSHAIR_SIZE);
 	vr.beam.width = VR_BEAM_WIDTH;
 	vr.beam.height = VR_BEAM_LENGTH;
 	vr.beam.image_count = 1;
@@ -1822,6 +1864,8 @@ void vr_dispose(void)
 		glDeleteTextures(2, vr.reticle_pictures);
 	if (vr.beam_picture)
 		glDeleteTextures(1, &vr.beam_picture);
+	if (vr.crosshair)
+		glDeleteTextures(1, &vr.crosshair);
 	if (vr.framebuffers[0])
 	{
 		glDeleteFramebuffers(2, vr.framebuffers);
@@ -1981,7 +2025,7 @@ int vr_frame_begin(void)
 			vr_end_frame(NULL, 0);
 		vr.frame_begun = 1;
 		vr.eyes_drawn[0] = vr.eyes_drawn[1] = 0;
-		vr.scope_drawn = vr.reticle_placed = 0;
+		vr.scope_drawn = vr.reticle_placed = vr.crosshair_drawn = 0;
 		vr.frames++;
 		vr_simulate_frame();
 		vr.stereo_frames++;
@@ -2015,7 +2059,7 @@ int vr_frame_begin(void)
 		return 0;
 	vr.frame_begun = 1;
 	vr.eyes_drawn[0] = vr.eyes_drawn[1] = 0;
-	vr.scope_drawn = vr.reticle_placed = 0;
+	vr.scope_drawn = vr.reticle_placed = vr.crosshair_drawn = 0;
 	vr.frames++;
 	if (vr.last_display_time && vr.frame_state.predictedDisplayTime > vr.last_display_time)
 		vr.display_seconds = (double)(vr.frame_state.predictedDisplayTime - vr.last_display_time) * 1e-9;
@@ -2364,8 +2408,18 @@ static int vr_reticle_layer(XrCompositionLayerQuad *quad)
 	image = vr_acquire(&vr.reticle);
 	if (!image)
 		return 0;
-	vr_copy(vr.reticle_pictures[vr.reticle_target], VR_RETICLE_SIZE, VR_RETICLE_SIZE, image, VR_RETICLE_SIZE,
-		VR_RETICLE_SIZE, 1);
+	/* (the game's crosshair as the HUD drew it, or the ring) */
+	if (vr.crosshair_drawn)
+	{
+		vr_draw_picture(vr.crosshair, image, VR_CROSSHAIR_SIZE, VR_CROSSHAIR_SIZE);
+	}
+	else
+	{
+		vr_copy(vr.reticle_pictures[vr.reticle_target], VR_RETICLE_SIZE, VR_RETICLE_SIZE, image, VR_CROSSHAIR_SIZE,
+			VR_CROSSHAIR_SIZE, 1);
+	}
+	if (vr.dumping)
+		vr_dump_texture(image, VR_CROSSHAIR_SIZE, VR_CROSSHAIR_SIZE, "reticle", vr.rows_from_top, 1);
 	vr_release(&vr.reticle);
 	/* (its +z toward the head: a turn about +y, then a tilt about +x) */
 	yaw = (float)atan2(offset[0], offset[2]);
@@ -2381,8 +2435,8 @@ static int vr_reticle_layer(XrCompositionLayerQuad *quad)
 	quad->space = vr.local;
 	quad->eyeVisibility = XR_EYE_VISIBILITY_BOTH;
 	quad->subImage.swapchain = vr.reticle.handle;
-	quad->subImage.imageRect.extent.width = VR_RETICLE_SIZE;
-	quad->subImage.imageRect.extent.height = VR_RETICLE_SIZE;
+	quad->subImage.imageRect.extent.width = VR_CROSSHAIR_SIZE;
+	quad->subImage.imageRect.extent.height = VR_CROSSHAIR_SIZE;
 	quad->pose.position.x = vr.reticle_position[0];
 	quad->pose.position.y = vr.reticle_position[1];
 	quad->pose.position.z = vr.reticle_position[2];
@@ -2390,7 +2444,8 @@ static int vr_reticle_layer(XrCompositionLayerQuad *quad)
 	quad->pose.orientation.y = both[1];
 	quad->pose.orientation.z = both[2];
 	quad->pose.orientation.w = both[3];
-	quad->size.width = quad->size.height = distance * VR_RETICLE_ANGLE;
+	quad->size.width = quad->size.height = vr.crosshair_drawn ? distance * 2.0f * VR_CROSSHAIR_TANGENT :
+		distance * VR_RETICLE_ANGLE;
 	if (vr.dumping)
 	{
 		platform_log("vr: frame %lu reticle at %.3f %.3f %.3f, %.2f m, %s", vr.stereo_frames,
@@ -2480,18 +2535,42 @@ static int vr_beam_layer(XrCompositionLayerQuad *quad)
 	return 1;
 }
 
+void vr_resolve_reticle(unsigned int texture, int width, int height, int x0, int y0, int x1, int y1)
+{
+	if (!vr.frame_begun || !vr.frame.stereo || !vr.crosshair || x1 <= x0 || y1 <= y0 || x0 < 0 || y0 < 0 ||
+		x1 > width || y1 > height)
+	{
+		return;
+	}
+	/* (the rows as they are: vr_draw_picture takes the back buffer's) */
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, vr.framebuffers[0]);
+	glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, 0);
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, vr.framebuffers[1]);
+	glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, vr.crosshair, 0);
+	glDisable(GL_SCISSOR_TEST);
+	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+	glBlitFramebuffer(x0, y0, x1, y1, 0, 0, VR_CROSSHAIR_SIZE, VR_CROSSHAIR_SIZE, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+	glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
+	glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+	vr.crosshair_drawn = 1;
+}
+
 void vr_scope_place(const struct vr_pose *pose, float width)
 {
 	vr.scope_pose = *pose;
 	vr.scope_width = width;
 }
 
-/* the HUD's panel: its picture over a clear ground */
-static void vr_draw_panel(GLuint source, GLuint destination)
+/* a picture of the HUD's (the panel's, the reticle's) over a clear ground:
+`source`, rows from the top as the back buffer's, into the runtime's image
+`destination`, width by height */
+static void vr_draw_picture(GLuint source, GLuint destination, GLsizei width, GLsizei height)
 {
 	glBindFramebuffer(GL_FRAMEBUFFER, vr.framebuffers[1]);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, destination, 0);
-	glViewport(0, 0, VR_PANEL_WIDTH, VR_PANEL_HEIGHT);
+	glViewport(0, 0, width, height);
 	glDisable(GL_SCISSOR_TEST);
 	glDisable(GL_BLEND);
 	glDisable(GL_DEPTH_TEST);
@@ -2742,7 +2821,7 @@ int vr_present(unsigned int texture, int width, int height)
 		if (vr.dumping && stereo)
 			vr_dump_texture(texture, width, height, "hudsource", 1, 1);
 		if (stereo)
-			vr_draw_panel(texture, image);
+			vr_draw_picture(texture, image, VR_PANEL_WIDTH, VR_PANEL_HEIGHT);
 		else
 			vr_copy(texture, width, height, image, VR_PANEL_WIDTH, VR_PANEL_HEIGHT, 1);
 		vr_draw_pointer(image);

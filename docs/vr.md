@@ -64,16 +64,23 @@ What sets the size the world is seen at, each measured or derived:
   angles' tangents (`vr_fov_bounds`) scales x by 2 / (tan right - tan
   left) and y by 2 / (tan up - tan down), the OpenXR projection.
   `display.fov` is not applied to the eyes.
-- The eyes' height (`vr.eye_height`): at the Chief's 1.89 m a player of
-  average height (eyes at 1.63 m) stands 26 cm taller than they are, and
-  the world looks some 14% smaller than its metres. "player" puts them at
-  the player's height over the floor, the runtime's STAGE space. The game's
-  crouch lowers them in proportion (its crouching camera is 57% of its
-  standing one), less what the head has gone down already: the button's
-  crouch to 0.92 m for that player, a real crouch no further than that or
-  than the head goes (checked in a simulated game: 1.632, 0.922, 0.922
-  and, the head 0.9 m down, 0.732 m). On foot the body follows the head
-  across the room, not up and down.
+- The eyes' height (`vr.eye_height`). "chief", the default: the Chief's
+  1.89 m, with the head as high as it has been since the runtime last
+  recentred, and lower by as much as the head is below that; a crouch of
+  the button lowers them to the game's crouching camera, and a real crouch
+  and the button's do not add up (the lower of the two). The player is the
+  cyborg: their eyes over its legs and between its shoulders, as tall as
+  it (at a player's own height, the legs drawn under them put the eyes at
+  the cyborg's chest). "player" puts them at the player's height over the
+  floor, the runtime's STAGE space; the game's crouch lowers them in
+  proportion (its crouching camera is 57% of its standing one), less what
+  the head has gone down already (checked in a simulated game: 1.632,
+  0.922, 0.922 and, the head 0.9 m down, 0.732 m). On foot the body
+  follows the head across the room, not up and down.
+- The legs (`display.first_person_legs`) are drawn under the head, facing
+  as the body the arms hang from does (`first_person_legs.c`,
+  `vr_render_legs`): not set back from the eye, which looks about on its
+  own.
 
 ## A frame
 
@@ -133,17 +140,33 @@ What sets the size the world is seen at, each measured or derived:
   (`vr.bindings` binds them otherwise), the action pressing the standard
   preset's button for it; mirrored for the left-handed; with the gestures
   (a punch, the off grip at the head, the head lowered, the main grip at a
-  shoulder) as presses of the same buttons. The palms together with the
-  off grip pressed swap the hands until `vr.left_handed` is changed
-  (astromaddie's gesture). The menu button is Start, or Back held a
+  shoulder) as presses of the same buttons. The off grip pressed at the
+  main hand takes the weapon there; if within 1.5 s the hands are 25 cm
+  apart, the main hand having moved more, the hands swap until
+  `vr.left_handed` is changed (a hand-over, after astromaddie's gesture);
+  hands that stay together hold it with both (a pistol's grip), and the
+  off hand pulling away lets go. The grenade's button held takes a grenade
+  (`vr.throw_gesture`): let go with the hand faster than 1.5 m/s (its
+  fastest of the last moments, falling by 8 m/s a second, as a hand slows
+  to let go; still counted where the tracking lost it in the swing) it
+  presses the button a tenth of a second, the game's throw, and let go
+  slower it presses nothing. The hands' speeds start again after the menus,
+  so a hand moved there neither strikes nor throws. The game's motors are felt in the hands:
+  the weapon's hand feels both, the other the left (the heavy one: hits,
+  blasts) and, while it holds the weapon too, the right (the shots). The menu button is Start, or Back held a
   second. It is a function of the frame and its own state, tested in the
   harness (`tools/harness/tests/test_vr_input.py`). Rebinding is the
   setting's, not the runtime's: actions bound by each runtime's own tool
   (SteamVR's has one, Oculus's none) would not follow a swap of hands.
 - The main hand's stick turns the heading by snaps or smoothly; it never
   reaches the game's right stick.
-- The hand aims on foot (`vr.aim`): the facing is the aim pose's (or, with
-  the off hand's grip near the weapon, from the main hand to the off), the
+- The hand aims on foot (`vr.aim`): the facing is where the hand points,
+  its grip pose's -z (the OpenXR specification's: along the index finger
+  held straight, the same for every controller, where the aim pose is
+  each runtime's own), turned up by `vr.aim_pitch`; with the off hand's
+  grip ahead of the main hand on a weapon not held as a pistol (by its
+  label: "pistol", "plasma pistol", "needler"), from the main hand to the
+  off; with it at the main hand (supporting it), as the main hand. The
   off stick is turned to move where the head faces, and the first-person
   weapon is posed from a camera behind the hand.
 - The weapon stays as the hand holds it: `first_person_weapons.c` gives it
@@ -237,9 +260,14 @@ What sets the size the world is seen at, each measured or derived:
   it. A menu's panel and the flat screen are each placed where the head
   faced as it came up, and kept there through a moment of the other (a
   menu's change).
-- The headset's settings have a screen of their own (`tools/port_settings.py`:
-  VR HEADSET, under Gamepad Setup and the pause menu's Settings), whose
-  changes the game takes at once (`config_changes`), but `display.vr`'s.
+- The headset's settings have screens of their own (`tools/port_settings.py`:
+  VR HEADSET, under Gamepad Setup and the pause menu's Settings, and its
+  HANDS AND BODY), whose changes the game takes at once (`config_changes`),
+  but `display.vr`'s. Their rows but the switch are the menus' platform
+  `vr` (`menu_files.c`): the desktop's with `display.vr` on as the menus
+  are read, so without the headset the screen has the switch alone and the
+  pause menu no VR HEADSET; the generator keeps those rows after the
+  desktop's others, so that they leave no gap.
 - `debug.vr_simulate` gives a headset and two hands of the game's own, and
   `debug.vr_simulate_input` scripts their buttons, sticks and poses, so the
   views and the controls can be checked without a headset

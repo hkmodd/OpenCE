@@ -396,8 +396,20 @@ static long current_line(struct reader *reader)
 #define MENU_PLATFORM "desktop"
 #endif
 
+/* the headset is in use (display.vr) as the menus are read: their "vr"
+platform's elements are there */
+static int menu_headset(void)
+{
+#ifdef HALO_GLES
+	return 0;
+#else
+	return config_boolean("display.vr");
+#endif
+}
+
 /* whether the element is for this platform (its platform attribute: the
-platforms it is for, separated by spaces) */
+platforms it is for, separated by spaces; "vr" is the desktop's with the
+headset in use) */
 static int for_this_platform(struct reader *reader, const XML_Char **attributes)
 {
 	int index;
@@ -416,13 +428,15 @@ static int for_this_platform(struct reader *reader, const XML_Char **attributes)
 				if (length)
 				{
 					if ((length != 7 || strncmp(name, "desktop", 7)) && (length != 7 || strncmp(name, "android", 7)) &&
-						(length != 3 || strncmp(name, "web", 3)))
+						(length != 3 || strncmp(name, "web", 3)) && (length != 2 || strncmp(name, "vr", 2)))
 					{
-						reader_error(reader, "platform=\"%s\" names one that is not desktop, android or web",
+						reader_error(reader, "platform=\"%s\" names one that is not desktop, android, web or vr",
 							attributes[index + 1]);
 						return 1;
 					}
 					if (length == strlen(MENU_PLATFORM) && !strncmp(name, MENU_PLATFORM, length))
+						found = 1;
+					if (length == 2 && !strncmp(name, "vr", 2) && menu_headset())
 						found = 1;
 				}
 				name += length;

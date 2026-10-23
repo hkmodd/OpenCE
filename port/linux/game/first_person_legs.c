@@ -12,6 +12,10 @@ legs folded into a lid over the waist, the whole set back a little behind
 the eye so the camera never looks out through the hips. The body itself, its hit boxes and markers, are the game's
 as ever. The legs are drawn in the world with the world's camera, so they
 keep their place and size at any field of view.
+
+In a headset (display.vr) the legs are not set back from the eye, which
+looks about on its own: their hips go under the head and they face as the
+body does, the shoulders' body that follows the head (vr_view.c).
 */
 
 #include "cseries.h"
@@ -25,6 +29,7 @@ keep their place and size at any field of view.
 #include "rasterizer/xbox/rasterizer_xbox.h"
 
 #include "object_mesh.h"
+#include "halo_vr.h"
 
 
 #include <string.h>
@@ -199,9 +204,42 @@ static boolean first_person_legs_waist(
 	return first_person_legs_waist_found;
 }
 
+/* in a headset: the pose turned about the hips, level, from the way the
+body faces (`facing`) to `body`, and moved level so that the hips are over
+`under` */
+static void first_person_legs_face(
+	long count,
+	real_point3d const *hips,
+	real_vector3d const *facing,
+	float const under[3],
+	float const body[3])
+{
+	real turn = (real)atan2(body[1], body[0]) - (real)atan2(facing->j, facing->i);
+	real c = (real)cos(turn), s = (real)sin(turn);
+	long index;
+
+	for (index = 0; index < count; index++)
+	{
+		real_matrix4x3 *matrix = &first_person_legs_matrices[index];
+		real x = matrix->position.x - hips->x, y = matrix->position.y - hips->y;
+		short axis;
+
+		matrix->position.x = under[0] + x * c - y * s;
+		matrix->position.y = under[1] + x * s + y * c;
+		for (axis = 0; axis < 3; axis++)
+		{
+			real i = matrix->n[axis][0], j = matrix->n[axis][1];
+
+			matrix->n[axis][0] = i * c - j * s;
+			matrix->n[axis][1] = i * s + j * c;
+		}
+	}
+}
+
 /* the pose to draw the legs with: the body's own (as it is drawn now), all
-but the legs folded into the hips, the whole set back behind the eye; NULL:
-none (a body without named legs) */
+but the legs folded into the hips, the whole set back behind the eye (in a
+headset, under the head, facing as its body does); NULL: none (a body
+without named legs) */
 real_matrix4x3 const *first_person_legs_node_matrices(
 	long object_index,
 	real_matrix4x3 const *nodes)
@@ -217,6 +255,8 @@ real_matrix4x3 const *first_person_legs_node_matrices(
 	real_vector3d back;
 	real_matrix4x3 skin;
 	real set_back;
+	float under[3], body[3];
+	boolean headset;
 
 	if (!object || !nodes)
 		return NULL;
@@ -250,11 +290,13 @@ real_matrix4x3 const *first_person_legs_node_matrices(
 		matrix4x3_transform_point(&skin, &middle, &fold);
 	}
 
-	/* (set back away from the way the eye looks, level) */
+	/* (set back away from the way the eye looks, level; in a headset not:
+	the hips go under the head) */
+	headset = vr_render_legs(under, body) != 0;
 	back.i = -global_window_parameters.camera.forward.i;
 	back.j = -global_window_parameters.camera.forward.j;
 	back.k = 0.f;
-	if (normalize3d(&back) <= 0.f)
+	if (headset || normalize3d(&back) <= 0.f)
 		back = *global_zero_vector3d;
 
 	/* (as far back as keeps the waist's rim out of the bottom of the view,
@@ -267,7 +309,7 @@ real_matrix4x3 const *first_person_legs_node_matrices(
 		real toward = dot_product3d(&bottom->n, &back);
 		short corner;
 
-		if (toward > 0.05f)
+		if (toward > 0.05f && !headset)
 		{
 			for (corner = 0; corner < first_person_legs_rim_count; corner++)
 			{
@@ -305,5 +347,7 @@ real_matrix4x3 const *first_person_legs_node_matrices(
 		matrix->position.y += back.j * set_back;
 		matrix->position.z += back.k * set_back;
 	}
+	if (headset)
+		first_person_legs_face(count, &nodes[pelvis].position, &object->object.forward, under, body);
 	return first_person_legs_matrices;
 }

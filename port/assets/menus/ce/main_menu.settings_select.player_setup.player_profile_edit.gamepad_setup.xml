@@ -140,6 +140,6 @@
 		<string text="Which stick moves and which looks."/>
 		<string text="Rumble the controller."/>
 		<string text="Show the game's hints about its controls."/>
-		<string text="The headset: aiming, the weapon's hand, turning,\nthe room, vehicles and cinematics."/>
+		<string text="The headset: aiming, the weapon's hand, turning,\nthe room and vehicles."/>
 	</strings>
 </menus>

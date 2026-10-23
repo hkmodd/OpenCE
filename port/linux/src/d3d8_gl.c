@@ -6835,6 +6835,28 @@ void halo_vr_resolve_eye(int eye)
 	xgpu_gl_state_invalidate();
 }
 
+/* the reticle's square of the back buffer (in the screen's coordinates),
+the game's crosshair drawn alone in it, into the reticle's picture */
+void halo_vr_resolve_reticle(short x0, short y0, short x1, short y1)
+{
+	struct render_target_entry *back_buffer;
+	float scale_x, scale_y;
+
+	if (!device.gl_ready || !(back_buffer = render_target_get(&device.back_buffer)) ||
+		back_buffer->target.width <= 0 || back_buffer->target.height <= 0)
+	{
+		return;
+	}
+	draw_flush();
+	render_target_resolve(&back_buffer->target);
+	scale_x = (float)back_buffer->target.gl_width / (float)back_buffer->target.width;
+	scale_y = (float)back_buffer->target.gl_height / (float)back_buffer->target.height;
+	vr_resolve_reticle(back_buffer->target.texture, (int)back_buffer->target.gl_width,
+		(int)back_buffer->target.gl_height, (int)(x0 * scale_x + 0.5f), (int)(y0 * scale_y + 0.5f),
+		(int)(x1 * scale_x + 0.5f), (int)(y1 * scale_y + 0.5f));
+	xgpu_gl_state_invalidate();
+}
+
 /* the scope's window has ended: its rectangle of the back buffer (in the
 screen's coordinates) into the scope's image */
 void halo_vr_resolve_scope(short x0, short y0, short x1, short y1)

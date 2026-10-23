@@ -553,14 +553,13 @@ static void vr_arms_fingers(
 	}
 }
 
-/* the body's forward (the world's, level) for the head's */
-static void vr_arms_body(
-	struct vr_arms_pose const *pose,
+void vr_arms_body(
+	real_vector3d const *head_forward,
+	real heading,
 	float forward[3])
 {
-	real head_yaw = vr_yaw_of(pose->head_forward.n, vr_arms.body_valid ? vr_arms.body_yaw + pose->heading :
-		pose->heading);
-	real local = vr_wrap_angle(head_yaw - pose->heading), turned;
+	real head_yaw = vr_yaw_of(head_forward->n, vr_arms.body_valid ? vr_arms.body_yaw + heading : heading);
+	real local = vr_wrap_angle(head_yaw - heading), turned;
 
 	if (!vr_arms.body_valid)
 	{
@@ -572,8 +571,8 @@ static void vr_arms_body(
 		vr_arms.body_yaw = vr_wrap_angle(vr_arms.body_yaw + turned - VR_ARMS_BODY_TURN);
 	else if (turned < -VR_ARMS_BODY_TURN)
 		vr_arms.body_yaw = vr_wrap_angle(vr_arms.body_yaw + turned + VR_ARMS_BODY_TURN);
-	forward[0] = (float)cos(vr_arms.body_yaw + pose->heading);
-	forward[1] = (float)sin(vr_arms.body_yaw + pose->heading);
+	forward[0] = (float)cos(vr_arms.body_yaw + heading);
+	forward[1] = (float)sin(vr_arms.body_yaw + heading);
 	forward[2] = 0.0f;
 }
 
@@ -718,7 +717,8 @@ void vr_arms_pose(
 	}
 
 	/* the shoulders, either side of the neck */
-	vr_arms_body(pose, forward);
+	for (axis = 0; axis < 3; axis++)
+		forward[axis] = (float)pose->body_forward.n[axis];
 	right[0] = forward[1];
 	right[1] = -forward[0];
 	right[2] = 0.0f;

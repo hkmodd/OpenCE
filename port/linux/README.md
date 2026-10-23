@@ -448,7 +448,7 @@ the setting for one start of the game. It has priority over the file.
 | `display.vr` | `false` | `HALO_VR` | Not on Android or in a browser. `true`: play in a VR headset through its OpenXR runtime. `false`: nothing of OpenXR is loaded. Read at start. Refer to "VR". |
 | `vr.resolution_scale` | `1.0` | `HALO_VR_RESOLUTION_SCALE` | With `display.vr`, the eyes' resolution as a multiple of the runtime's recommended one, from `0.5` to `2.0`. Read at start. |
 | `vr.arms` | `"free"` | `HALO_VR_ARMS` | With `display.vr` and the weapon in the hand: `"free"`, each arm its own, from the shoulder: the weapon's hand holds the weapon, the other its controller, until it holds the weapon too (grip near it) or the weapon is reloaded, readied or a grenade thrown; `"weapon"`, both arms on the weapon as the game animates them, moved with the hand. |
-| `vr.eye_height` | `"player"` | `HALO_VR_EYE_HEIGHT` | With `display.vr`, on foot: `"player"` puts the eyes as high over the ground as the player's are over the floor (where the runtime knows it: its STAGE space), so that the world is seen at its size; `"game"` at the Master Chief's, 1.89 m. A crouch lowers the eyes only as far as the head goes. The game's view and shots are unchanged. |
+| `vr.eye_height` | `"chief"` | `HALO_VR_EYE_HEIGHT` | With `display.vr`, on foot: `"chief"` puts the eyes at the Master Chief's, 1.89 m, while the head is as high as it has been since the runtime last recentred (standing, or sitting for a seated player), and as much lower as the head goes lower: the player's eyes are the cyborg's, over its legs and shoulders. `"player"` puts them as high over the ground as the player's are over the floor (where the runtime knows it: its STAGE space). A crouch of the button and a real one do not add up. The game's view and shots are unchanged. |
 | `vr.vignette` | `0.0` | `HALO_VR_VIGNETTE` | With `display.vr`, a comfort vignette: the eyes' field darkens from its edges while the view moves or turns by itself (the stick, a vehicle, a fall, smooth turning), not as the head moves, nor at a snap turn. From `0`, none, to `1`: at a run (3 m/s) or a turn of 86 degrees a second, the clear field closes from 85 degrees about the eyes' middle to 35, the dark 20 degrees past it, in a tenth of a second, and opens again in 0.3 s. |
 | `vr.image_rows` | `"auto"` | `HALO_VR_IMAGE_ROWS` | With `display.vr`, how the OpenXR runtime takes the rows of the game's images: `"bottom"` first (OpenGL's and OpenXR's way), `"top"` first, or `"auto"`: from the top for SteamVR, which otherwise shows the game upside down, from the bottom for any other runtime. Read at start. |
 | `vr.hud_distance` | `15.0` | `HALO_VR_HUD_DISTANCE` | With `display.vr`, how far before the head the HUD's panel is held, in metres, from `0.5` to `100`. |
@@ -464,7 +464,9 @@ the setting for one start of the game. It has priority over the file.
 | `vr.left_handed` | `false` | `HALO_VR_LEFT_HANDED` | With `display.vr`, the left controller aims and fires and the right moves: the controllers' buttons swap hands, and the weapon, mirrored, is held in the left. |
 | `vr.snap_turn` | `30.0` | `HALO_VR_SNAP_TURN` | With `display.vr`, how far a push of the aiming hand's stick turns, in degrees; `0` turns smoothly instead. |
 | `vr.smooth_turn_speed` | `120.0` | `HALO_VR_SMOOTH_TURN_SPEED` | With `vr.snap_turn` `0`, the stick's turn at full push, in degrees a second. |
-| `vr.gestures` | `true` | `HALO_VR_GESTURES` | With `display.vr`, a punch is a melee attack, the other hand's grip at the head does its action, the flashlight (`false`: the grip alone), and with the palms together takes the weapon into that hand, the aiming hand's grip at a shoulder switches weapons, and lowering the head crouches. |
+| `vr.gestures` | `true` | `HALO_VR_GESTURES` | With `display.vr`, a punch is a melee attack, the other hand's grip at the head does its action, the flashlight (`false`: the grip alone), and taking the weapon at the aiming hand hands it over if the aiming hand then pulls away (both staying together, both hold it), the aiming hand's grip at a shoulder switches weapons, and lowering the head crouches. |
+| `vr.throw_gesture` | `true` | `HALO_VR_THROW_GESTURE` | With `display.vr`, a grenade is thrown with the arm: its button (the other hand's trigger) held takes one, let go with the hand moving faster than 1.5 m/s throws it where the aim points, let go slower keeps it. `false`: the button throws as a gamepad's does. |
+| `vr.aim_pitch` | `0.0` | `HALO_VR_AIM_PITCH` | With `display.vr`, the weapon's barrel from where the hand points, in degrees up, from `-45` to `45`. The hand points along its index finger held straight: the grip pose, which OpenXR defines alike for every controller. Raise it if shots go lower than the hand seems to point, lower it if they go higher. |
 | `vr.bindings` | `""` | `HALO_VR_BINDINGS` | With `display.vr`, controller buttons bound to other actions than those in "VR": items such as `"main.lower=action off.click=none"`, each a hand (`main`, the one that aims, or `off`), a button (`trigger`, `grip`, `lower`, `upper`, `click`) and an action (`fire`, `throw_grenade`, `jump`, `action`, `melee`, `switch_weapon`, `switch_grenade`, `flashlight`, `crouch`, `zoom`, `scoreboard`, `none`), separated by spaces or commas. An item not understood is left out (and logged). |
 | `audio.enabled` | `true` | `HALO_NO_AUDIO=1` sets `false` | `false`: no audio device. The sound continues without output. |
 | `audio.volume` | `1.0` | `HALO_VOLUME` | The master volume. |
@@ -696,7 +698,8 @@ screen, with the cause in the log.
   the runtime gives them for the moment the frame is shown: the head turns,
   tilts and moves the view, and the distance between the eyes is the
   headset's.
-- The aiming controller aims (`vr.aim`): the weapon is held in it and shots
+- The aiming controller aims (`vr.aim`): the weapon is held in it, along
+  the index finger held straight (`vr.aim_pitch` turns it), and shots
   go where it points, starting at the weapon (from the eye, as always,
   when other machines are in the game). A reticle is held where the shot
   lands, red when the game's crosshair would be; the HUD draws no
@@ -705,7 +708,8 @@ screen, with the cause in the log.
   where the head faces.
 - Each arm is its own (`vr.arms`): from the player's shoulders, the
   weapon's hand holds the weapon and the other hand its controller; it
-  holds the weapon too while both hands do (the off grip near it) and
+  holds the weapon too while both hands do (the off grip at the aiming
+  hand, supporting it, or ahead of it on a rifle, aiming it) and
   while the weapon is reloaded, readied, put away, swung or a grenade
   thrown. The free hand opens and closes with its controller's grip, the
   index finger with its trigger.
@@ -730,7 +734,7 @@ screen, with the cause in the log.
 
   | Right hand | | Left hand | |
   | --- | --- | --- | --- |
-  | trigger | fire | trigger | grenade |
+  | trigger | fire | trigger | grenade (held, then thrown with the arm) |
   | A | jump | X | switch grenades |
   | B | action, reload | Y | switch weapons |
   | grip | melee (or a punch) | grip at the head | flashlight |
@@ -740,8 +744,13 @@ screen, with the cause in the log.
 
   They press the gamepad's buttons for those actions in the standard
   preset, so a player's own preset applies to them too; `vr.bindings` binds
-  them to other actions. With the palms together, the other hand's grip
-  takes the weapon into that hand (`vr.gestures`). Index's A and B, and
+  them to other actions. The other hand's grip at the aiming hand takes
+  the weapon; if the aiming hand then pulls away, the weapon is handed
+  over to the other hand (`vr.gestures`); held together, both hold it.
+  A grenade is thrown with the arm (`vr.throw_gesture`): the trigger held
+  takes it, let go in a swing throws it where the aim points, let go
+  still keeps it.
+  While both hold it, both feel its shots. Index's A and B, and
   Vive's and Windows Mixed Reality's trackpads, stand in for the face
   buttons. The game's rumble is felt in the hands. In the menus either
   hand's lower button is A and its upper B, either stick moves about them,
@@ -758,10 +767,13 @@ screen, with the cause in the log.
   menu's over its scene, seen in the headset all around; the pause menu
   over the game. The loading screens (and the cinematics with
   `vr.cinematics = "screen"`) are drawn flat on a panel placed so too.
-- Gamepad Setup's VR HEADSET, also in the pause menu's Settings, sets the
-  headset's settings: the headset itself (from the next start), what
-  aims, the weapon's hand, turning, room scale, the vehicles' view, aim
-  and steering, and the cinematics.
+- Gamepad Setup's VR HEADSET sets the headset's settings: the headset
+  itself (from the next start), and with it in use, what aims, the
+  weapon's hand, turning, room scale, the vehicles' view, aim and
+  steering, and HANDS AND BODY: the eyes' height, the arms, the aim's
+  angle, the gestures, the grenades' throw, the vignette and the
+  cinematics. With the headset in use, they are in the pause menu's
+  Settings too; without it, only the switch is there.
 - The window shows the left eye, or that panel's picture.
 - The game draws a frame for each of the headset's, at the time the runtime
   gives, and blends the game's 30 ticks a second for each, as SMOOTH
