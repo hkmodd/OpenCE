@@ -862,9 +862,21 @@ static unsigned long custom_edition_texel_capacity;
 
 static int custom_edition_hud_meter_active;
 
+static void hud_meter_command(void *payload)
+{
+	custom_edition_hud_meter_active = *(const int *)payload;
+}
+
+/* (read as a texture is bound: with the render thread, it is changed in
+order with the draws queued) */
 void halo_custom_edition_hud_meter(int active)
 {
-	custom_edition_hud_meter_active = active;
+	if (!render_thread_running())
+	{
+		custom_edition_hud_meter_active = active;
+		return;
+	}
+	*(int *)render_thread_record(hud_meter_command, sizeof(int)) = active;
 }
 
 /* the order of the texels at address */
