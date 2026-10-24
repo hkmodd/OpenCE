@@ -465,6 +465,8 @@ the setting for one start of the game. It has priority over the file.
 | `vr.snap_turn` | `30.0` | `HALO_VR_SNAP_TURN` | With `display.vr`, how far a push of the aiming hand's stick turns, in degrees; `0` turns smoothly instead. |
 | `vr.smooth_turn_speed` | `120.0` | `HALO_VR_SMOOTH_TURN_SPEED` | With `vr.snap_turn` `0`, the stick's turn at full push, in degrees a second. |
 | `vr.gestures` | `true` | `HALO_VR_GESTURES` | With `display.vr`, a punch is a melee attack, the other hand's grip at the head does its action, the flashlight (`false`: the grip alone), and taking the weapon at the aiming hand hands it over if the aiming hand then pulls away (both staying together, both hold it), the aiming hand's grip at a shoulder puts the weapon away there (bare hands, which strike but do not fire) or draws the weapon kept there, either hand's grip at a weapon on the ground takes it into that hand, and lowering the head crouches. |
+| `vr.hands` | `"physical"` | `HALO_VR_HANDS` | With `display.vr` and `vr.gestures`, how the hands hold the weapon: `"physical"`, by its grip (let go at a shoulder it is kept there, let go elsewhere it goes back to its own, the hands bare; held by the other hand too, it is handed over to it; an empty hand's grip at a shoulder draws the weapon kept there into that hand), a trigger firing in the hand that holds the weapon and taking a grenade in an empty one, a punch of either hand striking; `"game"`, always in the aiming hand, its grip a melee attack. |
+| `vr.grip_toggle` | `false` | `HALO_VR_GRIP_TOGGLE` | With `vr.hands` `"physical"`, a press of the grip holds the weapon and another lets go; `false`, the grip held holds it. |
 | `vr.throw_gesture` | `true` | `HALO_VR_THROW_GESTURE` | With `display.vr`, a grenade is thrown with the arm: its button (the other hand's trigger) held takes one, let go with the hand moving faster than 1.5 m/s throws it where the aim points, let go slower keeps it. `false`: the button throws as a gamepad's does. |
 | `vr.aim_pitch` | `0.0` | `HALO_VR_AIM_PITCH` | With `display.vr`, the weapon's barrel from where the hand points, in degrees up, from `-45` to `45`. The hand points along its index finger held straight: the grip pose, which OpenXR defines alike for every controller. Raise it if shots go lower than the hand seems to point, lower it if they go higher. |
 | `vr.bindings` | `""` | `HALO_VR_BINDINGS` | With `display.vr`, controller buttons bound to other actions than those in "VR": items such as `"main.lower=action off.click=none"`, each a hand (`main`, the one that aims, or `off`), a button (`trigger`, `grip`, `lower`, `upper`, `click`) and an action (`fire`, `throw_grenade`, `jump`, `action`, `melee`, `switch_weapon`, `switch_grenade`, `flashlight`, `crouch`, `zoom`, `scoreboard`, `none`), separated by spaces or commas. An item not understood is left out (and logged). |
@@ -752,8 +754,19 @@ screen, with the cause in the log.
   zoom) if it is the one kept there, else draws the one kept there; the
   weapon held goes to the other shoulder. Either hand's grip at a weapon
   on the ground takes it (the action, as the game takes weapons), and the
-  weapon comes to that hand. Bare hands are the headset's alone: the
+  weapon comes to that hand; a hand that holds no weapon feels a light
+  pulse as one comes within its reach. Bare hands are the headset's alone: the
   other players see the weapon held.
+  With `vr.hands` `"physical"` (the default) the hands hold as hands do:
+  the weapon is held by its grip (one that comes otherwise, at a new life,
+  is held until its grip is pressed and let go; `vr.grip_toggle` makes a
+  press hold and another let go). Let go at a shoulder, the weapon is kept
+  there; elsewhere, it goes back to its own shoulder; held by the other
+  hand too, it is handed over. An empty hand's grip at a shoulder that
+  keeps a weapon draws it into that hand. A trigger fires in the hand that
+  holds the weapon and takes a grenade in an empty hand (thrown with the
+  arm); the grips strike nothing, a punch of either empty or weapon hand
+  does.
   A grenade is thrown with the arm (`vr.throw_gesture`): the trigger held
   takes it, let go in a swing throws it where the aim points, let go
   still keeps it.

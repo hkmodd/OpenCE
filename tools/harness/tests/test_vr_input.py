@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from harness import CHECK_FAILED, build, mutated, read, run
 
 CASES = ["gameplay", "move", "menus", "menu-button", "turn", "seat", "drive", "room", "gestures", "hands", "ray",
-         "bindings", "swap", "throw", "grab", "bare"]
+         "bindings", "swap", "throw", "grab", "bare", "physical"]
 CONTROLS = {
     "left-handed-ignored": (("main_index = input->left_handed ? VR_HAND_LEFT : VR_HAND_RIGHT;",
                              "main_index = VR_HAND_RIGHT;"), "gameplay"),
@@ -49,8 +49,28 @@ CONTROLS = {
     "taken-stays": (("if (input->grab_pending > 0.0f && (input->grab_hand == VR_HAND_LEFT) != (input->left_handed != 0))",
                      "if (0)"), "grab"),
     "taken-any-time": (("\tif (input->grab_pending > 0.0f)\n\t\tinput->grab_pending -= seconds;\n", ""), "grab"),
-    "bare-fires": (("(settings->bare_hands && (action == VR_BIND_FIRE || action == VR_BIND_ZOOM))",
-                    "(settings->bare_hands && action == VR_BIND_ZOOM)"), "bare"),
+    "bare-fires": (("(action == VR_BIND_FIRE || action == VR_BIND_ZOOM)))", "action == VR_BIND_ZOOM))"), "bare"),
+    "physical-handover-ignored": (("\t\tif (input->supporting)\n\t\t{\n\t\t\tvr_swap_hands(input);",
+                                   "\t\tif (0)\n\t\t{\n\t\t\tvr_swap_hands(input);"), "physical"),
+    "physical-let-go-on-press": (("(settings->grip_toggle ? pressed[main_index] : released[main_index])",
+                                  "pressed[main_index]"), "physical"),
+    "physical-empty-shoulder-draws": (("if (side >= 0 && settings->shoulder_full[side])", "if (side >= 0)"),
+                                      "physical"),
+    "physical-grip-strikes": (("input->physical || input->holster ||", "input->holster ||"), "physical"),
+    "physical-empty-hand-fires": (("action = input->holding ? VR_BIND_FIRE : VR_BIND_THROW_GRENADE;",
+                                   "action = VR_BIND_FIRE;"), "physical"),
+    "physical-support-throws": (("action = input->supporting ? VR_BIND_NONE : VR_BIND_THROW_GRENADE;",
+                                 "action = VR_BIND_THROW_GRENADE;"), "physical"),
+    "physical-off-punch-ignored": (("(input->physical && !input->supporting &&", "(0 &&"), "physical"),
+    "physical-stale-off-hand": (("\t\t\tif (!input->physical || input->supporting)\n\t\t\t\tinput->off_position_valid = 0;\n",
+                                 ""), "physical"),
+    "physical-draw-stays": (("\t\t\tif (hand != main_index)\n\t\t\t\tvr_swap_hands(input);\n", ""), "physical"),
+    "physical-new-life-gripped": (("\t\tif (input->grab_pending > 0.0f)\n\t\t\tinput->gripped = 1;\n",
+                                   "\t\tinput->gripped = 1;\n"), "physical"),
+    "physical-in-seats": (("settings->physical && settings->gestures && settings->on_foot;",
+                           "settings->physical && settings->gestures;"), "physical"),
+    "physical-seat-lets-go": (("\t\tinput->holding = settings->physical && settings->gestures;\n",
+                               "\t\tinput->holding = 0;\n"), "physical"),
     "two-hands-backwards": (("z[axis] = (main_hand->grip.position[axis] - off_hand->grip.position[axis]) / length;",
                              "z[axis] = (off_hand->grip.position[axis] - main_hand->grip.position[axis]) / length;"),
                             "hands"),
@@ -85,7 +105,7 @@ CONTROLS = {
     "throw-on-press": (("return was_held && !held &&", "return !was_held && held &&"), "throw"),
     "punch-after-menus": (("\t\tinput->main_position_valid = 0;\n\t\tfor (hand", "\t\tfor (hand"), "throw"),
     "throw-after-menus": (("\t\t\tinput->throw_position_valid[hand] = 0;\n\t\t\tinput->throw_speed[hand] = 0.0f;\n"
-                           "\t\t}\n\t}", "\t\t}\n\t}"), "throw"),
+                           "\t\t}\n\t\tinput->off_position_valid", "\t\t}\n\t\tinput->off_position_valid"), "throw"),
     "ray-upside-down": (("*v = 0.5f - y / height;", "*v = 0.5f + y / height;"), "ray"),
     "ray-panel-not-turned": (("vr_rotate(inverse, relative, origin);", "memcpy(origin, relative, sizeof(origin));"),
                              "ray"),

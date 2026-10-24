@@ -137,6 +137,17 @@ struct vr_input_settings
 	/* a weapon lies within each hand's reach (vr_view.c): the hand's grip
 	pressed there takes it */
 	int grab_reach[VR_HAND_COUNT];
+	/* the hands hold as hands do (vr.hands "physical", with the gestures):
+	the weapon held by its grip, let go put back at its shoulder; and a
+	press of the grip holds, another lets go (vr.grip_toggle) */
+	int physical;
+	int grip_toggle;
+	/* the player is on foot, the weapon in the hand (vr_view.c): in a seat
+	the hands hold as the game's */
+	int on_foot;
+	/* each shoulder (VR_HAND_LEFT, VR_HAND_RIGHT) keeps a weapon not in the
+	hand, for a grip there to draw (vr_view.c) */
+	int shoulder_full[VR_HAND_COUNT];
 };
 
 struct vr_input
@@ -170,6 +181,18 @@ struct vr_input
 	int holster;
 	unsigned long shoulder_grabs;
 	int shoulder_side;
+	int shoulder_kind;
+	/* the hands as they hold (settings' physical, as last updated): the
+	main hand holds the weapon, by its grip (letting go, it lets go of it:
+	a weapon that came to the hand otherwise is held until its grip is
+	pressed and let go); the other hand holds it too; the other hand's
+	last position (its punch) */
+	int physical;
+	int holding;
+	int gripped;
+	int supporting;
+	float off_position[3];
+	int off_position_valid;
 	/* each hand's grip took a weapon within its reach: the action held
 	while it is held there, VR_GRAB_SECONDS at most, and for how long; the
 	last hand to take one, and the seconds since (a weapon that comes to
@@ -214,8 +237,20 @@ void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struc
 	int menus, float seconds, struct vr_pad *pad);
 
 /* a weapon came to the player's hand (vr_view.c): one a hand's grip took
-just now goes to that hand, which then aims */
+just now goes to that hand, which then aims; with the hands as they hold,
+the main hand holds it */
 void vr_input_weapon_taken(struct vr_input *input);
+
+/* what a grip did at a shoulder (vr_input's shoulder_kind): pressed there
+(vr.hands "game": vr_view.c puts the weapon away or draws one), drew the
+weapon kept there, or let the weapon go there (or, at no shoulder, back to
+the one that keeps it) */
+enum
+{
+	VR_SHOULDER_PRESS,
+	VR_SHOULDER_DRAW,
+	VR_SHOULDER_PUT
+};
 
 /* each hand's buttons' actions: the defaults (the table of vr_input.c), with
 each item of `text` in place of its default ("main.lower=action
@@ -268,9 +303,14 @@ void vr_input_rumble(float left, float right);
 int vr_input_left_handed(void);
 /* vr_view.c: the weapon is held with both hands this frame (the rumble) */
 void vr_input_weapon_hands(int both);
-/* vr_view.c: the main grip's presses at a shoulder (vr.gestures), and the
-last's shoulder (VR_HAND_LEFT or VR_HAND_RIGHT) */
-unsigned long vr_input_shoulder_grabs(int *side);
+/* vr_view.c: what grips did at the shoulders (vr.gestures), how many
+times, and the last's: its shoulder (VR_HAND_LEFT or VR_HAND_RIGHT; -1 for a
+weapon let go at none) and kind (VR_SHOULDER_*) */
+unsigned long vr_input_shoulder_grabs(int *side, int *kind);
+/* vr_view.c: the hands hold as hands do (vr.hands "physical"), and whether
+a hand holds the weapon */
+int vr_input_physical(void);
+int vr_input_holding(void);
 /* vr_view.c: a weapon came to the player's hand (vr_input_weapon_taken) */
 void vr_input_weapon_came(void);
 /* vr_view.c: the turn the stick made this frame (radians to the left),

@@ -332,6 +332,17 @@ static const struct config_setting config_settings[] =
 		"weapon away there (the hands bare, which strike) or draws the one kept\n"
 		"there; either hand's grip at a weapon on the ground takes it, into\n"
 		"that hand; the head lowered crouches." },
+	{ "vr.hands", _config_string, "\"physical\"", "HALO_VR_HANDS", _environment_value, _platform_desktop,
+		"With display.vr and vr.gestures, how the hands hold the weapon:\n"
+		"\"physical\", by its grip (let go at a shoulder, it is kept there; let\n"
+		"go elsewhere, back at its own; held by the other hand too, handed\n"
+		"over to it; an empty hand's grip at a shoulder draws the weapon kept\n"
+		"there), a trigger firing in the hand that holds it and taking a\n"
+		"grenade in an empty one, a punch of either hand striking; or \"game\",\n"
+		"always in the aiming hand, its grip a melee attack." },
+	{ "vr.grip_toggle", _config_boolean, "false", "HALO_VR_GRIP_TOGGLE", _environment_value, _platform_desktop,
+		"With vr.hands \"physical\", a press of the grip holds the weapon and\n"
+		"another lets go; false, the grip held holds it." },
 	{ "vr.throw_gesture", _config_boolean, "true", "HALO_VR_THROW_GESTURE", _environment_value, _platform_desktop,
 		"With display.vr, a grenade is thrown with the arm: its button (the\n"
 		"off trigger) held takes one, let go with the hand moving fast (1.5\n"

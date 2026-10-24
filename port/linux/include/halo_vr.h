@@ -220,6 +220,10 @@ int vr_render_bare_hands(void);
 /* vr_input.c: a weapon lies on the ground within the hand's (VR_HAND_*)
 reach, for its grip to take */
 int vr_render_grab_reach(int hand);
+/* vr_input.c: the shoulder (VR_HAND_*) keeps a weapon not in the hand */
+int vr_render_shoulder_full(int side);
+/* vr_input.c: the player is on foot, the weapon in the hand */
+int vr_render_on_foot(void);
 /* first_person_legs.c: in an eye's pass on foot, where the legs' hips go
 (the world's, under the head) and the way they face (the body's, level, as
 the arms' shoulders: vr_arms_body); 0 elsewhere */
@@ -269,6 +273,8 @@ int vr_render_zoom_hidden(void);
 #define vr_render_pistol_grip() 0
 #define vr_render_bare_hands() 0
 #define vr_render_grab_reach(hand) 0
+#define vr_render_shoulder_full(side) 0
+#define vr_render_on_foot() 0
 #define vr_render_legs(under, forward) 0
 #define vr_render_shot_origin(unit_index, origin) 0
 #define vr_render_shot_from_hand(unit_index) 0

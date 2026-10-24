@@ -17,9 +17,11 @@
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/op_arms" x="54" y="103"/>
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/op_aim_pitch" x="54" y="133"/>
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/op_gestures" x="54" y="163"/>
-		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/op_throw_gesture" x="54" y="193"/>
-		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/op_vignette" x="54" y="223"/>
-		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/op_cinematics" x="54" y="253"/>
+		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/op_hands" x="54" y="193"/>
+		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/op_grip_toggle" x="54" y="223"/>
+		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/op_throw_gesture" x="54" y="253"/>
+		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/op_vignette" x="54" y="283"/>
+		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/op_cinematics" x="54" y="313"/>
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/button_bar" y="414"/>
 	</widget>
 	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/button_bar" type="column_list" width="640" height="28" flags="pass_unhandled_to_focused_child left_right_tabs_items">
@@ -63,11 +65,29 @@
 	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/gestures_spinner" type="spinner" left="3" top="2" width="147" height="20" flags="pass_unhandled_to_focused_child left_right_tabs_items" strings="ON|OFF" setting="vr.gestures" values="true|false" font="ui\large_ui" color="#FF2896FF" align="center" text_y="1" header_bitmap="bitmaps/arrow_sm_left" footer_bitmap="bitmaps/arrow_sm_right" header_bounds="7 -6 19 0" footer_bounds="7 150 19 156">
 		<on event="created" run="port setting load"/>
 	</widget>
+	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/op_hands" width="512" height="28" flags="pass_unhandled_to_focused_child" bitmap="bitmaps/option_bkds" color="#FF2896FF">
+		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/hands_label"/>
+		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/hands_spinner" x="320" y="1"/>
+	</widget>
+	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/hands_label" type="text" controller="1" width="300" height="22" string_list="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/labels" string_index="4" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4">
+	</widget>
+	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/hands_spinner" type="spinner" left="3" top="2" width="147" height="20" flags="pass_unhandled_to_focused_child left_right_tabs_items" strings="PHYSICAL|GAME" setting="vr.hands" values="physical|game" font="ui\large_ui" color="#FF2896FF" align="center" text_y="1" header_bitmap="bitmaps/arrow_sm_left" footer_bitmap="bitmaps/arrow_sm_right" header_bounds="7 -6 19 0" footer_bounds="7 150 19 156">
+		<on event="created" run="port setting load"/>
+	</widget>
+	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/op_grip_toggle" width="512" height="28" flags="pass_unhandled_to_focused_child" bitmap="bitmaps/option_bkds" color="#FF2896FF">
+		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/grip_toggle_label"/>
+		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/grip_toggle_spinner" x="320" y="1"/>
+	</widget>
+	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/grip_toggle_label" type="text" controller="1" width="300" height="22" string_list="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/labels" string_index="5" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4">
+	</widget>
+	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/grip_toggle_spinner" type="spinner" left="3" top="2" width="147" height="20" flags="pass_unhandled_to_focused_child left_right_tabs_items" strings="HOLD|TOGGLE" setting="vr.grip_toggle" values="false|true" font="ui\large_ui" color="#FF2896FF" align="center" text_y="1" header_bitmap="bitmaps/arrow_sm_left" footer_bitmap="bitmaps/arrow_sm_right" header_bounds="7 -6 19 0" footer_bounds="7 150 19 156">
+		<on event="created" run="port setting load"/>
+	</widget>
 	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/op_throw_gesture" width="512" height="28" flags="pass_unhandled_to_focused_child" bitmap="bitmaps/option_bkds" color="#FF2896FF">
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/throw_gesture_label"/>
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/throw_gesture_spinner" x="320" y="1"/>
 	</widget>
-	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/throw_gesture_label" type="text" controller="1" width="300" height="22" string_list="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/labels" string_index="4" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4">
+	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/throw_gesture_label" type="text" controller="1" width="300" height="22" string_list="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/labels" string_index="6" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4">
 	</widget>
 	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/throw_gesture_spinner" type="spinner" left="3" top="2" width="147" height="20" flags="pass_unhandled_to_focused_child left_right_tabs_items" strings="THROWN|BUTTON" setting="vr.throw_gesture" values="true|false" font="ui\large_ui" color="#FF2896FF" align="center" text_y="1" header_bitmap="bitmaps/arrow_sm_left" footer_bitmap="bitmaps/arrow_sm_right" header_bounds="7 -6 19 0" footer_bounds="7 150 19 156">
 		<on event="created" run="port setting load"/>
@@ -76,7 +96,7 @@
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/vignette_label"/>
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/vignette_spinner" x="320" y="1"/>
 	</widget>
-	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/vignette_label" type="text" controller="1" width="300" height="22" string_list="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/labels" string_index="5" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4">
+	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/vignette_label" type="text" controller="1" width="300" height="22" string_list="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/labels" string_index="7" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4">
 	</widget>
 	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/vignette_spinner" type="spinner" left="3" top="2" width="147" height="20" flags="pass_unhandled_to_focused_child left_right_tabs_items" strings="OFF|LOW|MEDIUM|HIGH" setting="vr.vignette" values="0|0.35|0.65|1" font="ui\large_ui" color="#FF2896FF" align="center" text_y="1" header_bitmap="bitmaps/arrow_sm_left" footer_bitmap="bitmaps/arrow_sm_right" header_bounds="7 -6 19 0" footer_bounds="7 150 19 156">
 		<on event="created" run="port setting load"/>
@@ -85,7 +105,7 @@
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/cinematics_label"/>
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/cinematics_spinner" x="320" y="1"/>
 	</widget>
-	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/cinematics_label" type="text" controller="1" width="300" height="22" string_list="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/labels" string_index="6" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4">
+	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/cinematics_label" type="text" controller="1" width="300" height="22" string_list="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/labels" string_index="8" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4">
 	</widget>
 	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/cinematics_spinner" type="spinner" left="3" top="2" width="147" height="20" flags="pass_unhandled_to_focused_child left_right_tabs_items" strings="AROUND|SCREEN" setting="vr.cinematics" values="immersive|screen" font="ui\large_ui" color="#FF2896FF" align="center" text_y="1" header_bitmap="bitmaps/arrow_sm_left" footer_bitmap="bitmaps/arrow_sm_right" header_bounds="7 -6 19 0" footer_bounds="7 150 19 156">
 		<on event="created" run="port setting load"/>
@@ -105,6 +125,8 @@
 		<string text="ARMS:"/>
 		<string text="AIM ANGLE:"/>
 		<string text="GESTURES:"/>
+		<string text="HANDS:"/>
+		<string text="GRIP:"/>
 		<string text="GRENADES:"/>
 		<string text="VIGNETTE:"/>
 		<string text="CINEMATICS:"/>
@@ -115,6 +137,8 @@
 		<string text="FREE: each arm its own, the other hand free\nuntil it holds the weapon. ON WEAPON: the game's."/>
 		<string text="The barrel from where the hand points, degrees\nup: raise it if shots go lower than it points."/>
 		<string text="A punch strikes, a grip at the head is the\nflashlight, at a shoulder it switches weapons."/>
+		<string text="PHYSICAL: hold the weapon by the grip, let go\nto put it back. GAME: always in the hand."/>
+		<string text="HOLD: the grip held holds the weapon. TOGGLE:\na press holds it, another lets go."/>
 		<string text="THROWN: hold the trigger, throw with the arm.\nBUTTON: the trigger throws at once."/>
 		<string text="The view's edges darken while it moves or\nturns by itself, not with the head."/>
 		<string text="Cinematics around the head, a blink at each cut,\nor on a screen ahead."/>

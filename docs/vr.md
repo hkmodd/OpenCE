@@ -152,7 +152,8 @@ What sets the size the world is seen at, each measured or derived:
   weapon, as the other machines see it. Either grip pressed with a weapon
   on the ground (no one holds it) within 25 cm of it, along its length
   (its origin, about its grip, through its middle and as far again: its
-  bounding sphere is far wider), holds the action
+  bounding sphere is far wider; a hand that holds no weapon feels a light
+  pulse, 0.02 s, as one comes within it), holds the action
   (0.6 s at most, as long as the grip and the weapon stay), which takes a
   weapon as the game takes it; one that comes to the player within a
   second goes to that hand (the hands swap if it was the off hand's). The off grip pressed at the
@@ -160,7 +161,22 @@ What sets the size the world is seen at, each measured or derived:
   apart, the main hand having moved more, the hands swap until
   `vr.left_handed` is changed (a hand-over, after astromaddie's gesture);
   hands that stay together hold it with both (a pistol's grip), and the
-  off hand pulling away lets go. The grenade's button held takes a grenade
+  off hand pulling away lets go. With `vr.hands` `"physical"` (and the
+  gestures) the hands hold as hands do (`vr_physical_hands`): the main hand
+  holds the weapon while its grip is held (a weapon that comes otherwise, at
+  a new life or a switch, until the grip is pressed and let go; with
+  `vr.grip_toggle` a press holds, another lets go). Let go with the other
+  hand holding it too (`vr_two_handed`), the hands swap; else the weapon is
+  let go at the shoulder there (kept there, the one kept there going to the
+  other shoulder) or at none (back at its own), and the hands are bare. An
+  empty hand's grip pressed at a shoulder keeping a weapon not in the hand
+  draws it, into that hand; at the head it is the flashlight; at a weapon
+  on the ground it takes it. The triggers are bound by what the hand holds:
+  the main hand's fires while it holds the weapon, an empty hand's is the
+  grenade's button, a hand holding the weapon too presses nothing; the main
+  grip binds nothing, and a punch of the off hand strikes too while it is
+  empty. vr_view.c is told what a grip did at a shoulder (pressed, drew, or
+  let go) and keeps the slots as above. The grenade's button held takes a grenade
   (`vr.throw_gesture`): let go with the hand faster than 1.5 m/s (its
   fastest of the last moments, falling by 8 m/s a second, as a hand slows
   to let go; still counted where the tracking lost it in the swing) it
