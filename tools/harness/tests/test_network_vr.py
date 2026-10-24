@@ -34,7 +34,7 @@ def generated(fault=None):
     return (('enums.inc', enums), ('under_test.inc', code))
 
 
-@pytest.mark.parametrize('case', ['wire', 'valid', 'host', 'send', 'client'])
+@pytest.mark.parametrize('case', ['wire', 'valid', 'host', 'send', 'client', 'drop'])
 def test_case(case):
     status, output = run(build('network_vr', generated()), case)
     assert status == 0, output
@@ -55,6 +55,16 @@ def test_case(case):
     (('distributed_player_is_local(distributed_player_from_byte(entry.player_index))', 'FALSE'), 'client'),
     (('age <= NETWORK_VR_POSE_TICKS ?', 'TRUE ?'), 'client'),
     (('.taken_time = game_time_get();', '.taken_time = time;'), 'client'),
+    (('if (count != 1 || !stream || !network_vr_server())', 'if (count != 1 || !network_vr_server())'), 'drop'),
+    (('!distributed_machine_has_player(machine_index, entry.player_index))', 'FALSE)'), 'drop'),
+    (('if (count != 1 || !stream || !network_vr_server())', 'if (count != 1 || !stream)'), 'drop'),
+    (('entry.pad != 0 ||', ''), 'drop'),
+    (('if (!unit || unit->object.parent_object_index != NONE ||', 'if (!unit ||'), 'drop'),
+    (('now - network_vr_drop_times[player_index] < NETWORK_VR_DROP_TICKS', 'FALSE'), 'drop'),
+    (('if (!(speed <= NETWORK_VR_DROP_SPEED))', 'if (0)'), 'drop'),
+    (('\telse if (network_vr_server())\n', '\telse\n'), 'drop'),
+    (('_distributed_message_vr_drop, 1, sizeof(message), _distributed_to_host_reliably);',
+      '_distributed_message_vr_drop, 1, sizeof(message), _distributed_to_host);'), 'drop'),
 ])
 def test_negative_control(fault, case):
     status, output = run(build('network_vr', generated(fault)), case)

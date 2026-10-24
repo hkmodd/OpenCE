@@ -283,7 +283,13 @@ its head within 0.5 world units of the unit and its hands within 0.4 of the
 head, and sends it on to each client machine that sees the player (message
 93); each machine keeps a player's latest for a second, to pose the
 player's body by. It is only drawn: hits, shots and movement are the
-unit's.
+unit's. Then version 41 lets a VR server's headset's player let their weapon
+fall, thrown as the hand moved: the player's machine asks the host
+(distributed message 94, `network_vr.c`, over its stream), which takes it
+only for the machine's own player, on foot and alive, not within half a
+second of their last, no faster than 0.3 world units a tick on top of the
+unit's own, and drops the weapon as the game drops one; the other machines
+get the weapon as any dropped one.
 
 `port/linux/network_format.txt` records the wire format of the current
 version (`tools/network_format.py`): `test_linux_port.py` fails when the

@@ -116,6 +116,9 @@ let go, its fastest of late, which falls by VR_THROW_FALL a second (a
 throw's hand slows as it lets go) */
 #define VR_THROW_SPEED 1.5f
 #define VR_THROW_FALL 8.0f
+/* a hand's velocity, for the weapon it lets fall (a VR server's rules):
+its frames' over this long (seconds) */
+#define VR_DROP_SMOOTH 0.05f
 /* a hand's grip takes a weapon within its reach by holding the action this
 long at most (seconds: long enough for the game's swap) */
 #define VR_GRAB_SECONDS 0.6f
@@ -418,6 +421,29 @@ static void vr_shoulder(struct vr_input *input, int kind, int side)
 	input->shoulder_grabs++;
 }
 
+/* each hand's velocity of late, from its places frame to frame, smoothed
+over VR_DROP_SMOOTH seconds (none while it is not tracked) */
+static void vr_hand_velocities(struct vr_input *input, struct vr_frame const *frame, float seconds)
+{
+	int hand, axis;
+	float blend = seconds < VR_DROP_SMOOTH ? seconds / VR_DROP_SMOOTH : 1.0f;
+
+	for (hand = 0; hand < VR_HAND_COUNT; hand++)
+	{
+		struct vr_hand const *state = &frame->hand[hand];
+
+		for (axis = 0; axis < 3; axis++)
+		{
+			float now = state->tracked && input->hand_place_valid[hand] && seconds > 0.0f ?
+				(state->grip.position[axis] - input->hand_place[hand][axis]) / seconds : 0.0f;
+
+			input->hand_velocity[hand][axis] += (now - input->hand_velocity[hand][axis]) * blend;
+		}
+		memcpy(input->hand_place[hand], state->grip.position, sizeof(input->hand_place[hand]));
+		input->hand_place_valid[hand] = state->tracked;
+	}
+}
+
 /* the hands swap: the other aims and holds the weapon */
 static void vr_swap_hands(struct vr_input *input)
 {
@@ -436,7 +462,7 @@ pressed and let go do (the main hand may change) */
 static void vr_physical_hands(struct vr_input *input, struct vr_frame const *frame,
 	struct vr_input_settings const *settings)
 {
-	int main_index = input->left_handed ? VR_HAND_LEFT : VR_HAND_RIGHT, hand;
+	int main_index = input->left_handed ? VR_HAND_LEFT : VR_HAND_RIGHT, hand, side;
 	unsigned long pressed[VR_HAND_COUNT], released[VR_HAND_COUNT];
 	float orientation[4];
 
@@ -448,7 +474,7 @@ static void vr_physical_hands(struct vr_input *input, struct vr_frame const *fra
 	input->supporting = input->holding &&
 		vr_two_handed(frame, input->left_handed, settings->pistol_grip, settings->aim_pitch, orientation) != VR_HELD_ONE;
 	/* (the weapon let go: to the other hand holding it too, to the shoulder
-	it is let go at, else back to its own) */
+	it is let go at, else falling by a VR server's rules, or back to its own) */
 	if (input->holding && input->gripped && (settings->grip_toggle ? pressed[main_index] : released[main_index]))
 	{
 		pressed[main_index] = 0;
@@ -458,13 +484,21 @@ static void vr_physical_hands(struct vr_input *input, struct vr_frame const *fra
 			input->supporting = 0;
 			return;
 		}
-		vr_shoulder(input, VR_SHOULDER_PUT, vr_at_shoulder(frame, &frame->hand[main_index]));
+		side = vr_at_shoulder(frame, &frame->hand[main_index]);
+		if (side < 0 && settings->drop)
+		{
+			memcpy(input->drop_velocity, input->hand_velocity[main_index], sizeof(input->drop_velocity));
+			vr_shoulder(input, VR_SHOULDER_DROP, -1);
+		}
+		else
+		{
+			vr_shoulder(input, VR_SHOULDER_PUT, side);
+		}
 		input->holding = input->gripped = 0;
 	}
 	for (hand = 0; hand < VR_HAND_COUNT; hand++)
 	{
 		struct vr_hand const *state = &frame->hand[hand];
-		int side;
 
 		if (!pressed[hand] || !state->tracked)
 			continue;
@@ -548,6 +582,7 @@ void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struc
 		input->holding = settings->physical && settings->gestures;
 		input->gripped = input->supporting = 0;
 	}
+	vr_hand_velocities(input, frame, menus ? 0.0f : seconds);
 	if (input->physical && !menus)
 		vr_physical_hands(input, frame, settings);
 	main_index = input->left_handed ? VR_HAND_LEFT : VR_HAND_RIGHT;
@@ -1000,6 +1035,7 @@ static void vr_input_settings_read(struct vr_input_settings *settings)
 	settings->on_foot = vr_render_on_foot();
 	settings->shoulder_full[VR_HAND_LEFT] = vr_render_shoulder_full(VR_HAND_LEFT);
 	settings->shoulder_full[VR_HAND_RIGHT] = vr_render_shoulder_full(VR_HAND_RIGHT);
+	settings->drop = vr_rules_active();
 }
 
 int vr_input_gamepad(struct vr_pad *pad, int menus)
@@ -1058,6 +1094,11 @@ unsigned long vr_input_shoulder_grabs(int *side, int *kind)
 	*side = vr_input_state.shoulder_side;
 	*kind = vr_input_state.shoulder_kind;
 	return vr_input_state.shoulder_grabs;
+}
+
+void vr_input_drop_velocity(float velocity[3])
+{
+	memcpy(velocity, vr_input_state.drop_velocity, sizeof(vr_input_state.drop_velocity));
 }
 
 int vr_input_physical(void)

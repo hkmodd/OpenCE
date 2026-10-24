@@ -34,6 +34,7 @@ static struct vr_input_settings settings_of(int left_handed, float snap_angle, i
     settings.grip_toggle = 0;
     settings.on_foot = 1;
     settings.shoulder_full[VR_HAND_LEFT] = settings.shoulder_full[VR_HAND_RIGHT] = 0;
+    settings.drop = 0;
     vr_input_bindings_parse("", settings.bindings);
     return settings;
 }
@@ -826,7 +827,7 @@ int main(int argc, char **argv)
     }
     CASE("physical") {
         unsigned long grabs;
-        int hits = 0;
+        int hits = 0, held_hand, still;
 
         /* the hands as they hold: a weapon that came at a new life is held, though its grip is not */
         memset(&input, 0, sizeof(input));
@@ -999,6 +1000,34 @@ int main(int argc, char **argv)
         frame_of(&frame);
         vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
         CHECK(input.physical && input.holding && !input.gripped, "on foot again: held, not by its grip");
+        /* by a VR server's rules, let go away from the shoulders as it swings ahead: it falls, thrown so */
+        frame_of(&frame);
+        for (still = 0; still < 30; still++)
+            vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        held_hand = input.left_handed ? VR_HAND_LEFT : VR_HAND_RIGHT;
+        settings.drop = 1;
+        vr_input_weapon_taken(&input);
+        frame.hand[held_hand].buttons = VR_BUTTON_GRIP;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        frame.hand[held_hand].grip.position[2] -= 0.05f;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        frame.hand[held_hand].grip.position[2] -= 0.05f;
+        frame.hand[held_hand].buttons = 0;
+        grabs = input.shoulder_grabs;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(!input.holding && input.shoulder_grabs == grabs + 1 && input.shoulder_kind == VR_SHOULDER_DROP &&
+            input.shoulder_side == -1, "a VR server's rules: let go, it falls (%d, %lu, %d, %d)", input.holding,
+            input.shoulder_grabs, input.shoulder_kind, input.shoulder_side);
+        {
+            float velocity[3];
+
+            memcpy(velocity, input.drop_velocity, sizeof(velocity));
+            CHECK(velocity[2] < -0.5f && fabsf(velocity[0]) < 0.01f && fabsf(velocity[1]) < 0.01f,
+                "thrown ahead as the hand swung (%f, %f, %f)", velocity[0], velocity[1], velocity[2]);
+        }
+        settings.drop = 0;
+        frame_of(&frame);
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
         /* the game's hands: always held, the grip strikes */
         settings.physical = 0;
         frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;

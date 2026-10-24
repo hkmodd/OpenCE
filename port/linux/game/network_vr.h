@@ -38,6 +38,10 @@ units: 1.5 m and 1.2 m) */
 #define NETWORK_VR_HAND_REACH 0.4f
 /* a pose's life: the ticks after it was taken */
 #define NETWORK_VR_POSE_TICKS 30
+/* a weapon let fall: the fastest it is thrown (world units a tick: 27
+m/s), and the ticks before a player's next */
+#define NETWORK_VR_DROP_SPEED 0.3f
+#define NETWORK_VR_DROP_TICKS 15
 
 void network_vr_reset(void);
 /* any player's pose was taken this game (none: no body to pose) */
@@ -56,4 +60,13 @@ struct network_vr_pose const *network_vr_pose_get(long player);
 /* whether a pose is fit to take: its head near the unit, its hands near
 the head, its axes whole */
 boolean network_vr_pose_valid(struct network_vr_pose const *pose);
+/* (a headset's player's machine) the weapon in the player's hand let
+fall, thrown with a velocity (the world's axes, world units a tick): by a
+game with no network itself, by a VR server's host when it asks, which
+checks it; nothing on another server */
+void network_vr_drop(long player, real_vector3d const *velocity);
+/* the request's entry size and its handler (the host: over the
+machine's stream alone) */
+word network_vr_drop_entry_size(void);
+void network_vr_handle_drop(long machine_index, void const *entries, short count, boolean stream);
 #endif

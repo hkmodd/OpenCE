@@ -145,6 +145,10 @@ enum
 	from the host to each client machine that sees the player */
 	_distributed_message_vr_pose_up = 92,
 	_distributed_message_vr_pose_down = 93,
+	/* a headset's player's weapon let fall in a VR server's game, thrown
+	as the hand moved (network_vr.c): the player's machine's request to the
+	host, reliably, which checks it and drops the weapon as the game does */
+	_distributed_message_vr_drop = 94,
 
 	NUMBER_OF_DISTRIBUTED_MESSAGES
 };

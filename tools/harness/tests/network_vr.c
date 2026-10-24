@@ -12,6 +12,7 @@ typedef word message_header;
 #define HALO_PORT_MAXIMUM_NETWORK_MACHINES 8
 #define NUMBEROF(array) ((short)(sizeof(array) / sizeof((array)[0])))
 #define csmemcpy memcpy
+#define csmemset memset
 #define DISTRIBUTED_UNIT_SCALE 32767.0f
 struct network_game { byte cooperative_flags; };
 static struct network_game game;
@@ -52,17 +53,57 @@ static boolean distributed_machine_sees_player(long machine_index, short player_
 }
 /* what was sent: to the host, and to each machine */
 static int sent_up;
+static int asked_drops;
 static int sent_down[HALO_PORT_MAXIMUM_NETWORK_MACHINES];
 static byte last_message[128];
 static void distributed_send(void *message, byte type, short count, word size, short destination)
 {
  if (type == _distributed_message_vr_pose_up && count == 1 && destination == _distributed_to_host) sent_up++;
+ if (type == _distributed_message_vr_drop && count == 1 && destination == _distributed_to_host_reliably) asked_drops++;
  memcpy(last_message, message, size);
 }
 static void distributed_send_to_machine(long machine_index, void *message, byte type, short count, word size)
 {
  if (type == _distributed_message_vr_pose_down && count == 1) sent_down[machine_index]++;
  memcpy(last_message, message, size);
+}
+/* the players' units (player i's unit i), their weapons in hand (NONE:
+none), riding or dead; the drops done and the last weapon's acceleration */
+enum { _object_dead_bit };
+struct player_datum { long unit_index; };
+struct unit_datum { struct { long parent_object_index; word damage_flags; } object; struct { short current_weapon_index; } unit; };
+static struct player_datum player_data[MAXIMUM_TRACKED_PLAYERS];
+static struct unit_datum unit_data[MAXIMUM_TRACKED_PLAYERS];
+static long held_weapon[MAXIMUM_TRACKED_PLAYERS];
+static int drops;
+static real_vector3d accelerated;
+static struct player_datum *distributed_player(short player_index)
+{
+ return player_index >= 0 && player_index < MAXIMUM_TRACKED_PLAYERS && present[player_index] ? &player_data[player_index] : NULL;
+}
+static struct unit_datum *unit_try_and_get(long unit_index)
+{
+ return unit_index >= 0 && unit_index < MAXIMUM_TRACKED_PLAYERS ? &unit_data[unit_index] : NULL;
+}
+static long unit_inventory_get_weapon(long unit_index, short slot){(void)slot;return held_weapon[unit_index];}
+static boolean infection_allow_weapon_drop(long unit_index, long weapon_index){(void)unit_index;(void)weapon_index;return TRUE;}
+static boolean unit_drop_current_weapon(long unit_index, boolean immediate)
+{
+ (void)immediate;
+ if (held_weapon[unit_index] == NONE) return FALSE;
+ drops++;
+ return TRUE;
+}
+static void *object_try_and_get(long object_index){return object_index != NONE ? (void *)&drops : NULL;}
+static void object_get_velocities(long object_index, real_vector3d *translational, real_vector3d *angular)
+{
+ (void)object_index;(void)angular;
+ translational->i = translational->j = translational->k = 0.0f;
+}
+static void item_accelerate(long item_index, real_vector3d const *acceleration, boolean detonates)
+{
+ (void)item_index;(void)detonates;
+ accelerated = *acceleration;
 }
 #include "under_test.inc"
 
@@ -220,6 +261,66 @@ int main(int argc,char **argv)
   network_vr_handle_down(now+500,&entry,1);
   CHECK(network_vr_pose_get(distributed_player_from_byte(1))!=NULL,
    "a pose sent by a clock ahead of this machine's aged from when it was taken");
+ } else CASE("drop") {
+  struct network_vr_drop_entry entry;
+  real_vector3d velocity;
+  short index;
+  connection=_game_connection_network_server;
+  players();
+  for (index=0;index<MAXIMUM_TRACKED_PLAYERS;index++)
+  {
+   player_data[index].unit_index=index;held_weapon[index]=100+index;
+   unit_data[index].object.parent_object_index=NONE;unit_data[index].object.damage_flags=0;
+  }
+  game.cooperative_flags=FLAG(_network_game_port_vr_rules_bit);
+  memset(&entry,0,sizeof(entry));
+  entry.player_index=1;
+  vector_set(&velocity,0.1f,0.0f,0.05f);
+  distributed_vector_pack(&velocity,NETWORK_VR_VELOCITY_SCALE,&entry.velocity);
+  network_vr_handle_drop(2,&entry,1,FALSE);
+  CHECK(drops==0,"a request in a datagram refused");
+  network_vr_handle_drop(3,&entry,1,TRUE);
+  CHECK(drops==0,"another machine's player's refused");
+  game.cooperative_flags=0;
+  network_vr_handle_drop(2,&entry,1,TRUE);
+  CHECK(drops==0,"an ordinary server's refused");
+  game.cooperative_flags=FLAG(_network_game_port_vr_rules_bit);
+  entry.pad=1;
+  network_vr_handle_drop(2,&entry,1,TRUE);
+  CHECK(drops==0,"its pad set refused");
+  entry.pad=0;
+  unit_data[1].object.parent_object_index=7;
+  network_vr_handle_drop(2,&entry,1,TRUE);
+  CHECK(drops==0,"a player riding refused");
+  unit_data[1].object.parent_object_index=NONE;
+  network_vr_handle_drop(2,&entry,1,TRUE);
+  CHECK(drops==1,"its own player's weapon dropped");
+  CHECK(fabsf(accelerated.i-0.1f)<0.001f && fabsf(accelerated.k-0.05f)<0.001f,"thrown with its velocity");
+  now+=NETWORK_VR_DROP_TICKS-1;
+  network_vr_handle_drop(2,&entry,1,TRUE);
+  CHECK(drops==1,"not again within NETWORK_VR_DROP_TICKS");
+  now++;
+  vector_set(&velocity,1.5f,0.0f,0.0f);
+  distributed_vector_pack(&velocity,NETWORK_VR_VELOCITY_SCALE,&entry.velocity);
+  network_vr_handle_drop(2,&entry,1,TRUE);
+  CHECK(drops==2,"again after it");
+  CHECK(fabsf(accelerated.i-NETWORK_VR_DROP_SPEED)<0.001f,"no faster than NETWORK_VR_DROP_SPEED: %f",accelerated.i);
+  now+=NETWORK_VR_DROP_TICKS;
+  held_weapon[1]=NONE;
+  network_vr_handle_drop(2,&entry,1,TRUE);
+  CHECK(drops==2,"no weapon in hand, none dropped");
+  /* a game with no network drops it itself; a VR server's client asks */
+  connection=_game_connection_local;game.cooperative_flags=0;held_weapon[0]=50;now+=NETWORK_VR_DROP_TICKS;
+  vector_set(&velocity,0.0f,0.0f,0.1f);
+  network_vr_drop(distributed_player_from_byte(0),&velocity);
+  CHECK(drops==3,"a game with no network: dropped at once");
+  connection=_game_connection_network_client;now+=NETWORK_VR_DROP_TICKS;
+  network_vr_drop(distributed_player_from_byte(0),&velocity);
+  CHECK(drops==3 && asked_drops==0,"an ordinary server's client: nothing asked");
+  game.cooperative_flags=FLAG(_network_game_port_vr_rules_bit);
+  network_vr_drop(distributed_player_from_byte(0),&velocity);
+  CHECK(drops==3 && asked_drops==1,"a VR server's client: asked, reliably, not dropped itself");
+  CHECK(((struct network_vr_drop_message *)last_message)->entry.player_index==0,"for its player");
  } else return 2;
  return 0;
 }

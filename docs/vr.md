@@ -338,6 +338,14 @@ the weapon's hand's). The fingers and the weapon move with the hand. A copy
 of the pose is posed as a frame is drawn, so the body's hit boxes and
 markers stay the game's.
 
+A VR server's headset's player who lets go of the weapon at no shoulder
+lets it fall, thrown with the hand's velocity (its last 50 ms): the game
+itself drops it in a game with no network, the host when the player's
+machine asks it (network version 41), checking that the player is the
+machine's own, on foot and alive, no oftener than every half second and
+no faster than 0.3 world units a tick (27 m/s). On any other server the
+weapon let go goes back to its shoulder, as before.
+
 ## To come
 
 Each step is a pull request of its own, with harness tests and the pixel

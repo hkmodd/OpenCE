@@ -1,4 +1,4 @@
-version 40
+version 41
 bound CHAT_TEXT_SIZE 64
 bound DISCORD_ID_SIZE 24
 bound DISCORD_NAME_SIZE 40
@@ -95,6 +95,7 @@ enum _distributed_message_voice_down 81
 enum _distributed_message_voice_up 80
 enum _distributed_message_votekick 78
 enum _distributed_message_votekick_status 79
+enum _distributed_message_vr_drop 94
 enum _distributed_message_vr_pose_down 93
 enum _distributed_message_vr_pose_up 92
 enum _distributed_object_at_rest_bit 1

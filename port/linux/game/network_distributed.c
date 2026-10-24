@@ -4572,6 +4572,7 @@ void network_distributed_handle_message(
 	case _distributed_message_chat_config: entry_size = network_chat_config_entry_size(); break;
 	case _distributed_message_vr_pose_up:
 	case _distributed_message_vr_pose_down: entry_size = network_vr_entry_size(); break;
+	case _distributed_message_vr_drop: entry_size = network_vr_drop_entry_size(); break;
 	case _distributed_message_player_inputs: entry_size = sizeof(struct distributed_player_input); break;
 	case _distributed_message_relayed_actions: entry_size = DISTRIBUTED_RELAYED_ACTION_MINIMUM_SIZE; break;
 	case _distributed_message_game_state:
@@ -4602,6 +4603,7 @@ void network_distributed_handle_message(
 	case _distributed_message_chat_config:
 	case _distributed_message_vr_pose_up:
 	case _distributed_message_vr_pose_down:
+	case _distributed_message_vr_drop:
 		if (header.count < 1)
 			return;
 		break;
@@ -4632,6 +4634,7 @@ void network_distributed_handle_message(
 	case _distributed_message_votekick:
 	case _distributed_message_chat_up:
 	case _distributed_message_vr_pose_up:
+	case _distributed_message_vr_drop:
 		if (machine_index == NONE || game_connection() != _game_connection_network_server)
 			return;
 		/* (heard from: the latency meter's connection problem) */
@@ -4720,6 +4723,9 @@ void network_distributed_handle_message(
 		break;
 	case _distributed_message_vr_pose_down:
 		network_vr_handle_down(header.game_time, entries, header.count);
+		break;
+	case _distributed_message_vr_drop:
+		network_vr_handle_drop(machine_index, entries, header.count, distributed_handling_stream_message);
 		break;
 	case _distributed_message_coop_device_groups:
 		network_coop_handle_device_groups(entries, header.count);

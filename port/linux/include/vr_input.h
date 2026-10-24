@@ -148,6 +148,9 @@ struct vr_input_settings
 	/* each shoulder (VR_HAND_LEFT, VR_HAND_RIGHT) keeps a weapon not in the
 	hand, for a grip there to draw (vr_view.c) */
 	int shoulder_full[VR_HAND_COUNT];
+	/* the game plays by a VR server's rules (vr_rules_active): the weapon
+	let go at no shoulder falls, thrown as the hand moved */
+	int drop;
 };
 
 struct vr_input
@@ -210,6 +213,13 @@ struct vr_input
 	float throw_seconds;
 	unsigned long throws;
 	int throw_hand;
+	/* each hand's velocity of late (metres a second, LOCAL's axes, its
+	frames' over VR_DROP_SMOOTH seconds) and last place; the velocity of
+	the hand that last let the weapon fall (VR_SHOULDER_DROP) */
+	float hand_velocity[VR_HAND_COUNT][3];
+	float hand_place[VR_HAND_COUNT][3];
+	int hand_place_valid[VR_HAND_COUNT];
+	float drop_velocity[3];
 	/* the off grip took the weapon at the main hand: the weapon goes to it
 	if the main hand pulls away from it while it holds on (a hand-over);
 	for how long, and where both hands were as it took it */
@@ -244,12 +254,14 @@ void vr_input_weapon_taken(struct vr_input *input);
 /* what a grip did at a shoulder (vr_input's shoulder_kind): pressed there
 (vr.hands "game": vr_view.c puts the weapon away or draws one), drew the
 weapon kept there, or let the weapon go there (or, at no shoulder, back to
-the one that keeps it) */
+the one that keeps it), or at no shoulder let it fall (a VR server's
+rules: vr_input_drop_velocity) */
 enum
 {
 	VR_SHOULDER_PRESS,
 	VR_SHOULDER_DRAW,
-	VR_SHOULDER_PUT
+	VR_SHOULDER_PUT,
+	VR_SHOULDER_DROP
 };
 
 /* each hand's buttons' actions: the defaults (the table of vr_input.c), with
@@ -307,6 +319,9 @@ void vr_input_weapon_hands(int both);
 times, and the last's: its shoulder (VR_HAND_LEFT or VR_HAND_RIGHT; -1 for a
 weapon let go at none) and kind (VR_SHOULDER_*) */
 unsigned long vr_input_shoulder_grabs(int *side, int *kind);
+/* vr_view.c: the velocity the weapon last let fall was thrown with
+(metres a second, LOCAL's axes) */
+void vr_input_drop_velocity(float velocity[3]);
 /* vr_view.c: the hands hold as hands do (vr.hands "physical"), and whether
 a hand holds the weapon */
 int vr_input_physical(void);

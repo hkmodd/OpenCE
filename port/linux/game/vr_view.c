@@ -627,6 +627,23 @@ shoulder draws the weapon kept there (the one held going to the other
 shoulder), and the weapon let go at a shoulder is kept there (the one kept
 there going to the other). Only the player's view and buttons change: the
 game's player holds the weapon still, as the other machines see it */
+/* the weapon let fall from the hand, thrown with the hand's velocity
+(the room's turned into the world's, metres a second into world units a
+tick) by the game itself or its host (network_vr.c) */
+static void vr_drop(
+	struct unit_datum const *unit)
+{
+	real_vector3d velocity;
+	float local[3];
+
+	vr_input_drop_velocity(local);
+	vr_local_to_world(local, vr_view.frame_heading, velocity.n);
+	scale_vector3d(&velocity, VR_UNITS_PER_METRE / 30.0f, &velocity);
+	network_vr_drop(unit->unit.player_index, &velocity);
+	vr_haptic(vr_view.main_hand, 0.3f, 0.04f);
+	platform_log("vr: the weapon let fall (%.2f, %.2f, %.2f m/s)", local[0], local[1], local[2]);
+}
+
 static void vr_shoulders(
 	void)
 {
@@ -663,6 +680,12 @@ static void vr_shoulders(
 		return;
 	vr_view.shoulder_grabs = grabs;
 	current = unit->unit.current_weapon_index;
+	/* (let go at no shoulder by a VR server's rules: the weapon falls) */
+	if (physical && kind == VR_SHOULDER_DROP && held != NONE)
+	{
+		vr_drop(unit);
+		return;
+	}
 	if (held == NONE || side < 0 || side >= VR_HAND_COUNT || current < 0 || current >= MAXIMUM_WEAPONS_PER_UNIT)
 		return;
 	kept = vr_view.shoulder_slot[side];

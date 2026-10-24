@@ -14,6 +14,11 @@ is only drawn: the game's hits, shots and movement are the unit's. */
 #include "networking/network_game_manager.h"
 #include "network_distributed.h"
 #include "network_vr.h"
+#include "infection.h"
+#include "items/items.h"
+#include "objects/objects.h"
+#include "units/units.h"
+#include <math.h>
 #include <string.h>
 
 void platform_log(char const *format, ...);
@@ -56,13 +61,18 @@ static struct
 static long network_vr_sent_time = NONE;
 /* any player's pose was taken this game */
 static boolean network_vr_any_pose = FALSE;
+/* the tick each player's weapon last fell at (NONE: none this game) */
+static long network_vr_drop_times[MAXIMUM_TRACKED_PLAYERS];
 
 void network_vr_reset(void)
 {
 	short index;
 
 	for (index = 0; index < MAXIMUM_TRACKED_PLAYERS; index++)
+	{
 		network_vr_poses[index].time = NONE;
+		network_vr_drop_times[index] = NONE;
+	}
 	network_vr_sent_time = NONE;
 	network_vr_any_pose = FALSE;
 }
@@ -280,4 +290,129 @@ struct network_vr_pose const *network_vr_pose_get(long player)
 	}
 	age = game_time_get() - network_vr_poses[player_index].taken_time;
 	return age >= 0 && age <= NETWORK_VR_POSE_TICKS ? &network_vr_poses[player_index].pose : NULL;
+}
+
+/* ---------- the weapon let fall */
+
+/* a dropped weapon's velocity on the wire: parts of 1/16384 of a world
+unit a tick */
+#define NETWORK_VR_VELOCITY_SCALE 16384.0f
+
+/* a client's request to the host: its player's weapon let fall, thrown
+with a velocity (the world's axes, world units a tick) */
+struct network_vr_drop_entry
+{
+	byte player_index;
+	byte pad;
+	struct distributed_vector velocity;
+};
+
+typedef char network_vr_drop_entry_size_assert[sizeof(struct network_vr_drop_entry) == 8 ? 1 : -1];
+
+struct network_vr_drop_message
+{
+	struct distributed_message_header header;
+	struct network_vr_drop_entry entry;
+};
+
+word network_vr_drop_entry_size(void)
+{
+	return (word)sizeof(struct network_vr_drop_entry);
+}
+
+/* the player's unit lets its weapon in hand fall, thrown with the velocity
+(no faster than NETWORK_VR_DROP_SPEED) on top of the unit's own, as the
+game drops one (not oftener than every NETWORK_VR_DROP_TICKS, not while it
+rides, dead or keeping it, an Infection zombie's skull) */
+static boolean network_vr_drop_weapon(short player_index, real_vector3d const *velocity)
+{
+	struct player_datum *player = player_index >= 0 && player_index < MAXIMUM_TRACKED_PLAYERS ?
+		distributed_player((byte)player_index) : NULL;
+	struct unit_datum *unit = player ? unit_try_and_get(player->unit_index) : NULL;
+	long now = game_time_get();
+	long weapon_index;
+	real_vector3d thrown = *velocity, unit_velocity, weapon_velocity;
+	real speed;
+
+	if (!unit || unit->object.parent_object_index != NONE || TEST_FLAG(unit->object.damage_flags, _object_dead_bit) ||
+		(network_vr_drop_times[player_index] != NONE && now >= network_vr_drop_times[player_index] &&
+			now - network_vr_drop_times[player_index] < NETWORK_VR_DROP_TICKS))
+	{
+		return FALSE;
+	}
+	weapon_index = unit_inventory_get_weapon(player->unit_index, unit->unit.current_weapon_index);
+	if (weapon_index == NONE || !infection_allow_weapon_drop(player->unit_index, weapon_index) ||
+		!unit_drop_current_weapon(player->unit_index, TRUE))
+	{
+		return FALSE;
+	}
+	network_vr_drop_times[player_index] = now;
+	/* (no faster than the most; a velocity not a number, none) */
+	speed = (real)sqrt(thrown.i * thrown.i + thrown.j * thrown.j + thrown.k * thrown.k);
+	if (!(speed <= NETWORK_VR_DROP_SPEED))
+	{
+		real scale = speed > NETWORK_VR_DROP_SPEED ? NETWORK_VR_DROP_SPEED / speed : 0.0f;
+
+		thrown.i *= scale;
+		thrown.j *= scale;
+		thrown.k *= scale;
+	}
+	/* (the game may have deleted it: one that cannot be fired, or out of
+	the world) */
+	if (object_try_and_get(weapon_index))
+	{
+		object_get_velocities(player->unit_index, &unit_velocity, NULL);
+		object_get_velocities(weapon_index, &weapon_velocity, NULL);
+		thrown.i += unit_velocity.i - weapon_velocity.i;
+		thrown.j += unit_velocity.j - weapon_velocity.j;
+		thrown.k += unit_velocity.k - weapon_velocity.k;
+		item_accelerate(weapon_index, &thrown, FALSE);
+	}
+	return TRUE;
+}
+
+void network_vr_drop(long player, real_vector3d const *velocity)
+{
+	struct network_vr_drop_message message;
+	short player_index = (short)DATUM_INDEX_TO_ABSOLUTE_INDEX(player);
+
+	if (player == NONE || player_index >= MAXIMUM_TRACKED_PLAYERS || !game_in_progress())
+		return;
+	if (game_connection() == _game_connection_local)
+	{
+		network_vr_drop_weapon(player_index, velocity);
+	}
+	else if (network_vr_server())
+	{
+		if (game_connection() == _game_connection_network_server)
+		{
+			network_vr_drop_weapon(player_index, velocity);
+		}
+		else if (game_connection() == _game_connection_network_client)
+		{
+			csmemset(&message, 0, sizeof(message));
+			message.entry.player_index = (byte)player_index;
+			distributed_vector_pack(velocity, NETWORK_VR_VELOCITY_SCALE, &message.entry.velocity);
+			distributed_send(&message, _distributed_message_vr_drop, 1, sizeof(message), _distributed_to_host_reliably);
+		}
+	}
+}
+
+void network_vr_handle_drop(long machine_index, void const *entries, short count, boolean stream)
+{
+	struct network_vr_drop_entry entry;
+	real_vector3d velocity;
+
+	if (count != 1 || !stream || !network_vr_server())
+		return;
+	csmemcpy(&entry, entries, sizeof(entry));
+	if (entry.player_index >= MAXIMUM_TRACKED_PLAYERS || entry.pad != 0 ||
+		distributed_player_from_byte(entry.player_index) == NONE ||
+		!distributed_machine_has_player(machine_index, entry.player_index))
+	{
+		return;
+	}
+	distributed_vector_unpack(&entry.velocity, NETWORK_VR_VELOCITY_SCALE, &velocity);
+	if (network_vr_drop_weapon(entry.player_index, &velocity))
+		platform_log("network vr: player %d let their weapon fall", entry.player_index);
 }
