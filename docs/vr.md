@@ -328,6 +328,16 @@ of the head, and sends it on to each machine that sees the player; every
 machine keeps each player's latest for a second, for its body to be posed by.
 The pose is only drawn: the game's hits, shots and movement stay the unit's.
 
+Every machine, a flat one too, draws such a player's body as the headset
+poses it (`port/linux/game/network_vr_body.c`): the head turned from where
+the game has it look to where the headset looks, each arm reaching from its
+shoulder to its controller with its own bones' lengths, the elbow down, out
+and back, and the hand turned from the game's aim to the controller's way,
+holding the weapon as the game's hand holds it (the model's right arm is
+the weapon's hand's). The fingers and the weapon move with the hand. A copy
+of the pose is posed as a frame is drawn, so the body's hit boxes and
+markers stay the game's.
+
 ## To come
 
 Each step is a pull request of its own, with harness tests and the pixel

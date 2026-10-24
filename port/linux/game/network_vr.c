@@ -43,14 +43,19 @@ struct network_vr_pose_message
 	struct network_vr_pose_entry entry;
 };
 
-/* each player's latest pose and the tick it was sent at (NONE: none);
-the tick this machine last sent its own at */
+/* each player's latest pose, the tick it was sent at (NONE: none), by
+its sender's clock, which orders them, and the tick this machine took it
+at, by its own, which ages it (a machine's clock may run ahead of
+another's); the tick this machine last sent its own at */
 static struct
 {
 	long time;
+	long taken_time;
 	struct network_vr_pose pose;
 } network_vr_poses[MAXIMUM_TRACKED_PLAYERS];
 static long network_vr_sent_time = NONE;
+/* any player's pose was taken this game */
+static boolean network_vr_any_pose = FALSE;
 
 void network_vr_reset(void)
 {
@@ -59,6 +64,12 @@ void network_vr_reset(void)
 	for (index = 0; index < MAXIMUM_TRACKED_PLAYERS; index++)
 		network_vr_poses[index].time = NONE;
 	network_vr_sent_time = NONE;
+	network_vr_any_pose = FALSE;
+}
+
+boolean network_vr_poses_kept(void)
+{
+	return network_vr_any_pose;
 }
 
 word network_vr_entry_size(void)
@@ -136,8 +147,8 @@ boolean network_vr_pose_valid(struct network_vr_pose const *pose)
 	return TRUE;
 }
 
-/* a pose taken: kept if newer than the player's last (its axes made
-whole), and told once a game */
+/* a pose taken: kept if newer than the player's last by its sender's
+clock (its axes made whole), and told once a game */
 static boolean network_vr_pose_take(short player_index, long time, struct network_vr_pose const *pose)
 {
 	short hand;
@@ -150,7 +161,9 @@ static boolean network_vr_pose_take(short player_index, long time, struct networ
 	if (network_vr_poses[player_index].time == NONE)
 		platform_log("network vr: player %d's headset pose", player_index);
 	network_vr_poses[player_index].time = time;
+	network_vr_poses[player_index].taken_time = game_time_get();
 	network_vr_poses[player_index].pose = *pose;
+	network_vr_any_pose = TRUE;
 	distributed_axes_make_valid(&network_vr_poses[player_index].pose.head_forward,
 		&network_vr_poses[player_index].pose.head_up);
 	for (hand = 0; hand < 2; hand++)
@@ -265,6 +278,6 @@ struct network_vr_pose const *network_vr_pose_get(long player)
 	{
 		return NULL;
 	}
-	age = game_time_get() - network_vr_poses[player_index].time;
-	return age >= -NETWORK_VR_POSE_TICKS && age <= NETWORK_VR_POSE_TICKS ? &network_vr_poses[player_index].pose : NULL;
+	age = game_time_get() - network_vr_poses[player_index].taken_time;
+	return age >= 0 && age <= NETWORK_VR_POSE_TICKS ? &network_vr_poses[player_index].pose : NULL;
 }

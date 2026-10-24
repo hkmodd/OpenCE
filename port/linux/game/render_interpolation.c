@@ -43,6 +43,7 @@ with their unit, and with what it rides.
 #include "render/render_cameras.h"
 #include "units/units.h"
 #include "halo_vr.h"
+#include "network_vr_body.h"
 
 /* port/linux/src/port_config.c */
 int config_boolean(const char *name);
@@ -149,6 +150,8 @@ static struct interpolated_first_person interpolated_first_person[MAXIMUM_LOCAL_
 static long interpolation_tick;
 static long interpolation_frame;
 static boolean interpolation_rendering;
+/* a frame is drawn (interpolated or not) */
+static boolean interpolation_drawing;
 static real interpolation_fraction = 1.0f;
 
 /* ---------- blending */
@@ -505,6 +508,7 @@ void render_interpolation_reset(void)
 void render_interpolation_frame_begin(void)
 {
 	interpolation_rendering = halo_interpolation_enabled();
+	interpolation_drawing = TRUE;
 	interpolation_frame++;
 	interpolation_fraction = game_time_get_tick_fraction();
 }
@@ -512,6 +516,7 @@ void render_interpolation_frame_begin(void)
 void render_interpolation_frame_end(void)
 {
 	interpolation_rendering = FALSE;
+	interpolation_drawing = FALSE;
 }
 
 real render_interpolation_fraction(void)
@@ -519,7 +524,7 @@ real render_interpolation_fraction(void)
 	return interpolation_rendering ? interpolation_fraction : 1.0f;
 }
 
-real_matrix4x3 *render_interpolation_object_node_matrices(long object_index)
+static real_matrix4x3 *render_interpolation_blended_node_matrices(long object_index)
 {
 	struct interpolated_object *record;
 	long absolute_index;
@@ -599,6 +604,17 @@ real_matrix4x3 *render_interpolation_object_node_matrices(long object_index)
 		record->blended_frame = interpolation_frame;
 	}
 	return record->nodes + 2 * record->node_capacity;
+}
+
+real_matrix4x3 *render_interpolation_object_node_matrices(long object_index)
+{
+	real_matrix4x3 *nodes = render_interpolation_blended_node_matrices(object_index);
+
+	/* (a VR server's other headsets' players' bodies as their headsets pose
+	them, drawn only: network_vr_body.c) */
+	if (interpolation_drawing && network_vr_bodies())
+		return network_vr_body_node_matrices(object_index, nodes, interpolation_frame);
+	return nodes;
 }
 
 /* ---------- corrections */

@@ -216,6 +216,10 @@ int main(int argc,char **argv)
   now++;
   CHECK(network_vr_pose_get(distributed_player_from_byte(1))==NULL,"none once a second old");
   CHECK(network_vr_pose_get(NONE)==NULL,"none for no player");
+  pose=pose_of();entry=entry_of(1,&pose);
+  network_vr_handle_down(now+500,&entry,1);
+  CHECK(network_vr_pose_get(distributed_player_from_byte(1))!=NULL,
+   "a pose sent by a clock ahead of this machine's aged from when it was taken");
  } else return 2;
  return 0;
 }

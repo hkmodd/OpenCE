@@ -54,6 +54,7 @@ def test_case(case):
     (('time == network_vr_sent_time ||', ''), 'send'),
     (('distributed_player_is_local(distributed_player_from_byte(entry.player_index))', 'FALSE'), 'client'),
     (('age <= NETWORK_VR_POSE_TICKS ?', 'TRUE ?'), 'client'),
+    (('.taken_time = game_time_get();', '.taken_time = time;'), 'client'),
 ])
 def test_negative_control(fault, case):
     status, output = run(build('network_vr', generated(fault)), case)

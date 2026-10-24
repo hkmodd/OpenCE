@@ -36,10 +36,12 @@ struct network_vr_pose
 units: 1.5 m and 1.2 m) */
 #define NETWORK_VR_HEAD_REACH 0.5f
 #define NETWORK_VR_HAND_REACH 0.4f
-/* a pose's life: the ticks after it was sent */
+/* a pose's life: the ticks after it was taken */
 #define NETWORK_VR_POSE_TICKS 30
 
 void network_vr_reset(void);
+/* any player's pose was taken this game (none: no body to pose) */
+boolean network_vr_poses_kept(void);
 /* (a VR player's machine, once a tick) this machine's player's pose, of
 its unit (player: the player's datum index) */
 void network_vr_send(long player, struct network_vr_pose const *pose);
