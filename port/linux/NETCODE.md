@@ -289,7 +289,12 @@ fall, thrown as the hand moved: the player's machine asks the host
 only for the machine's own player, on foot and alive, not within half a
 second of their last, no faster than 0.3 world units a tick on top of the
 unit's own, and drops the weapon as the game drops one; the other machines
-get the weapon as any dropped one.
+get the weapon as any dropped one. Then version 42 adds to the pose the
+slot of the weapon the player's other hand holds (or none) and that hand's
+trigger: every other machine's copy of the unit, the host's too, holds
+that weapon of its inventory in its other hand and fires it with that
+trigger (`dual_wield.c`), and the host takes the hits of a player who held
+one in the last three seconds at twice the rate.
 
 `port/linux/network_format.txt` records the wire format of the current
 version (`tools/network_format.py`): `test_linux_port.py` fails when the

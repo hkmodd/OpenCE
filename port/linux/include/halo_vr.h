@@ -246,7 +246,7 @@ holds there is held: its place, forward where it points (the world's,
 this frame); 0 for none (not the headset's unit, the hand not tracked) */
 int vr_render_off_hand_grip(long unit_index, struct real_matrix4x3 *grip);
 /* vr_input.c: the other hand may hold a weapon of its own (by a VR
-server's rules, every player this machine's: dual_wield.c) */
+server's rules: dual_wield.c) */
 int vr_render_dual_wield(void);
 /* hud_messaging.c: a prompt's button (one of the HUD's button icons) as the
 headset's controllers name it (vr_input.c's buttons): the right B acts, the

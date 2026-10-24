@@ -9,7 +9,8 @@ headset poses it; a pose not heard for a second is none */
 
 /* a pose: the head's and each hand's place from the unit's (its
 position, world units, along the world's axes) and their axes; a hand's
-only with its bit */
+only with its bit; and the slot of the weapon the other hand holds
+(dual_wield.c; NONE: none) and that hand's trigger (0 to 1) */
 enum
 {
 	_network_vr_pose_left_hand_bit,
@@ -30,6 +31,8 @@ struct network_vr_pose
 	real_vector3d hands[2];
 	real_vector3d hand_forwards[2];
 	real_vector3d hand_ups[2];
+	short off_slot;
+	real off_trigger;
 };
 
 /* how far from the unit a head may be, and a hand from the head (world
@@ -55,7 +58,8 @@ word network_vr_entry_size(void);
 void network_vr_handle_up(long machine_index, long game_time, void const *entries, short count);
 void network_vr_handle_down(long game_time, void const *entries, short count);
 /* the pose of a player to draw (another machine's: a VR server's), NULL
-for none */
+for none; what it says the other hand holds, every machine's copy of the
+unit holds there (dual_wield.c) */
 struct network_vr_pose const *network_vr_pose_get(long player);
 /* whether a pose is fit to take: its head near the unit, its hands near
 the head, its axes whole */

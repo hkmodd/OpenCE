@@ -927,6 +927,10 @@ static const struct config_setting config_settings[] =
 		"With display.vr, a headset of the game's own in place of the runtime:\n"
 		"a Rift's eyes held still, frames at once (tests, and images of what\n"
 		"the headset shows with vr_dump_frame)." },
+	{ "debug.vr_simulate_paced", _config_boolean, "false", "HALO_VR_SIMULATE_PACED", _environment_set_is_true,
+		_platform_desktop,
+		"The simulated headset's frames 90 a second, as a runtime's, so that the\n"
+		"game's clock keeps time (a network game's client); else at once." },
 	{ "debug.vr_simulate_yaw", _config_real, "0.0", "HALO_VR_SIMULATE_YAW", _environment_value, _platform_desktop,
 		"The simulated head's turn to the left, in degrees." },
 	{ "debug.vr_simulate_pitch", _config_real, "0.0", "HALO_VR_SIMULATE_PITCH", _environment_value,

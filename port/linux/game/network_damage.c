@@ -66,6 +66,7 @@ being hit looks and feels like on the clients).
 #include "scenario/scenario.h"
 #include "units/units.h"
 #include "network_distributed.h"
+#include "dual_wield.h"
 
 #include <math.h>
 
@@ -107,7 +108,9 @@ enum
 	(a throw takes most of a second); past it the oldest gives way */
 	MAXIMUM_GRENADE_THROWS = 32,
 	/* a player's hits: a bucket of this many seconds of fire, filling at a
-	second a second, a hit taking what one of its weapon's projectiles
+	second a second (two while a VR server's headset's player holds, or
+	held within REPORT_MAXIMUM_AGE_TICKS, a weapon in each hand:
+	dual_wield.c), a hit taking what one of its weapon's projectiles
 	takes to fire (at twice the weapon's fastest rate: a shotgun's
 	pellets, a spray); an explosion's hits are one, however many it hits */
 	HIT_REPORT_BURST_SECONDS = 3,
@@ -386,6 +389,9 @@ static struct
 	long unarmed_time;
 	real hit_seconds;
 	long hit_seconds_time;
+	/* (a weapon in the other hand last held: a VR server's headset's
+	player, dual_wield.c) */
+	long dual_time;
 } damage_players[MAXIMUM_TRACKED_PLAYERS];
 /* ... the explosions whose hits came this tick, each paid for once, and
 the objects each hit (each once), each player's */
@@ -1627,6 +1633,8 @@ static void distributed_note_weapons(
 			continue;
 		damage_players[player_index].unarmed_melee_damage_index = unit_unarmed_melee_damage(unit_index);
 		damage_players[player_index].unarmed_time = game_time_get();
+		if (dual_wield_weapon(unit_index) != NONE)
+			damage_players[player_index].dual_time = game_time_get();
 		units[0] = unit_index;
 		units[1] = object_get(unit_index)->object.parent_object_index;
 		/* (a vehicle's collisions are its driver's, physics.c) */
@@ -1784,7 +1792,12 @@ static boolean distributed_report_paid(
 	}
 	if (!paid)
 	{
-		*hit_seconds = MIN((real)HIT_REPORT_BURST_SECONDS, *hit_seconds + (real)elapsed / TICKS_PER_SECOND);
+		/* (a weapon in each hand fires twice as much) */
+		real earned = (real)elapsed / TICKS_PER_SECOND;
+
+		if (game_time_get() - damage_players[player_index].dual_time <= REPORT_MAXIMUM_AGE_TICKS)
+			earned *= 2.0f;
+		*hit_seconds = MIN((real)HIT_REPORT_BURST_SECONDS, *hit_seconds + earned);
 		damage_players[player_index].hit_seconds_time = game_time_get();
 		if (*hit_seconds < 1.0f / rate)
 			return FALSE;
@@ -2482,6 +2495,7 @@ void network_damage_new_game(
 			damage_players[player_index].throw_times[index] = NONE;
 		damage_players[player_index].driven_time = -RECENT_WEAPON_TICKS - 1;
 		damage_players[player_index].hit_seconds = HIT_REPORT_BURST_SECONDS;
+		damage_players[player_index].dual_time = -REPORT_MAXIMUM_AGE_TICKS - 1;
 		damage_explosions[player_index].time = NONE;
 		damage_explosions[player_index].count = 0;
 		for (index = 0; index < PLAYER_TRAIL_POINTS; index++)

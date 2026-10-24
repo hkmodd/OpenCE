@@ -151,8 +151,7 @@ struct vr_input_settings
 	/* the game plays by a VR server's rules (vr_rules_active): the weapon
 	let go at no shoulder falls, thrown as the hand moved */
 	int drop;
-	/* ... and the other hand may hold a weapon of its own (dual_wield.c:
-	every player this machine's) */
+	/* ... and the other hand may hold a weapon of its own (dual_wield.c) */
 	int dual;
 };
 

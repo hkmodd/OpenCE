@@ -2021,6 +2021,16 @@ int vr_frame_begin(void)
 	vr.dumping = 0;
 	if (vr.simulated)
 	{
+		/* (paced as a runtime paces its frames, debug.vr_simulate_paced) */
+		if (config_boolean("debug.vr_simulate_paced"))
+		{
+			static Uint64 next = 0;
+			Uint64 now = SDL_GetTicksNS();
+
+			if (now < next)
+				SDL_DelayNS(next - now);
+			next = (now < next ? next : now) + SDL_NS_PER_SECOND / 90;
+		}
 		if (vr.frame_begun)
 			vr_end_frame(NULL, 0);
 		vr.frame_begun = 1;

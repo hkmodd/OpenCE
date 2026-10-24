@@ -740,8 +740,8 @@ static void vr_shoulders(
 		vr_view.bare ? "the weapon put away, the hands bare" : "a weapon drawn");
 }
 
-/* the other hand's weapon (by a VR server's rules, every player this
-machine's: no other machine plays it yet): taken from the shoulder it drew at as it holds one, put back as it
+/* the other hand's weapon (by a VR server's rules; the other machines
+follow this one's, network_vr.c): taken from the shoulder it drew at as it holds one, put back as it
 lets go, the weapon in hand's as the main hand lets go of its own; its
 trigger told (dual_wield.c) */
 static void vr_dual(
@@ -1437,6 +1437,9 @@ static void vr_pose_send(
 {
 	struct unit_datum *unit = unit_try_and_get(vr_view.unit_index);
 	struct network_vr_pose pose;
+	unsigned long transfers;
+	float trigger;
+	int side;
 	short hand;
 
 	if (!unit || unit->object.parent_object_index != NONE || !vr_view.hand_aiming ||
@@ -1461,6 +1464,9 @@ static void vr_pose_send(
 	}
 	SET_FLAG(pose.flags, _network_vr_pose_left_handed_bit, vr_view.main_hand == VR_HAND_LEFT);
 	SET_FLAG(pose.flags, _network_vr_pose_bare_bit, vr_view.bare);
+	pose.off_slot = dual_wield_slot(vr_view.unit_index);
+	vr_input_off_holding(&side, &trigger, &transfers);
+	pose.off_trigger = pose.off_slot != NONE ? PIN(trigger, 0.0f, 1.0f) : 0.0f;
 	network_vr_send(local_player_get_player_index(local_player_index), &pose);
 }
 
@@ -2221,7 +2227,7 @@ static boolean vr_players_all_here(
 int vr_render_dual_wield(
 	void)
 {
-	return vr_players_all_here() && vr_rules_active();
+	return vr_rules_active();
 }
 
 int vr_render_off_hand_grip(

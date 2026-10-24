@@ -13,6 +13,8 @@ typedef word message_header;
 #define NUMBEROF(array) ((short)(sizeof(array) / sizeof((array)[0])))
 #define csmemcpy memcpy
 #define csmemset memset
+#define CEILING(n,ceiling) ((n)>(ceiling)?(ceiling):(n))
+#define PIN(n,floor,ceiling) ((n)<(floor) ? (floor) : CEILING((n),(ceiling)))
 #define DISTRIBUTED_UNIT_SCALE 32767.0f
 struct network_game { byte cooperative_flags; };
 static struct network_game game;
@@ -116,6 +118,7 @@ static struct network_vr_pose pose_of(void)
  short hand;
  memset(&pose,0,sizeof(pose));
  pose.flags=FLAG(_network_vr_pose_left_hand_bit)|FLAG(_network_vr_pose_right_hand_bit);
+ pose.off_slot=NONE;
  vector_set(&pose.head,0.05f,-0.02f,0.6f);
  vector_set(&pose.head_forward,1.0f,0.0f,0.0f);
  vector_set(&pose.head_up,0.0f,0.0f,1.0f);
@@ -152,7 +155,7 @@ int main(int argc,char **argv)
  CASE("wire") {
   struct network_vr_pose pose=pose_of(),back;
   struct network_vr_pose_entry entry=entry_of(5,&pose);
-  CHECK(network_vr_entry_size()==56,"the entry is 56 bytes: %d",(int)network_vr_entry_size());
+  CHECK(network_vr_entry_size()==58,"the entry is 58 bytes: %d",(int)network_vr_entry_size());
   CHECK(entry.player_index==5,"its player");
   network_vr_pose_unpack(&entry,&back);
   CHECK(back.flags==pose.flags,"the flags");
@@ -160,6 +163,17 @@ int main(int argc,char **argv)
    "places to 1/4096 of a world unit: %f %f",back.head.k,back.hands[1].j);
   CHECK(fabsf(back.hand_forwards[0].k+1.0f)<1e-4f && fabsf(back.head_up.k-1.0f)<1e-4f,"axes whole");
   CHECK(network_vr_pose_valid(&back),"fit to take after the wire");
+  CHECK(back.off_slot==NONE && back.off_trigger==0.0f,"no weapon in the other hand: %d %f",back.off_slot,
+   back.off_trigger);
+  pose.off_slot=1;pose.off_trigger=0.6f;
+  entry=entry_of(5,&pose);
+  network_vr_pose_unpack(&entry,&back);
+  CHECK(back.off_slot==1 && fabsf(back.off_trigger-0.6f)<0.5f/255.0f,"the other hand's slot and trigger: %d %f",
+   back.off_slot,back.off_trigger);
+  pose.off_trigger=7.0f;
+  entry=entry_of(5,&pose);
+  CHECK(entry.off_trigger==255,"a trigger past its end sent pulled: %d",entry.off_trigger);
+  pose.off_slot=NONE;pose.off_trigger=0.0f;
   pose.flags=FLAG(_network_vr_pose_right_hand_bit);
   vector_set(&pose.hands[0],100.0f,100.0f,100.0f);
   entry=entry_of(5,&pose);
@@ -183,6 +197,16 @@ int main(int argc,char **argv)
   CHECK(!network_vr_pose_valid(&pose),"the head's axes not square refused");
   pose=pose_of();vector_set(&pose.hand_forwards[0],0.0f,0.0f,0.0f);
   CHECK(!network_vr_pose_valid(&pose),"a hand's axes of no length refused");
+  pose=pose_of();pose.off_slot=MAXIMUM_WEAPONS_PER_UNIT-1;pose.off_trigger=1.0f;
+  CHECK(network_vr_pose_valid(&pose),"the last slot in the other hand, its trigger pulled");
+  pose.off_slot=MAXIMUM_WEAPONS_PER_UNIT;
+  CHECK(!network_vr_pose_valid(&pose),"a slot past the inventory refused");
+  pose.off_slot=-2;
+  CHECK(!network_vr_pose_valid(&pose),"a slot below none refused");
+  pose.off_slot=0;pose.off_trigger=sqrtf(-1.0f);
+  CHECK(!network_vr_pose_valid(&pose),"a trigger not a number refused");
+  pose.off_trigger=1.5f;
+  CHECK(!network_vr_pose_valid(&pose),"a trigger past its end refused");
  } else CASE("host") {
   struct network_vr_pose pose=pose_of();
   struct network_vr_pose_entry entry;

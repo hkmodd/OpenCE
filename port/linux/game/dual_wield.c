@@ -9,6 +9,14 @@ Its shots leave its muzzle along where that hand points. The player sees
 it in their hand, as the world model it is (the first-person weapon is the
 weapon in hand's alone).
 
+In a network game the player's machine holds it as it chooses and says so
+with the player's pose (network_vr.c); every other machine's copy of the
+unit, the host's too, holds what the pose says and fires it with the
+pose's trigger: its shots are seen everywhere, its ammunition is the
+host's, and its hits are the player's machine's to report, as any shot
+of theirs (network_damage.c). There it is held in the posed body's hand
+(network_vr_body.c) and its shots leave that hand.
+
 The game's rules for the weapon in hand still hold: before a weapon is
 readied in the unit's hand the other hand's is put back if it is that one,
 and before the unit's inventory is dropped (its death) or deleted, so that
@@ -20,6 +28,8 @@ no weapon of an inventory is ever connected to the map twice. */
 #include "units/units.h"
 #include "dual_wield.h"
 #include "halo_vr.h"
+#include "network_distributed.h"
+#include "network_vr.h"
 #include <string.h>
 
 void platform_log(char const *format, ...);
@@ -173,6 +183,29 @@ void dual_wield_set_trigger(
 		dual_wield_units[index].trigger = trigger > 0.0f ? (trigger < 1.0f ? trigger : 1.0f) : 0.0f;
 }
 
+/* another machine's player's unit holds what the player's pose says,
+its trigger the pose's (none once no pose has come for a while) */
+static void dual_wield_follow_pose(
+	long unit_index)
+{
+	struct unit_datum *unit = unit_try_and_get(unit_index);
+	struct network_vr_pose const *pose;
+	short index;
+
+	if (!unit || unit->unit.player_index == NONE || distributed_player_is_local(unit->unit.player_index))
+		return;
+	pose = network_vr_pose_get(unit->unit.player_index);
+	index = dual_wield_find(unit_index);
+	if (index != NONE && (!pose || dual_wield_units[index].slot != pose->off_slot))
+	{
+		dual_wield_put_back(index);
+		index = NONE;
+	}
+	if (!pose || pose->off_slot == NONE || (index == NONE && !dual_wield_begin(unit_index, pose->off_slot)))
+		return;
+	dual_wield_set_trigger(unit_index, pose->off_trigger);
+}
+
 void dual_wield_unit_update(
 	long unit_index)
 {
@@ -180,6 +213,8 @@ void dual_wield_unit_update(
 	short index;
 	word flags = 0;
 
+	if (network_vr_poses_kept())
+		dual_wield_follow_pose(unit_index);
 	if (!dual_wield_count || (index = dual_wield_find(unit_index)) == NONE)
 		return;
 	unit = unit_try_and_get(unit_index);
@@ -249,6 +284,31 @@ static long dual_wield_holder(
 	return NONE;
 }
 
+/* another machine's player's other hand, as their pose has it: at the
+hand, along the controller (NONE: no pose, or no such hand) */
+static boolean dual_wield_posed_grip(
+	long unit_index,
+	real_matrix4x3 *grip)
+{
+	struct unit_datum *unit = unit_try_and_get(unit_index);
+	struct network_vr_pose const *pose = unit && unit->unit.player_index != NONE ?
+		network_vr_pose_get(unit->unit.player_index) : NULL;
+	short hand;
+
+	if (!pose)
+		return FALSE;
+	/* (the other hand: the right of a left-handed player) */
+	hand = TEST_FLAG(pose->flags, _network_vr_pose_left_handed_bit) ? 1 : 0;
+	if (!TEST_FLAG(pose->flags, _network_vr_pose_left_hand_bit + hand))
+		return FALSE;
+	grip->scale = 1.0f;
+	grip->forward = pose->hand_forwards[hand];
+	grip->up = pose->hand_ups[hand];
+	cross_product3d(&grip->up, &grip->forward, &grip->left);
+	point_from_line3d(&unit->object.position, &pose->hands[hand], 1.0f, &grip->position);
+	return TRUE;
+}
+
 boolean dual_wield_projectile_ray(
 	long weapon_index,
 	real_point3d *origin,
@@ -260,7 +320,7 @@ boolean dual_wield_projectile_ray(
 	real_matrix4x3 const *nodes;
 	real_point3d muzzle;
 
-	if (unit_index == NONE || !vr_render_off_hand_grip(unit_index, &grip))
+	if (unit_index == NONE || (!vr_render_off_hand_grip(unit_index, &grip) && !dual_wield_posed_grip(unit_index, &grip)))
 		return FALSE;
 	/* (its muzzle where it is on the weapon held at the hand: from its
 	root's frame as the game holds it) */

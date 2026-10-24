@@ -346,8 +346,7 @@ machine's own, on foot and alive, no oftener than every half second and
 no faster than 0.3 world units a tick (27 m/s). On any other server the
 weapon let go goes back to its shoulder, as before.
 
-By a VR server's rules, while every player is the machine's own (a game
-with no network, or a host no one has joined yet), the other hand that
+By a VR server's rules (and in a game with no network) the other hand that
 draws at a shoulder while the main hand holds its weapon holds the
 shoulder's weapon itself (`port/linux/game/dual_wield.c`). The weapon is
 readied as the game readies the weapon in hand, held at the unit's left
@@ -361,8 +360,16 @@ its shoulder; the main hand letting go of its own (to a shoulder, or
 falling) passes the other hand's weapon to the main hand, the hands
 swapping. Before the game readies a weapon in hand, drops the unit's
 inventory or deletes it, the other hand's weapon goes back first. The
-HUD shows the weapon in hand's ammunition only, and once another machine
-joins the other hand lets go.
+HUD shows the weapon in hand's ammunition only. In a network game the
+player's machine says with the pose which slot the other hand holds and
+how far its trigger is pulled (network version 42); every other
+machine's copy of the unit, the host's too, holds that weapon in its
+other hand (the posed body's) and fires it with that trigger, so its shots
+are seen everywhere and its ammunition is the host's. Its hits are the
+player's machine's to report, as any shot of theirs; the host takes them
+at twice a player's rate for three seconds after the player last held
+one. A simulated headset that is to join a network game keeps time with
+`debug.vr_simulate_paced` (a host drops a client whose clock runs fast).
 
 ## To come
 

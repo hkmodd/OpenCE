@@ -18,7 +18,8 @@ def generated(fault=None):
                        enum_with(distributed_header, '_distributed_message_vr_pose_up'),
                        enum_with(distributed_header, '_distributed_to_host,'),
                        enum_with(read('source/networking/network_game_manager.h'),
-                                 '_network_game_port_vr_rules_bit')]) + '\n'
+                                 '_network_game_port_vr_rules_bit'),
+                       enum_with(read('source/units/units.h'), 'MAXIMUM_WEAPONS_PER_UNIT = 4')]) + '\n'
     source = read('port/linux/game/network_vr.c')
     code = '\n'.join([enum_with(header, '_network_vr_pose_left_hand_bit'), structure(header, 'network_vr_pose')] +
                      re.findall(r'^#define NETWORK_VR_\w+ .*$', header, re.M) +
@@ -50,6 +51,11 @@ def test_case(case):
     (('NETWORK_VR_HAND_REACH * NETWORK_VR_HAND_REACH ||', '4.0f * NETWORK_VR_HAND_REACH * NETWORK_VR_HAND_REACH ||'),
      'valid'),
     (('pose->flags >= FLAG(NUMBER_OF_NETWORK_VR_POSE_BITS) ||', ''), 'valid'),
+    (('pose->off_slot >= MAXIMUM_WEAPONS_PER_UNIT ||', 'pose->off_slot > MAXIMUM_WEAPONS_PER_UNIT ||'), 'valid'),
+    (('pose->off_slot < NONE ||', ''), 'valid'),
+    (('!(pose->off_trigger >= 0.0f && pose->off_trigger <= 1.0f)', 'pose->off_trigger > 1.0f'), 'valid'),
+    (('PIN(pose->off_trigger, 0.0f, 1.0f) * 255.0f', 'pose->off_trigger * 255.0f'), 'wire'),
+    (('\tpose->off_slot = entry->off_slot;\n', ''), 'wire'),
     (('if (!TEST_FLAG(pose->flags, _network_vr_pose_left_hand_bit + hand))\n\t\t\tcontinue;', ''), 'wire'),
     (('time == network_vr_sent_time ||', ''), 'send'),
     (('distributed_player_is_local(distributed_player_from_byte(entry.player_index))', 'FALSE'), 'client'),

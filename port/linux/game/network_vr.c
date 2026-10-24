@@ -6,7 +6,9 @@ server's game, newer than the last, its head near the unit, its hands near
 the head and every axis whole, and sends it on to each client machine that
 can see the player. Every machine keeps each player's latest, which is none
 a second after it was sent: what the player's body is to be posed by. It
-is only drawn: the game's hits, shots and movement are the unit's. */
+is only drawn: the game's hits, shots and movement are the unit's. It
+says what the other hand holds and how far its trigger is pulled, which
+every machine's copy of the unit holds and fires (dual_wield.c). */
 #include "cseries.h"
 #include "game/game.h"
 #include "game/players.h"
@@ -26,8 +28,9 @@ void platform_log(char const *format, ...);
 /* a place's parts of 1/4096 of a world unit (8 world units each way) */
 #define NETWORK_VR_PLACE_SCALE 4096.0f
 
-/* a pose on the wire: its player, flags, and the head's and hands' places
-and axes */
+/* a pose on the wire: its player, flags, the head's and hands' places
+and axes, the other hand's weapon's slot (-1: none) and its trigger (of
+255) */
 struct network_vr_pose_entry
 {
 	byte player_index;
@@ -38,9 +41,11 @@ struct network_vr_pose_entry
 	struct distributed_vector hands[2];
 	struct distributed_vector hand_forwards[2];
 	struct distributed_vector hand_ups[2];
+	char off_slot;
+	byte off_trigger;
 };
 
-typedef char network_vr_pose_entry_size_assert[sizeof(struct network_vr_pose_entry) == 2 + 9 * 6 ? 1 : -1];
+typedef char network_vr_pose_entry_size_assert[sizeof(struct network_vr_pose_entry) == 2 + 9 * 6 + 2 ? 1 : -1];
 
 struct network_vr_pose_message
 {
@@ -95,6 +100,8 @@ static void network_vr_pose_pack(short player_index, struct network_vr_pose cons
 	memset(entry, 0, sizeof(*entry));
 	entry->player_index = (byte)player_index;
 	entry->flags = pose->flags;
+	entry->off_slot = (char)pose->off_slot;
+	entry->off_trigger = (byte)(long)floor(PIN(pose->off_trigger, 0.0f, 1.0f) * 255.0f + 0.5f);
 	distributed_vector_pack(&pose->head, NETWORK_VR_PLACE_SCALE, &entry->head);
 	distributed_vector_pack(&pose->head_forward, DISTRIBUTED_UNIT_SCALE, &entry->head_forward);
 	distributed_vector_pack(&pose->head_up, DISTRIBUTED_UNIT_SCALE, &entry->head_up);
@@ -114,6 +121,8 @@ static void network_vr_pose_unpack(struct network_vr_pose_entry const *entry, st
 
 	memset(pose, 0, sizeof(*pose));
 	pose->flags = entry->flags;
+	pose->off_slot = entry->off_slot;
+	pose->off_trigger = (real)entry->off_trigger / 255.0f;
 	distributed_vector_unpack(&entry->head, NETWORK_VR_PLACE_SCALE, &pose->head);
 	distributed_unit_vector_unpack(&entry->head_forward, &pose->head_forward);
 	distributed_unit_vector_unpack(&entry->head_up, &pose->head_up);
@@ -140,7 +149,9 @@ boolean network_vr_pose_valid(struct network_vr_pose const *pose)
 	if (pose->flags >= FLAG(NUMBER_OF_NETWORK_VR_POSE_BITS) ||
 		pose->head.i * pose->head.i + pose->head.j * pose->head.j > NETWORK_VR_HEAD_REACH * NETWORK_VR_HEAD_REACH ||
 		pose->head.k < -NETWORK_VR_HEAD_REACH || pose->head.k > 2.0f * NETWORK_VR_HEAD_REACH ||
-		!distributed_axes_make_valid(&copy.head_forward, &copy.head_up))
+		!distributed_axes_make_valid(&copy.head_forward, &copy.head_up) ||
+		pose->off_slot < NONE || pose->off_slot >= MAXIMUM_WEAPONS_PER_UNIT ||
+		!(pose->off_trigger >= 0.0f && pose->off_trigger <= 1.0f))
 	{
 		return FALSE;
 	}
