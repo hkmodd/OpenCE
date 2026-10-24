@@ -79,6 +79,7 @@ machine (their datum identifiers need not be).
 #include "network_voice.h"
 #include "network_aim_assist.h"
 #include "network_shield_effects.h"
+#include "network_vr.h"
 #include "map_share.h"
 #include "latency_meter.h"
 #include "profile_sections.h"
@@ -3813,6 +3814,7 @@ void network_distributed_new_game(
 	network_coop_new_game();
 	network_aim_assist_reset();
 	network_shield_effects_reset();
+	network_vr_reset();
 	network_votekick_new_game();
 }
 
@@ -4568,6 +4570,8 @@ void network_distributed_handle_message(
 	case _distributed_message_chat_up:
 	case _distributed_message_chat_down: entry_size = network_chat_line_entry_size(); break;
 	case _distributed_message_chat_config: entry_size = network_chat_config_entry_size(); break;
+	case _distributed_message_vr_pose_up:
+	case _distributed_message_vr_pose_down: entry_size = network_vr_entry_size(); break;
 	case _distributed_message_player_inputs: entry_size = sizeof(struct distributed_player_input); break;
 	case _distributed_message_relayed_actions: entry_size = DISTRIBUTED_RELAYED_ACTION_MINIMUM_SIZE; break;
 	case _distributed_message_game_state:
@@ -4596,6 +4600,8 @@ void network_distributed_handle_message(
 	case _distributed_message_chat_up:
 	case _distributed_message_chat_down:
 	case _distributed_message_chat_config:
+	case _distributed_message_vr_pose_up:
+	case _distributed_message_vr_pose_down:
 		if (header.count < 1)
 			return;
 		break;
@@ -4625,6 +4631,7 @@ void network_distributed_handle_message(
 	case _distributed_message_coop_skip_vote:
 	case _distributed_message_votekick:
 	case _distributed_message_chat_up:
+	case _distributed_message_vr_pose_up:
 		if (machine_index == NONE || game_connection() != _game_connection_network_server)
 			return;
 		/* (heard from: the latency meter's connection problem) */
@@ -4707,6 +4714,12 @@ void network_distributed_handle_message(
 		break;
 	case _distributed_message_chat_config:
 		network_chat_handle_config(entries, !network_connection_last_read_was_unreliable());
+		break;
+	case _distributed_message_vr_pose_up:
+		network_vr_handle_up(machine_index, header.game_time, entries, header.count);
+		break;
+	case _distributed_message_vr_pose_down:
+		network_vr_handle_down(header.game_time, entries, header.count);
 		break;
 	case _distributed_message_coop_device_groups:
 		network_coop_handle_device_groups(entries, header.count);

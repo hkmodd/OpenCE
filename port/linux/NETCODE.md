@@ -275,7 +275,15 @@ it is a VR server (`network.vr_rules`: a bit of the game's port switches,
 `_network_game_port_vr_rules_bit`), by whose rules every machine plays its
 headset's players, and with its LAN advertisement and internet listing a bit
 of its kind (`GAME_MODES_KIND_VR`), which the server browser shows as "VR"
-before the gametype.
+before the gametype. Then version 40, in a VR server's game, has each
+headset's player's machine send its head and hands, from its unit, to the
+host once a tick (distributed message 92, `network_vr.c`, unreliably), which
+takes a pose only of the sending machine's own player, newer than the last,
+its head within 0.5 world units of the unit and its hands within 0.4 of the
+head, and sends it on to each client machine that sees the player (message
+93); each machine keeps a player's latest for a second, to pose the
+player's body by. It is only drawn: hits, shots and movement are the
+unit's.
 
 `port/linux/network_format.txt` records the wire format of the current
 version (`tools/network_format.py`): `test_linux_port.py` fails when the

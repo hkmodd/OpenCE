@@ -140,6 +140,11 @@ enum
 	/* the host's shield effects (network_shield_effects.c), to every client,
 	reliably, when it is ready and when they change */
 	_distributed_message_shield_effects = 91,
+	/* a headset's player's head and hands in a VR server's game
+	(network_vr.c): from the player's machine to the host once a tick, and
+	from the host to each client machine that sees the player */
+	_distributed_message_vr_pose_up = 92,
+	_distributed_message_vr_pose_down = 93,
 
 	NUMBER_OF_DISTRIBUTED_MESSAGES
 };

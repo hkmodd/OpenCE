@@ -84,6 +84,7 @@ cutscenes are drawn as always, onto the flat screen held in the room.
 #include "units/vehicles.h"
 #include "networking/network_game_globals.h"
 #include "networking/network_game_manager.h"
+#include "network_vr.h"
 
 #include <math.h>
 
@@ -1358,6 +1359,41 @@ static void vr_comfort(
 	vr_vignette(vr_view.vignette * vr_view.vignette_strength);
 }
 
+/* on foot, the head's and the hands' places from the unit's and their axes,
+to the host of a VR server's game (network_vr.c: it does nothing in any
+other), for the other machines to pose the player's body by */
+static void vr_pose_send(
+	short local_player_index)
+{
+	struct unit_datum *unit = unit_try_and_get(vr_view.unit_index);
+	struct network_vr_pose pose;
+	short hand;
+
+	if (!unit || unit->object.parent_object_index != NONE || !vr_view.hand_aiming ||
+		game_connection() == _game_connection_local)
+	{
+		return;
+	}
+	csmemset(&pose, 0, sizeof(pose));
+	vector_from_points3d(&unit->object.position, &vr_view.head_camera.position, &pose.head);
+	pose.head_forward = vr_view.head_camera.forward;
+	pose.head_up = vr_view.head_camera.up;
+	for (hand = 0; hand < VR_HAND_COUNT; hand++)
+	{
+		if (!vr_view.grip_valid[hand])
+			continue;
+		SET_FLAG(pose.flags, hand == VR_HAND_LEFT ? _network_vr_pose_left_hand_bit : _network_vr_pose_right_hand_bit,
+			TRUE);
+		vector_from_points3d(&unit->object.position, &vr_view.grips[hand].position,
+			&pose.hands[hand == VR_HAND_LEFT ? 0 : 1]);
+		pose.hand_forwards[hand == VR_HAND_LEFT ? 0 : 1] = vr_view.grips[hand].forward;
+		pose.hand_ups[hand == VR_HAND_LEFT ? 0 : 1] = vr_view.grips[hand].up;
+	}
+	SET_FLAG(pose.flags, _network_vr_pose_left_handed_bit, vr_view.main_hand == VR_HAND_LEFT);
+	SET_FLAG(pose.flags, _network_vr_pose_bare_bit, vr_view.bare);
+	network_vr_send(local_player_get_player_index(local_player_index), &pose);
+}
+
 short vr_render_windows(
 	struct render_window *windows,
 	short window_count)
@@ -1493,6 +1529,7 @@ short vr_render_windows(
 	}
 	vr_shoulders();
 	vr_grab_reach();
+	vr_pose_send(player.local_player_index);
 	{
 		float both[4];
 

@@ -319,6 +319,15 @@ Its own rules (weapons let go falling or thrown, a weapon in each hand, the
 other players' bodies as their headsets pose them) come with the steps
 below; a game with no network, the campaign or a local game, plays by them.
 
+In a VR server's game each headset's player's machine sends the host the
+head's and the hands' places from the player's unit and their axes once a
+tick (`port/linux/game/network_vr.c`, network version 40). The host takes a
+pose only of the sending machine's own player, newer than the last, its head
+within 0.5 world units (1.5 m) of the unit and its hands within 0.4 (1.2 m)
+of the head, and sends it on to each machine that sees the player; every
+machine keeps each player's latest for a second, for its body to be posed by.
+The pose is only drawn: the game's hits, shots and movement stay the unit's.
+
 ## To come
 
 Each step is a pull request of its own, with harness tests and the pixel
