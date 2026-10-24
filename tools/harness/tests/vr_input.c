@@ -35,6 +35,7 @@ static struct vr_input_settings settings_of(int left_handed, float snap_angle, i
     settings.on_foot = 1;
     settings.shoulder_full[VR_HAND_LEFT] = settings.shoulder_full[VR_HAND_RIGHT] = 0;
     settings.drop = 0;
+    settings.dual = 0;
     vr_input_bindings_parse("", settings.bindings);
     return settings;
 }
@@ -1033,6 +1034,79 @@ int main(int argc, char **argv)
         frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
         vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
         CHECK(!input.physical && !input.holding && pad.analog[VR_PAD_B] == 255, "the game's hands: the grip strikes");
+        return 0;
+    }
+    CASE("dual") {
+        unsigned long grabs;
+
+        /* in a game with no network, by a VR server's rules: the right hand holds its weapon */
+        memset(&input, 0, sizeof(input));
+        settings = settings_of(0, 0.5f, 1);
+        settings.physical = 1;
+        settings.drop = settings.dual = 1;
+        frame_of(&frame);
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        vr_input_weapon_taken(&input);
+        frame.hand[VR_HAND_RIGHT].buttons = VR_BUTTON_GRIP;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(input.holding && input.gripped && !input.off_holding, "the right hand holds its weapon");
+        /* the left hand draws from the left shoulder: it holds that weapon itself, the right keeps its own */
+        settings.shoulder_full[VR_HAND_LEFT] = 1;
+        at_shoulder(&frame, VR_HAND_LEFT, VR_HAND_LEFT);
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
+        grabs = input.shoulder_grabs;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(input.off_holding && input.off_side == VR_HAND_LEFT && input.shoulder_grabs == grabs &&
+            input.holding && !input.left_handed && input.swaps == 0, "the left hand holds the shoulder's weapon (%d, %d, %lu, %d)",
+            input.off_holding, input.off_side, input.shoulder_grabs, input.left_handed);
+        settings.shoulder_full[VR_HAND_LEFT] = 0;
+        /* the left hand at the right: not a support; the left trigger is that weapon's, no grenade */
+        frame_of(&frame);
+        frame.hand[VR_HAND_LEFT].grip.position[0] = 0.12f;
+        frame.hand[VR_HAND_RIGHT].buttons = VR_BUTTON_GRIP;
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP | VR_BUTTON_TRIGGER;
+        frame.hand[VR_HAND_LEFT].trigger = 1.0f;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(input.off_holding && !input.supporting && pad.analog[VR_PAD_LEFT_TRIGGER] == 0,
+            "the left trigger: no grenade (%d, %d)", input.supporting, pad.analog[VR_PAD_LEFT_TRIGGER]);
+        CHECK(input.off_side == VR_HAND_LEFT && input.off_trigger == 1.0f && input.off_transfers == 0,
+            "told: the left shoulder's, its trigger pulled (%d, %f, %lu)", input.off_side, input.off_trigger,
+            input.off_transfers);
+        /* the right hand lets go: the left's weapon is the one in hand, the left aims */
+        frame.hand[VR_HAND_RIGHT].buttons = 0;
+        grabs = input.shoulder_grabs;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(!input.off_holding && input.off_transfers == 1 && input.holding && input.gripped && input.left_handed &&
+            input.shoulder_grabs == grabs + 1, "the right let go: the left's weapon in hand (%d, %lu, %d, %d)",
+            input.off_holding, input.off_transfers, input.holding, input.left_handed);
+        /* the right hand draws from the right shoulder, then lets go: back to that shoulder, nothing else */
+        settings.shoulder_full[VR_HAND_RIGHT] = 1;
+        frame.hand[VR_HAND_LEFT].trigger = 0.0f;
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
+        at_shoulder(&frame, VR_HAND_RIGHT, VR_HAND_RIGHT);
+        frame.hand[VR_HAND_RIGHT].buttons = VR_BUTTON_GRIP;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(input.off_holding && input.off_side == VR_HAND_RIGHT, "the right hand holds the right shoulder's weapon");
+        frame.hand[VR_HAND_RIGHT].buttons = 0;
+        grabs = input.shoulder_grabs;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(!input.off_holding && input.holding && input.left_handed && input.off_transfers == 1 &&
+            input.shoulder_grabs == grabs, "the right let go: its weapon back, the left's kept (%d, %d, %d, %lu)",
+            input.off_holding, input.holding, input.left_handed, input.off_transfers);
+        /* held again as those rules end (a network game begins): let go of */
+        frame.hand[VR_HAND_RIGHT].buttons = VR_BUTTON_GRIP;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(input.off_holding, "the right hand holds it again");
+        settings.dual = 0;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(!input.off_holding && input.holding && input.left_handed, "no dual wield: let go of (%d)", input.off_holding);
+        /* not by those rules: the shoulder's weapon goes to the drawing hand, as always */
+        frame.hand[VR_HAND_RIGHT].buttons = 0;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        frame.hand[VR_HAND_RIGHT].buttons = VR_BUTTON_GRIP;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(!input.off_holding && input.shoulder_kind == VR_SHOULDER_DRAW && !input.left_handed,
+            "no dual wield: drawn into the hand (%d, %d, %d)", input.off_holding, input.shoulder_kind, input.left_handed);
         return 0;
     }
     CASE("swap") {

@@ -372,6 +372,12 @@ void render_objects(
 	return;
 }
 
+/* port: port/linux/game/dual_wield.c */
+boolean dual_wield_any(void);
+long dual_wield_first_person_weapon(long unit_index);
+/* port: the object render_object_list draws without its siblings (NONE:
+it draws them all) */
+static long render_object_alone = NONE;
 /* port: port/linux/game/first_person_legs.c */
 boolean first_person_legs_wanted(long object_index);
 real_matrix4x3 const *first_person_legs_node_matrices(long object_index, real_matrix4x3 const *nodes);
@@ -679,8 +685,21 @@ static void render_object_list(
 					object->object.first_child_object_index);
 			}
 		}
+		/* port: the weapon in a headset's player's other hand, seen in that
+		hand though the unit is not drawn, or only its legs are
+		(port/linux/game/dual_wield.c) */
+		if (dual_wield_any() && !data->shadow && !render.camera.mirrored &&
+			object_is_first_person_camera(object_index) && dual_wield_first_person_weapon(object_index) != NONE)
+		{
+			long alone = render_object_alone;
 
-		object_index = object->object.next_object_index;
+			render_object_alone = dual_wield_first_person_weapon(object_index);
+			render_object_list(data, parent_model_effect, render_object_alone);
+			render_object_alone = alone;
+		}
+
+		/* port: (one object alone, not its siblings) */
+		object_index = object_index == render_object_alone ? NONE : object->object.next_object_index;
 	}
 
 	return;

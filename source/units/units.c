@@ -645,6 +645,7 @@ symbols in this file:
 
 #include "cseries.h"
 #include "infection.h" /* port: port/linux/game/infection.c */
+#include "dual_wield.h" /* port: port/linux/game/dual_wield.c */
 #include "units.h"
 
 #include "bipeds.h"
@@ -1863,6 +1864,9 @@ void unit_delete_all_weapons(
 	struct unit_datum *unit = unit_get(unit_index);
 	short weapon_index;
 
+	/* port: the other hand's weapon back in the inventory first
+	(port/linux/game/dual_wield.c) */
+	dual_wield_unit_dropping(unit_index);
 	for (weapon_index = 0; weapon_index<MAXIMUM_WEAPONS_PER_UNIT; ++weapon_index)
 	{
 		if (unit->unit.weapon_object_indices[weapon_index]!=NONE && weapon_index!=unit->unit.current_weapon_index)
@@ -2714,6 +2718,9 @@ static void unit_drop_inventory_weapons(
 	short inventory_index;
 
 	unit = unit_get(unit_index);
+	/* port: the other hand's weapon back in the inventory first
+	(port/linux/game/dual_wield.c) */
+	dual_wield_unit_dropping(unit_index);
 	inventory_index = 0;
 	weapon_object_index = unit->unit.weapon_object_indices;
 	do
@@ -6039,6 +6046,9 @@ boolean unit_update(
 
 			weapon_owner_update(unit_get_current_weapon_index(unit_index), flags, primary_trigger);
 		}
+		/* port: a headset's player's weapon in the other hand, told its
+		controls as the one in hand is (port/linux/game/dual_wield.c) */
+		dual_wield_unit_update(unit_index);
 	}
 
 
@@ -7660,6 +7670,9 @@ static void unit_ready_desired_weapon(
 	long desired_weapon_index = unit_get_desired_weapon_index(unit_index);
 	long current_weapon_index = unit_get_current_weapon_index(unit_index);
 
+	/* port: the weapon to ready taken out of the other hand first
+	(port/linux/game/dual_wield.c) */
+	dual_wield_unit_readying(unit_index);
 	if (current_weapon_index!=NONE && weapon_put_away(current_weapon_index, immediate))
 	{
 		object_detach(current_weapon_index);

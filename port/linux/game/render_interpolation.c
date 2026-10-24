@@ -44,6 +44,7 @@ with their unit, and with what it rides.
 #include "units/units.h"
 #include "halo_vr.h"
 #include "network_vr_body.h"
+#include "dual_wield.h"
 
 /* port/linux/src/port_config.c */
 int config_boolean(const char *name);
@@ -611,9 +612,12 @@ real_matrix4x3 *render_interpolation_object_node_matrices(long object_index)
 	real_matrix4x3 *nodes = render_interpolation_blended_node_matrices(object_index);
 
 	/* (a VR server's other headsets' players' bodies as their headsets pose
-	them, drawn only: network_vr_body.c) */
+	them, drawn only: network_vr_body.c; a weapon in this headset's other
+	hand at that hand: dual_wield.c) */
 	if (interpolation_drawing && network_vr_bodies())
-		return network_vr_body_node_matrices(object_index, nodes, interpolation_frame);
+		nodes = network_vr_body_node_matrices(object_index, nodes, interpolation_frame);
+	if (interpolation_drawing && dual_wield_any())
+		nodes = dual_wield_node_matrices(object_index, nodes, interpolation_frame);
 	return nodes;
 }
 

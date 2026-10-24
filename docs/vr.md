@@ -346,6 +346,24 @@ machine's own, on foot and alive, no oftener than every half second and
 no faster than 0.3 world units a tick (27 m/s). On any other server the
 weapon let go goes back to its shoulder, as before.
 
+By a VR server's rules, while every player is the machine's own (a game
+with no network, or a host no one has joined yet), the other hand that
+draws at a shoulder while the main hand holds its weapon holds the
+shoulder's weapon itself (`port/linux/game/dual_wield.c`). The weapon is
+readied as the game readies the weapon in hand, held at the unit's left
+hand, and told its controls each tick from that hand's trigger (and the
+reload button) as the unit tells the weapon in hand, so that its rate of
+fire, heat, ammunition and effects are its own; its shots leave its
+muzzle along where the hand points, and it is drawn at the hand. That
+hand's trigger throws no grenade meanwhile, and the hands holding
+weapons apart do not hold one with both. Let go, the weapon goes back to
+its shoulder; the main hand letting go of its own (to a shoulder, or
+falling) passes the other hand's weapon to the main hand, the hands
+swapping. Before the game readies a weapon in hand, drops the unit's
+inventory or deletes it, the other hand's weapon goes back first. The
+HUD shows the weapon in hand's ammunition only, and once another machine
+joins the other hand lets go.
+
 ## To come
 
 Each step is a pull request of its own, with harness tests and the pixel

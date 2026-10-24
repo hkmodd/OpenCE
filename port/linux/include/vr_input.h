@@ -151,6 +151,9 @@ struct vr_input_settings
 	/* the game plays by a VR server's rules (vr_rules_active): the weapon
 	let go at no shoulder falls, thrown as the hand moved */
 	int drop;
+	/* ... and the other hand may hold a weapon of its own (dual_wield.c:
+	every player this machine's) */
+	int dual;
 };
 
 struct vr_input
@@ -194,6 +197,13 @@ struct vr_input
 	int holding;
 	int gripped;
 	int supporting;
+	/* by a VR server's rules the other hand holds a weapon of its own,
+	drawn from a shoulder (dual_wield.c): which, its trigger (0 to 1), and
+	the times its weapon went to the main hand as the main one let go */
+	int off_holding;
+	int off_side;
+	float off_trigger;
+	unsigned long off_transfers;
 	float off_position[3];
 	int off_position_valid;
 	/* each hand's grip took a weapon within its reach: the action held
@@ -322,6 +332,10 @@ unsigned long vr_input_shoulder_grabs(int *side, int *kind);
 /* vr_view.c: the velocity the weapon last let fall was thrown with
 (metres a second, LOCAL's axes) */
 void vr_input_drop_velocity(float velocity[3]);
+/* vr_view.c: the other hand holds a weapon of its own (dual_wield.c): the
+shoulder it drew it from, its trigger, and the times it went to the main
+hand */
+int vr_input_off_holding(int *side, float *trigger, unsigned long *transfers);
 /* vr_view.c: the hands hold as hands do (vr.hands "physical"), and whether
 a hand holds the weapon */
 int vr_input_physical(void);

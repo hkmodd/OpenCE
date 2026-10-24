@@ -233,6 +233,7 @@ symbols in this file:
 #include "units/unit_definitions.h"
 #include "units/units.h"
 #include "halo_vr.h" /* port: port/linux/game/vr_view.c */
+#include "dual_wield.h" /* port: port/linux/game/dual_wield.c */
 
 #ifdef HALO_PORT_MAXIMUM_NETWORK_PLAYERS
 #include "bitmaps/bitmap_group.h"
@@ -2394,6 +2395,7 @@ boolean weapon_get_projectile_ray(long weapon_index, short trigger_index, real_p
 	struct weapon_trigger_definition *trigger;
 	struct object_marker marker;
 	real velocity = 0.0f;
+	boolean other_hand = FALSE;
 
 	if (!unit || unit->unit.player_index == NONE || trigger_index < 0 ||
 		trigger_index >= definition->weapon.triggers.count)
@@ -2413,13 +2415,16 @@ boolean weapon_get_projectile_ray(long weapon_index, short trigger_index, real_p
 
 		unit_adjust_projectile_ray(owner_index, origin, forward, &velocity,
 			TEST_FLAG(unit_definition->unit.flags, _unit_fires_from_camera_bit), TRUE);
+		/* port: an other hand's weapon from that hand, along where it points
+		(port/linux/game/dual_wield.c) */
+		other_hand = dual_wield_projectile_ray(weapon_index, origin, forward);
 		cross_product3d(global_up3d, forward, &right);
 		if (normalize3d(&right) == 0.0f)
 			right = *global_left3d;
 		cross_product3d(forward, &right, &up);
 		normalize3d(&up);
 		/* port: (not from a headset's hand, at the weapon already) */
-		if (!vr_render_shot_from_hand(owner_index))
+		if (!vr_render_shot_from_hand(owner_index) && !other_hand)
 		{
 			point_from_line3d(origin, forward, trigger->first_person_weapon_offset.x, origin);
 			point_from_line3d(origin, &right, trigger->first_person_weapon_offset.y, origin);
@@ -2484,6 +2489,7 @@ static void trigger_create_projectiles(
 			long actor_index= unit->unit.actor_index;
 			boolean adjust_origin;
 			boolean use_aiming_vector;
+			boolean other_hand;
 
 			if (unit->unit.gunner_object_index!=NONE)
 			{
@@ -2505,6 +2511,9 @@ static void trigger_create_projectiles(
 			}
 
 			unit_adjust_projectile_ray(owner_object_index, &origin, &forward, &velocity, adjust_origin, use_aiming_vector);
+			/* port: an other hand's weapon from that hand, along where it
+			points (port/linux/game/dual_wield.c) */
+			other_hand= dual_wield_projectile_ray(weapon_index, &origin, &forward);
 
 			if (player_index!=NONE)
 			{
@@ -2521,7 +2530,7 @@ static void trigger_create_projectiles(
 
 				/* port: a shot from a headset's hand starts at the weapon
 				already (port/linux/game/vr_view.c) */
-				if (!vr_render_shot_from_hand(owner_object_index))
+				if (!vr_render_shot_from_hand(owner_object_index) && !other_hand)
 				{
 					point_from_line3d(
 						&origin,

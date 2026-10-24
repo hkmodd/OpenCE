@@ -85,6 +85,7 @@ cutscenes are drawn as always, onto the flat screen held in the room.
 #include "networking/network_game_globals.h"
 #include "networking/network_game_manager.h"
 #include "network_vr.h"
+#include "dual_wield.h"
 
 #include <math.h>
 
@@ -327,6 +328,13 @@ static struct
 	real frame_heading;
 	boolean grip_valid[VR_HAND_COUNT];
 	struct render_camera grips[VR_HAND_COUNT];
+	/* the other hand's grip as a weapon it holds is held (dual_wield.c):
+	at the grip, along where the hand points */
+	boolean off_grip_valid;
+	struct render_camera off_grip;
+	/* the times the other hand's weapon went to the main hand, as last
+	seen (vr_input.c) */
+	unsigned long off_transfers;
 
 	/* in a seat seen from it (vr.vehicle_view "first_person"): the vehicle
 	and the seat, the view's yaw from the vehicle's (the seat's own turn, less
@@ -730,6 +738,45 @@ static void vr_shoulders(
 	vr_haptic(vr_view.main_hand, 0.4f, 0.05f);
 	platform_log("vr: the %s shoulder: %s", side == VR_HAND_LEFT ? "left" : "right",
 		vr_view.bare ? "the weapon put away, the hands bare" : "a weapon drawn");
+}
+
+/* the other hand's weapon (by a VR server's rules, every player this
+machine's: no other machine plays it yet): taken from the shoulder it drew at as it holds one, put back as it
+lets go, the weapon in hand's as the main hand lets go of its own; its
+trigger told (dual_wield.c) */
+static void vr_dual(
+	void)
+{
+	struct unit_datum *unit = unit_try_and_get(vr_view.unit_index);
+	unsigned long transfers;
+	float trigger;
+	int side, holding = vr_input_off_holding(&side, &trigger, &transfers);
+	long held = dual_wield_weapon(vr_view.unit_index);
+	short slot = dual_wield_slot(vr_view.unit_index);
+
+	if (transfers != vr_view.off_transfers)
+	{
+		vr_view.off_transfers = transfers;
+		if (unit && slot != NONE)
+		{
+			dual_wield_end(vr_view.unit_index);
+			player_control_set_desired_weapon(vr_view.unit_index, slot);
+			held = NONE;
+		}
+	}
+	if (!unit || !holding || !vr_render_dual_wield() || unit->object.parent_object_index != NONE ||
+		!vr_view.hand_aiming)
+	{
+		if (held != NONE)
+			dual_wield_end(vr_view.unit_index);
+		return;
+	}
+	if (held == NONE && side >= 0 && side < VR_HAND_COUNT &&
+		dual_wield_begin(vr_view.unit_index, vr_view.shoulder_slot[side]))
+	{
+		vr_haptic(vr_view.main_hand == VR_HAND_LEFT ? VR_HAND_RIGHT : VR_HAND_LEFT, 0.4f, 0.05f);
+	}
+	dual_wield_set_trigger(vr_view.unit_index, trigger);
 }
 
 /* the distance squared from `point` to the segment from `a` to `b` */
@@ -1551,8 +1598,22 @@ short vr_render_windows(
 		}
 	}
 	vr_shoulders();
+	vr_dual();
 	vr_grab_reach();
 	vr_pose_send(player.local_player_index);
+	/* (the other hand's grip, for the weapon it may hold) */
+	{
+		int off = vr_view.main_hand == VR_HAND_LEFT ? VR_HAND_RIGHT : VR_HAND_LEFT, axis;
+		struct vr_hand const *hand = &frame->hand[off];
+		struct vr_pose pointing = hand->aim;
+
+		vr_view.off_grip_valid = frame->controllers && hand->tracked && !vr_view.cinematic;
+		vr_hand_pointing(hand, vr_view.aim_pitch, pointing.orientation);
+		for (axis = 0; axis < 3; axis++)
+			offset[axis] = head[axis] + hand->grip.position[axis] - frame->head.position[axis];
+		vr_view.off_grip = player.rasterizer_camera;
+		vr_camera_from_pose(&vr_view.off_grip, &pointing, offset, &anchor, heading);
+	}
 	{
 		float both[4];
 
@@ -2154,6 +2215,29 @@ static boolean vr_players_all_here(
 		if (player->local_player_index == NONE)
 			return FALSE;
 	}
+	return TRUE;
+}
+
+int vr_render_dual_wield(
+	void)
+{
+	return vr_players_all_here() && vr_rules_active();
+}
+
+int vr_render_off_hand_grip(
+	long unit_index,
+	struct real_matrix4x3 *grip)
+{
+	if (!vr_view.stereo || !vr_view.off_grip_valid || !vr_view.hand_aiming || unit_index == NONE ||
+		unit_index != vr_view.unit_index)
+	{
+		return FALSE;
+	}
+	grip->scale = 1.0f;
+	grip->forward = vr_view.off_grip.forward;
+	grip->up = vr_view.off_grip.up;
+	cross_product3d(&grip->up, &grip->forward, &grip->left);
+	grip->position = vr_view.off_grip.position;
 	return TRUE;
 }
 

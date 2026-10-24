@@ -21,6 +21,7 @@ struct render_window;
 struct render_camera;
 union real_rectangle2d;
 struct icon_hud_element_definition;
+struct real_matrix4x3;
 
 /* a pass of the headset's frame (vr_view.c) */
 enum
@@ -240,6 +241,13 @@ int vr_render_shot_origin(long unit_index, float origin[3]);
 /* weapons.c: that unit's shots start at the hand: the first-person
 weapon's offset from the eye is not added to them */
 int vr_render_shot_from_hand(long unit_index);
+/* dual_wield.c: the unit's headset's other hand's grip as the weapon it
+holds there is held: its place, forward where it points (the world's,
+this frame); 0 for none (not the headset's unit, the hand not tracked) */
+int vr_render_off_hand_grip(long unit_index, struct real_matrix4x3 *grip);
+/* vr_input.c: the other hand may hold a weapon of its own (by a VR
+server's rules, every player this machine's: dual_wield.c) */
+int vr_render_dual_wield(void);
 /* hud_messaging.c: a prompt's button (one of the HUD's button icons) as the
 headset's controllers name it (vr_input.c's buttons): the right B acts, the
 left X switches grenades */
@@ -283,6 +291,8 @@ int vr_render_zoom_hidden(void);
 #define vr_render_legs(under, forward) 0
 #define vr_render_shot_origin(unit_index, origin) 0
 #define vr_render_shot_from_hand(unit_index) 0
+#define vr_render_off_hand_grip(unit_index, grip) 0
+#define vr_render_dual_wield() 0
 #define vr_render_prompt_icon(icon) (icon)
 #define vr_render_zoom_hidden() 0
 #define vr_frame_begin() 0

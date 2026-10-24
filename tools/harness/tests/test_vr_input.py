@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from harness import CHECK_FAILED, build, mutated, read, run
 
 CASES = ["gameplay", "move", "menus", "menu-button", "turn", "seat", "drive", "room", "gestures", "hands", "ray",
-         "bindings", "swap", "throw", "grab", "bare", "physical"]
+         "bindings", "swap", "throw", "grab", "bare", "physical", "dual"]
 CONTROLS = {
     "left-handed-ignored": (("main_index = input->left_handed ? VR_HAND_LEFT : VR_HAND_RIGHT;",
                              "main_index = VR_HAND_RIGHT;"), "gameplay"),
@@ -54,13 +54,13 @@ CONTROLS = {
                                    "\t\tif (0)\n\t\t{\n\t\t\tvr_swap_hands(input);"), "physical"),
     "physical-let-go-on-press": (("(settings->grip_toggle ? pressed[main_index] : released[main_index])",
                                   "pressed[main_index]"), "physical"),
-    "physical-empty-shoulder-draws": (("if (side >= 0 && settings->shoulder_full[side])", "if (side >= 0)"),
+    "physical-empty-shoulder-draws": (("if (side >= 0 && settings->shoulder_full[side])\n", "if (side >= 0)\n"),
                                       "physical"),
     "physical-grip-strikes": (("input->physical || input->holster ||", "input->holster ||"), "physical"),
     "physical-empty-hand-fires": (("action = input->holding ? VR_BIND_FIRE : VR_BIND_THROW_GRENADE;",
                                    "action = VR_BIND_FIRE;"), "physical"),
-    "physical-support-throws": (("action = input->supporting ? VR_BIND_NONE : VR_BIND_THROW_GRENADE;",
-                                 "action = VR_BIND_THROW_GRENADE;"), "physical"),
+    "physical-support-throws": (("action = input->supporting || input->off_holding ? VR_BIND_NONE : VR_BIND_THROW_GRENADE;",
+                                 "action = input->off_holding ? VR_BIND_NONE : VR_BIND_THROW_GRENADE;"), "physical"),
     "physical-off-punch-ignored": (("(input->physical && !input->supporting &&", "(0 &&"), "physical"),
     "physical-stale-off-hand": (("\t\t\tif (!input->physical || input->supporting)\n\t\t\t\tinput->off_position_valid = 0;\n",
                                  ""), "physical"),
@@ -74,6 +74,16 @@ CONTROLS = {
                              ""), "physical"),
     "physical-drop-velocity-of-the-moment": (("input->hand_velocity[hand][axis] += (now - input->hand_velocity[hand][axis]) * blend;",
                                               "input->hand_velocity[hand][axis] = 0.0f;"), "physical"),
+    "dual-never": (("settings->shoulder_full[side] && settings->dual && input->holding", "0"), "dual"),
+    "dual-supports": (("input->supporting = input->holding && !input->off_holding &&",
+                       "input->supporting = input->holding &&"), "dual"),
+    "dual-off-trigger-throws": (("action = input->supporting || input->off_holding ? VR_BIND_NONE : VR_BIND_THROW_GRENADE;",
+                                 "action = input->supporting ? VR_BIND_NONE : VR_BIND_THROW_GRENADE;"), "dual"),
+    "dual-no-transfer": (("\t\t\tinput->off_transfers++;\n\t\t\tvr_swap_hands(input);\n\t\t\tinput->holding = input->gripped = 1;\n",
+                          ""), "dual"),
+    "dual-kept-let-go": (("\t\tpressed[off_index] = 0;\n\t\tinput->off_holding = 0;\n", "\t\tpressed[off_index] = 0;\n"),
+                         "dual"),
+    "dual-past-rules": (("\tif (!settings->dual)\n\t\tinput->off_holding = 0;\n", ""), "dual"),
     "physical-seat-lets-go":(("\t\tinput->holding = settings->physical && settings->gestures;\n",
                                "\t\tinput->holding = 0;\n"), "physical"),
     "two-hands-backwards": (("z[axis] = (main_hand->grip.position[axis] - off_hand->grip.position[axis]) / length;",
