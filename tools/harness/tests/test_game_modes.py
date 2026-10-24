@@ -33,6 +33,7 @@ def generated(fault=None):
         defaults, function(modes, 'game_modes_option'), function(modes, 'game_modes_options_default'),
         function(modes, 'game_modes_options_sanitize'), function(modes, 'game_modes_player_killed'),
         function(modes, 'game_modes_variant_mode'), '#define GAME_MODES_KIND_HARDCORE 0x80',
+        '#define GAME_MODES_KIND_VR 0x40',
         function(modes, 'game_modes_kind'), function(modes, 'game_modes_kind_name'),
         function(infection, 'infection_round_result'),
         function(infection, 'infection_state_valid'), order,
@@ -68,6 +69,7 @@ def test_case(case):
     (('game_engine_index == game_engine_slayer && mode > _game_mode_none', 'mode > _game_mode_none'),
      'kind_untrusted'),
     (('if (!hardcore || game_engine_index', 'if (game_engine_index'), 'kind_untrusted'),
+    (('~(GAME_MODES_KIND_HARDCORE | GAME_MODES_KIND_VR)', '~GAME_MODES_KIND_HARDCORE'), 'kind'),
 ])
 def test_negative_control(fault, case):
     status, output = run(build('game_modes', generated(fault)), case)

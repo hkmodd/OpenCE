@@ -1521,10 +1521,12 @@ static void network_game_server_list(
 		snprintf(gametype + length, sizeof(gametype) - length, " %s", difficulty_names[game->difficulty]);
 	}
 	/* (the scenario's name, not its path: the listing has 32 characters) */
-	/* port: (and its OpenCE gametype's kind: port/linux/game/game_modes.c) */
+	/* port: (and its OpenCE gametype's kind: port/linux/game/game_modes.c;
+	and whether it is a VR server) */
 	p2p_set_game_listing(name, tag_name_strip_path(game->map.name), gametype, game->variant.game_engine_index,
-		game_modes_kind(&game->variant, &game->variant_options), open, in_progress,
-		game->variant.universal_variant.teams);
+		game_modes_kind(&game->variant, &game->variant_options) |
+			(TEST_FLAG(game->cooperative_flags, _network_game_port_vr_rules_bit) ? GAME_MODES_KIND_VR : 0),
+		open, in_progress, game->variant.universal_variant.teams);
 }
 
 /* port: the bots (port/linux/game/bots.c, the settings' bots.count and
@@ -4539,6 +4541,18 @@ void network_game_server_port_set_cooperative_ally_friendly_fire(
 	SET_FLAG(server->game.cooperative_flags, _network_game_cooperative_no_ally_friendly_fire_bit, !ally_friendly_fire);
 	if (server->state == _network_game_server_state_pregame && !network_game_server_send_game_data_pregame(server))
 		network_event("network_game_server_port_set_cooperative_ally_friendly_fire() failed to send updated game settings to clients");
+}
+
+void network_game_server_port_set_vr_rules(
+	boolean vr_rules)
+{
+	struct network_game_server *server = global_network_game_server_get();
+
+	if (!server)
+		return;
+	SET_FLAG(server->game.cooperative_flags, _network_game_port_vr_rules_bit, vr_rules);
+	if (server->state == _network_game_server_state_pregame && !network_game_server_send_game_data_pregame(server))
+		network_event("network_game_server_port_set_vr_rules() failed to send updated game settings to clients");
 }
 
 /* port: a game a host runs afresh. A machine that asked to join as the last

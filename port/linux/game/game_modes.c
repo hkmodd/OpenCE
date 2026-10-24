@@ -310,7 +310,7 @@ wchar_t const *game_modes_kind_name(
 		{ L"HARDCORE RACE", L"HC RACE" },
 	};
 	boolean hardcore = (kind & GAME_MODES_KIND_HARDCORE) != 0;
-	short mode = (short)(kind & ~GAME_MODES_KIND_HARDCORE);
+	short mode = (short)(kind & ~(GAME_MODES_KIND_HARDCORE | GAME_MODES_KIND_VR));
 
 	/* (another machine's: a mode of Slayer only, and one this build knows) */
 	if (game_engine_index == game_engine_slayer && mode > _game_mode_none && mode < NUMBER_OF_GAME_MODES)

@@ -1544,6 +1544,9 @@ void network_test_update(
 						player_ui_set_game_variant_options(&options);
 					network_game_server_change_game_variant(global_network_game_server_get(), &variant);
 				}
+				/* (a VR server or not, as Server Setup's hosting sets it:
+				network.vr_rules, menu_functions.c) */
+				network_game_server_port_set_vr_rules(config_boolean("network.vr_rules"));
 				network_test.map_set = TRUE;
 			}
 			if (!network_test.player_added && network_test.setup_seconds >= 2.0f && global_network_game_client_get())

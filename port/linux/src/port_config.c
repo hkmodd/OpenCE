@@ -694,6 +694,10 @@ static const struct config_setting config_settings[] =
 		"\"on\", \"shields_only\" or \"explosives_only\" (FRIENDLY FIRE in\n"
 		"co-op's Server Setup > Co-op Options writes its choice here). Their AI\n"
 		"allies they hurt as network.coop_ally_friendly_fire says." },
+	{ "network.vr_rules", _config_boolean, "false", "HALO_NET_VR_RULES", _environment_value, _platform_all,
+		"The games this machine hosts are VR servers: the server browser shows\n"
+		"\"VR\" before their gametype, and the headsets' players play there by\n"
+		"the hands' rules; false, as on any server, as the other players do." },
 	{ "network.coop_ally_friendly_fire", _config_boolean, "true", "HALO_NET_COOP_ALLY_FRIENDLY_FIRE",
 		_environment_value, _platform_all,
 		"Whether the players of an online co-op game hurt their AI allies (the\n"

@@ -21,7 +21,8 @@
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/op_vehicle_view" x="54" y="223" platform="vr"/>
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/op_vehicle_aim" x="54" y="253" platform="vr"/>
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/op_vehicle_steering" x="54" y="283" platform="vr"/>
-		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/op_vr_body" x="54" y="313" platform="vr"/>
+		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/op_vr_rules" x="54" y="313" platform="vr"/>
+		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/op_vr_body" x="54" y="343" platform="vr"/>
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/button_bar" y="414"/>
 	</widget>
 	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/button_bar" type="column_list" width="640" height="28" flags="pass_unhandled_to_focused_child left_right_tabs_items">
@@ -101,13 +102,22 @@
 	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/vehicle_steering_spinner" type="spinner" left="3" top="2" width="147" height="20" flags="pass_unhandled_to_focused_child left_right_tabs_items" strings="STICK|AIM" setting="vr.vehicle_steering" values="drive|aim" font="ui\large_ui" color="#FF2896FF" align="center" text_y="1" header_bitmap="bitmaps/arrow_sm_left" footer_bitmap="bitmaps/arrow_sm_right" header_bounds="7 -6 19 0" footer_bounds="7 150 19 156">
 		<on event="created" run="port setting load"/>
 	</widget>
+	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/op_vr_rules" width="512" height="28" flags="pass_unhandled_to_focused_child" bitmap="bitmaps/option_bkds" color="#FF2896FF" platform="vr">
+		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/vr_rules_label"/>
+		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/vr_rules_spinner" x="320" y="1"/>
+	</widget>
+	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/vr_rules_label" type="text" controller="1" width="300" height="22" string_list="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/labels" string_index="8" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4">
+	</widget>
+	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/vr_rules_spinner" type="spinner" left="3" top="2" width="147" height="20" flags="pass_unhandled_to_focused_child left_right_tabs_items" strings="ON|OFF" setting="network.vr_rules" values="true|false" font="ui\large_ui" color="#FF2896FF" align="center" text_y="1" header_bitmap="bitmaps/arrow_sm_left" footer_bitmap="bitmaps/arrow_sm_right" header_bounds="7 -6 19 0" footer_bounds="7 150 19 156">
+		<on event="created" run="port setting load"/>
+	</widget>
 	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/op_vr_body" width="512" height="28" flags="pass_unhandled_to_focused_child" bitmap="bitmaps/option_bkds" color="#FF2896FF" platform="vr">
 		<on event="a" open="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/vr_body_settings_screen"/>
 		<on event="start" open="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr_body/vr_body_settings_screen"/>
 		<on event="left_mouse" run="mouse emit accept event"/>
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/vr_body_label"/>
 	</widget>
-	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/vr_body_label" type="text" controller="1" width="512" height="22" string_list="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/labels" string_index="8" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4">
+	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/vr_body_label" type="text" controller="1" width="512" height="22" string_list="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/labels" string_index="9" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4">
 	</widget>
 	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/button_defaults" type="text" width="128" height="24" bitmap="bitmaps/text_button_background" string_list="strings/common_button_captions" string_index="3" font="ui\small_ui" color="#FFFFFFFF" align="center" text_y="2">
 		<on event="a" run="port settings defaults"/>
@@ -128,6 +138,7 @@
 		<string text="VEHICLE VIEW:"/>
 		<string text="VEHICLE AIM:"/>
 		<string text="STEERING:"/>
+		<string text="VR SERVER:"/>
 		<string text="HANDS AND BODY:"/>
 	</strings>
 	<strings name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/help_strings">
@@ -140,6 +151,7 @@
 		<string text="Ride in the seat, the view level with the\nvehicle, or behind it as the game does."/>
 		<string text="What aims guns and flies a Banshee in a seat:\nthe controller, its stick or the head."/>
 		<string text="A Warthog's or Ghost's driver steers with the\nother stick, or toward the aim as the game does."/>
+		<string text="Games you host are VR servers: the browser shows\nVR, and headsets play there by the hands' rules."/>
 		<string text="The height, the arms, the aim's angle, gestures,\ngrenades, comfort and cinematics."/>
 	</strings>
 </menus>

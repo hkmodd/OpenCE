@@ -386,6 +386,9 @@ SCREENS["gamepad_setup/vr"] = {
         ("STEERING:", "vr.vehicle_steering", [("STICK", "drive"), ("AIM", "aim")],
          "A Warthog's or Ghost's driver steers with the\nother stick, or toward the aim as the game does.",
          "vr"),
+        ("VR SERVER:", "network.vr_rules", ON_OFF,
+         "Games you host are VR servers: the browser shows\nVR, and headsets play there by the hands' rules.",
+         "vr"),
     ],
     "categories": [_vr_body_category],
 }

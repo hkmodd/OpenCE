@@ -270,7 +270,12 @@ browser names in its gametype column ("SWAT", "HC CTF"); a browser takes a
 mode for a Slayer game only, and one it does not know as none. Then version 38
 lets the host's shield effects be `players` (SHIELD EFFECTS' PLAYERS' OWN), a
 value of distributed message 91 that tells each client to draw its own
-settings', not synced.
+settings', not synced. Then version 39 sends with the game's settings whether
+it is a VR server (`network.vr_rules`: a bit of the game's port switches,
+`_network_game_port_vr_rules_bit`), by whose rules every machine plays its
+headset's players, and with its LAN advertisement and internet listing a bit
+of its kind (`GAME_MODES_KIND_VR`), which the server browser shows as "VR"
+before the gametype.
 
 `port/linux/network_format.txt` records the wire format of the current
 version (`tools/network_format.py`): `test_linux_port.py` fails when the

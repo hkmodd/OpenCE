@@ -304,6 +304,21 @@ What sets the size the world is seen at, each measured or derived:
   views and the controls can be checked without a headset
   (`debug.vr_dump_frame` writes the images).
 
+## VR servers
+
+A host decides how its game's headsets play (`network.vr_rules`, VR SERVER
+on the VR HEADSET screen, false by default). On any other server, a VR
+player plays as any player does: the hands' holding, shoulders, bare hands
+and taking with the hand all come down to the buttons and the weapon
+switches a gamepad presses, and nothing a network game sends changes. A VR
+server says so with the game's settings (a bit of the game's port switches,
+`_network_game_port_vr_rules_bit`, network version 39), which every machine
+has, and in its LAN advertisement and internet listing (a bit of its kind,
+`GAME_MODES_KIND_VR`: the server browser shows "VR" before its gametype).
+Its own rules (weapons let go falling or thrown, a weapon in each hand, the
+other players' bodies as their headsets pose them) come with the steps
+below; a game with no network, the campaign or a local game, plays by them.
+
 ## To come
 
 Each step is a pull request of its own, with harness tests and the pixel

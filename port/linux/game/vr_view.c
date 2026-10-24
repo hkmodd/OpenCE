@@ -82,6 +82,8 @@ cutscenes are drawn as always, onto the flat screen held in the room.
 #include "units/vehicle_datum.h"
 #include "units/vehicle_definitions.h"
 #include "units/vehicles.h"
+#include "networking/network_game_globals.h"
+#include "networking/network_game_manager.h"
 
 #include <math.h>
 
@@ -290,6 +292,8 @@ static struct
 	weapon held the last frame; a weapon on the ground within each hand's
 	reach (vr_grab_reach) */
 	boolean bare;
+	/* the rules played by (vr_rules_active), as last logged: -1 none yet */
+	int rules;
 	short shoulder_slot[VR_HAND_COUNT];
 	long shoulder_unit;
 	unsigned long shoulder_grabs;
@@ -1476,6 +1480,17 @@ short vr_render_windows(
 	barrel lies along it (vr_weapon_in_hand) */
 	vr_view.weapon_in_hand = vr_view.hand_aiming && !vr_view.cinematic;
 	vr_view.pistol_grip = vr_view.weapon_in_hand && vr_pistol_grip();
+	/* (the rules the headset plays by, logged as they change) */
+	{
+		int rules = vr_rules_active();
+
+		if (rules != vr_view.rules)
+		{
+			vr_view.rules = rules;
+			platform_log("vr: %s", rules ? "a VR server's rules (or a game with no network)" :
+				"an ordinary server's rules: the hands as any player's buttons");
+		}
+	}
 	vr_shoulders();
 	vr_grab_reach();
 	{
@@ -2000,6 +2015,16 @@ int vr_render_grab_reach(
 	return vr_view.stereo && hand >= 0 && hand < VR_HAND_COUNT && vr_view.grab_reach[hand];
 }
 
+int vr_rules_active(
+	void)
+{
+	struct network_game *game = network_game_get_game();
+
+	/* (a local game has a server of its own, which takes no one else) */
+	return !game || network_game_is_splitscreen_local() ||
+		TEST_FLAG(game->cooperative_flags, _network_game_port_vr_rules_bit);
+}
+
 int vr_render_on_foot(
 	void)
 {
@@ -2120,6 +2145,7 @@ void vr_view_reset(
 	vr_view.head_top_valid = FALSE;
 	vr_view.pistol_grip = FALSE;
 	vr_view.bare = FALSE;
+	vr_view.rules = -1;
 	vr_view.shoulder_unit = NONE;
 	vr_view.held_weapon = NONE;
 	vr_view.grab_reach[VR_HAND_LEFT] = vr_view.grab_reach[VR_HAND_RIGHT] = FALSE;

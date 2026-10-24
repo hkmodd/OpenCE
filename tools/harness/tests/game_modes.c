@@ -212,6 +212,7 @@ int main(int argc,char **argv)
   client=FALSE;
  } else CASE("kind") {
   struct game_variant variant;
+  wchar_t const *vr_name;
   memset(&variant,0,sizeof(variant));memset(&options,0,sizeof(options));
   variant.game_engine_index=game_engine_slayer;variant.universal_variant.teams=TRUE;
   CHECK(game_modes_kind(&variant,&options)==0,"a stock gametype has no kind");
@@ -227,6 +228,11 @@ int main(int argc,char **argv)
   variant.game_engine_index=game_engine_ctf;options.mode=_game_mode_none;
   CHECK(!wcscmp(game_modes_kind_name(game_engine_ctf,game_modes_kind(&variant,&options),TRUE),L"HC CTF"),"HC CTF");
   CHECK(!wcscmp(game_modes_kind_name(game_engine_slayer,_game_mode_swat,TRUE),L"SWAT"),"SWAT");
+  vr_name=game_modes_kind_name(game_engine_slayer,_game_mode_swat|GAME_MODES_KIND_VR,TRUE);
+  CHECK(vr_name&&!wcscmp(vr_name,L"SWAT"),"a VR server's SWAT, named SWAT (VR is its caller's)");
+  CHECK(game_modes_kind_name(game_engine_slayer,GAME_MODES_KIND_VR,TRUE)==NULL,"a VR server's Slayer, by its engine");
+  vr_name=game_modes_kind_name(game_engine_ctf,GAME_MODES_KIND_VR|0x80,TRUE);
+  CHECK(vr_name&&!wcscmp(vr_name,L"HC CTF"),"a VR server's HC CTF");
  } else CASE("kind_untrusted") {
   CHECK(game_modes_kind_name(game_engine_ctf,_game_mode_swat,TRUE)==NULL,"a mode of CTF is none");
   CHECK(!wcscmp(game_modes_kind_name(game_engine_oddball,_game_mode_infection|0x80,TRUE),L"HC ODDBALL"),

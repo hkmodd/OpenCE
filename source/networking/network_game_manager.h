@@ -51,6 +51,10 @@ enum
 	/* the players do their AI allies no harm (Server Setup's ALLY FRIENDLY
 	FIRE: OFF, co-op's): network_coop_ally_friendly_fire */
 	_network_game_cooperative_no_ally_friendly_fire_bit = 1,
+	/* the host's game is a VR server (network.vr_rules: the headset's players
+	play by its hands' rules, port/linux/game/vr_view.c's vr_rules_active),
+	in any game, co-op's or not */
+	_network_game_port_vr_rules_bit = 2,
 };
 
 struct network_game
@@ -58,8 +62,9 @@ struct network_game
 	wchar_t name[16];
 	struct network_game_map map;
 	struct game_variant variant;
-	/* port: co-op's switches (_network_game_cooperative_*_bit), in a byte the
-	Xbox's game left as padding, which builds before them send as 0 */
+	/* port: co-op's switches (_network_game_cooperative_*_bit) and the VR
+	rules' (_network_game_port_vr_rules_bit), in a byte the Xbox's game left
+	as padding, which builds before them send as 0 */
 	byte cooperative_flags;
 	char minimum_players;
 	/* port: 128 does not fit a signed char */

@@ -2760,6 +2760,7 @@ void network_game_server_port_set_settings(wchar_t const *name, long maximum_pla
 void network_game_server_port_set_cooperative_friendly_fire(short friendly_fire);
 void network_game_server_port_set_cooperative_player_collisions(boolean player_collisions);
 void network_game_server_port_set_cooperative_ally_friendly_fire(boolean ally_friendly_fire);
+void network_game_server_port_set_vr_rules(boolean vr_rules);
 void *global_network_game_client_get(void);
 void *global_network_game_server_get(void);
 boolean network_game_is_splitscreen_local(void);
@@ -3682,6 +3683,8 @@ static boolean server_start(void)
 	}
 	else if (!gametype_setup_apply())
 		return campaign_fail();
+	/* (a VR server or not: network.vr_rules) */
+	network_game_server_port_set_vr_rules(config_boolean("network.vr_rules"));
 	return global_network_game_server_get() != NULL;
 }
 
@@ -3916,9 +3919,17 @@ static wchar_t const *game_type_name(long engine_type)
 game_modes.h), "HC" for Hardcore in the browsers' narrow column */
 static wchar_t const *game_kind_name(long engine_type, byte kind, boolean abbreviated)
 {
+	static wchar_t vr_name[40];
 	wchar_t const *name = game_modes_kind_name(engine_type, kind, abbreviated);
 
-	return name ? name : game_type_name(engine_type);
+	if (!name)
+		name = game_type_name(engine_type);
+	/* (a VR server's, "VR" before it) */
+	if (!(kind & GAME_MODES_KIND_VR) || !name)
+		return name;
+	usnprintf(vr_name, NUMBEROF(vr_name) - 1, L"VR %s", name);
+	vr_name[NUMBEROF(vr_name) - 1] = 0;
+	return vr_name;
 }
 
 /* an advertised (LAN, Direct Link) game's kind */

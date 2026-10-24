@@ -1793,9 +1793,11 @@ static boolean network_game_server_handle_message_client_broadcast_game_search(
 			{
 				advertisement.reserved[HALO_PORT_ADVERTISED_FLAGS_OFFSET] |= HALO_PORT_ADVERTISED_IN_PROGRESS_FLAG;
 			}
-			/* (an OpenCE gametype's kind, the server browser's name for it) */
+			/* (an OpenCE gametype's kind, the server browser's name for it,
+			and whether it is a VR server) */
 			advertisement.reserved[HALO_PORT_ADVERTISED_KIND_OFFSET] = game_modes_kind(&game->variant,
-				&game->variant_options);
+				&game->variant_options) |
+				(TEST_FLAG(game->cooperative_flags, _network_game_port_vr_rules_bit) ? GAME_MODES_KIND_VR : 0);
 			/* (open to joins: not while the machines load the game, nor
 			once it is over, nor in progress when no player can join it) */
 			if (network_game_server_get_state(server, NULL) == _network_game_server_state_ingame
