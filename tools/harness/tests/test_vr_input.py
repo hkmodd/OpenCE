@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from harness import CHECK_FAILED, build, mutated, read, run
 
 CASES = ["gameplay", "move", "menus", "menu-button", "turn", "seat", "drive", "room", "gestures", "hands", "ray",
-         "bindings", "swap", "throw", "grab", "bare", "physical", "dual", "layout", "seat-secondary", "handles"]
+         "bindings", "swap", "throw", "grab", "bare", "physical", "dual", "layout", "seat-secondary", "handles", "seat-switch"]
 CONTROLS = {
     "left-handed-ignored": (("main_index = input->left_handed ? VR_HAND_LEFT : VR_HAND_RIGHT;",
                              "main_index = VR_HAND_RIGHT;"), "gameplay"),
@@ -152,6 +152,13 @@ CONTROLS = {
                                 "settings->gestures ? VR_BIND_NONE :"), "handles"),
     "handles-swap": (("(off_pressed & VR_BUTTON_GRIP) && off_hand->tracked && !input->physical && !settings->handles)",
                       "(off_pressed & VR_BUTTON_GRIP) && off_hand->tracked && !input->physical)"), "handles"),
+    "switch-on-foot": (("\t\tif (settings->seat_switch)\n", "\t\tif (1)\n"), "seat-switch"),
+    "switch-crouches": (("\t\t\thand_bindings[move_index][VR_CONTROL_CLICK] = VR_BIND_NONE;\n", ""), "seat-switch"),
+    "switch-while-held": (("frame->hand[move_index].buttons & ~input->held[move_index] & VR_BUTTON_STICK",
+                           "frame->hand[move_index].buttons & VR_BUTTON_STICK"), "seat-switch"),
+    "switch-on-aiming-stick": (("frame->hand[move_index].buttons & ~input->held[move_index] & VR_BUTTON_STICK",
+                                "frame->hand[turn_index].buttons & ~input->held[turn_index] & VR_BUTTON_STICK"),
+                               "seat-switch"),
     "seat-throws": (("throw_gesture = settings->throw_gesture && !settings->seated;",
                      "throw_gesture = settings->throw_gesture;"), "seat-secondary"),
     "punch-after-menus": (("\t\tinput->main_position_valid = 0;\n\t\tfor (hand", "\t\tfor (hand"), "throw"),

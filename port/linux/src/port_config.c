@@ -311,7 +311,9 @@ static const struct config_setting config_settings[] =
 		_platform_desktop,
 		"With display.vr, how a vehicle's seat is seen: \"first_person\", from\n"
 		"the seat, the view level and turning with the vehicle, or \"chase\",\n"
-		"the game's camera (behind the Warthog, the Ghost, the Banshee...)." },
+		"the game's camera (behind the Warthog, the Ghost, the Banshee...). In\n"
+		"a seat with a view behind it (a driver's, a gunner's) the moving\n"
+		"hand's stick click switches between the two, and writes this." },
 	{ "vr.vehicle_aim", _config_string, "\"hand\"", "HALO_VR_VEHICLE_AIM", _environment_value, _platform_desktop,
 		"With display.vr, what aims in a vehicle's seat (a gun's, a tank's\n"
 		"cannon, where a Banshee flies): \"hand\", where the aiming controller\n"

@@ -488,9 +488,9 @@ the setting for one start of the game. It has priority over the file.
 | `vr.aim` | `"hand"` | `HALO_VR_AIM` | With `display.vr`, what aims on foot: `"hand"`, the aiming controller (the weapon held in it, the crosshair where its shot lands), or `"head"`. In a vehicle's seat, `vr.vehicle_aim`. |
 | `vr.roomscale` | `true` | `HALO_VR_ROOMSCALE` | With `display.vr`, the room is the player's: on foot the player walks after the head as the person steps (the off stick still), and in the menus and cinematics the head goes anywhere in the room; `false`, the view leans up to 35 cm from the game's camera. |
 | `vr.cinematics` | `"immersive"` | `HALO_VR_CINEMATICS` | With `display.vr`, the cinematics: `"immersive"`, around the head (each shot ahead of where it faces as the shot begins, a blink at a cut, no letterbox), or `"screen"`, on a screen ahead. |
-| `vr.vehicle_view` | `"first_person"` | `HALO_VR_VEHICLE_VIEW` | With `display.vr`, how a vehicle's seat is seen: `"first_person"`, from the seat, the view level and turning with the vehicle (the player's own view only: shots are aimed as always), or `"chase"`, the game's camera. |
+| `vr.vehicle_view` | `"first_person"` | `HALO_VR_VEHICLE_VIEW` | With `display.vr`, how a vehicle's seat is seen: `"first_person"`, from the seat, the view level and turning with the vehicle (the player's own view only: shots are aimed as always), or `"chase"`, the game's camera. In a seat that has a view behind it (a driver's, a gunner's), the moving hand's stick click switches between the two and writes this setting. |
 | `vr.vehicle_aim` | `"hand"` | `HALO_VR_VEHICLE_AIM` | With `display.vr`, what aims in a vehicle's seat (a gun, a tank's cannon, where a Banshee flies): `"hand"`, where the aiming controller points (a passenger's own weapon in that hand, in the first-person seat; in a gunner's seat, a Warthog's or a Shade's gun, the hands work the gun's handles instead: the grips held, raising them lowers the barrel and moving them left turns it right, as a mounted gun's handles behind its pivot; let go, it stays where it aims), `"stick"`, its stick as a gamepad's right stick, or `"head"`; with the first two the head looks around freely and the crosshair is where the shot lands. |
-| `vr.vehicle_steering` | `"drive"` | `HALO_VR_VEHICLE_STEERING` | With `display.vr` and the first-person seat, how a Warthog's or a Ghost's driver steers: `"drive"`, the other controller's stick (sideways turns the wheels as far as it is pushed, mirrored backing, as a car's; forward and back are the throttle; the Ghost does not strafe), or `"aim"`, toward where `vr.vehicle_aim` aims, as the game does. |
+| `vr.vehicle_steering` | `"drive"` | `HALO_VR_VEHICLE_STEERING` | With `display.vr`, how a Warthog's or a Ghost's driver steers, seen from the seat or from behind (from behind, the view turns with the steering): `"drive"`, the other controller's stick (sideways turns the wheels as far as it is pushed, mirrored backing, as a car's; forward and back are the throttle; the Ghost does not strafe), or `"aim"`, toward where `vr.vehicle_aim` aims, as the game does. |
 | `vr.left_handed` | `false` | `HALO_VR_LEFT_HANDED` | With `display.vr`, the controllers' layouts swap: the left stick turns and the right moves, the left's face buttons are the right's, and the weapon starts in the left hand. In play the weapon passes from hand to hand; the sticks and the face buttons stay, the trigger and the grip go with the weapon. The weapon is never mirrored. |
 | `vr.snap_turn` | `30.0` | `HALO_VR_SNAP_TURN` | With `display.vr`, how far a push of the aiming hand's stick turns, in degrees; `0` turns smoothly instead. |
 | `vr.smooth_turn_speed` | `120.0` | `HALO_VR_SMOOTH_TURN_SPEED` | With `vr.snap_turn` `0`, the stick's turn at full push, in degrees a second. |
@@ -763,7 +763,9 @@ screen, with the cause in the log.
   the head sat, not moved by the seat's animations. A Warthog's or a
   Ghost's driver steers with the off stick (`vr.vehicle_steering`):
   sideways turns the wheels as far as it is pushed, forward and back are
-  the throttle. The aiming stick turns (`vr.snap_turn`), and
+  the throttle, seen from the seat or from behind: in a seat that has a
+  view behind it, the moving hand's stick click switches between the two.
+  The aiming stick turns (`vr.snap_turn`), and
   the mouse, the gamepad's stick and the game's own turns (a respawn, a
   script) turn the world around the player, as a turn of the body. Aim
   assist is off.
@@ -778,7 +780,7 @@ screen, with the cause in the log.
   | B | action, reload | Y | switch weapons |
   | grip | melee (or a punch) | grip at the visor | flashlight |
   | stick | turn | stick | move |
-  | stick click | zoom | stick click | crouch (or lower the head) |
+  | stick click | zoom | stick click | crouch (or lower the head); in a vehicle, the seat's view or the one behind |
   | | | menu | pause; held a second, the scores |
 
   They press the gamepad's buttons for those actions in the standard

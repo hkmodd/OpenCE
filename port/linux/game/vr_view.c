@@ -87,11 +87,13 @@ cutscenes are drawn as always, onto the flat screen held in the room.
 #include "networking/network_game_manager.h"
 #include "network_vr.h"
 #include "dual_wield.h"
+#include "passenger_camera.h"
 
 #include <math.h>
 
 double config_real(const char *name);
 int config_boolean(const char *name);
+int config_write(const char *name, const char *value);
 const char *config_string(const char *name);
 unsigned long config_changes(void);
 void platform_log(char const *format, ...);
@@ -414,6 +416,11 @@ static struct
 	int handles_held;
 	float handles_pivot[3];
 	boolean handles_taken;
+	/* the seat has a view of the game's own behind it, which the move
+	stick's click switches to and from (vr_seat_view_switch); the clicks
+	taken (vr_input.c's) */
+	boolean seat_switch;
+	unsigned long view_switches;
 	/* the eyes' place in the seat (vr_seat_eye), in its node's frame, and
 	whether it is taken */
 	real_point3d seat_eye;
@@ -652,6 +659,41 @@ int vr_render_seat_view(
 	vr_settings_read();
 	return vr_view.seat_first_person &&
 		vr_seat_of(player_control_get_unit_index(local_player_index), &vehicle_index, &seat);
+}
+
+/* as the game takes the player's input: in a seat with a view of the
+game's own behind it (the seat's third-person camera, or the passenger
+camera: passenger_camera.c), a click of the move stick (vr_input.c)
+switches between the seat's view and that one. vr.vehicle_view is written,
+as the settings' screen writes it, so that it holds for the next seat and
+the next start; the eyes blink, and the director cuts between the cameras
+(director_choose_game_perspective) */
+static void vr_seat_view_switch(
+	short local_player_index)
+{
+	long unit_index = player_control_get_unit_index(local_player_index);
+	long vehicle_index;
+	struct unit_seat const *seat;
+	unsigned long switches = vr_input_view_switches();
+	boolean seated = vr_seat_of(unit_index, &vehicle_index, &seat);
+
+	/* (the seated unit, for the drive's facing seen from either view) */
+	if (seated)
+		vr_view.unit_index = unit_index;
+	vr_view.seat_switch = seated &&
+		(TEST_FLAG(seat->flags, _unit_seat_third_person_camera_bit) || passenger_camera_enabled(local_player_index));
+	/* (a click taken as the seat was left is dropped) */
+	if (switches == vr_view.view_switches)
+		return;
+	vr_view.view_switches = switches;
+	if (!vr_view.seat_switch)
+		return;
+	vr_settings_read();
+	if (!config_write("vr.vehicle_view", vr_view.seat_first_person ? "chase" : "first_person"))
+		platform_log("vr: vr.vehicle_view set for now, not written to config.toml");
+	vr_blink(VR_SEAT_BLINK);
+	platform_log("vr: vehicle %lx's seat %d seen %s (the move stick's click)", vehicle_index,
+		(int)unit_get(unit_index)->unit.parent_seat_index, vr_view.seat_first_person ? "from behind" : "from it");
 }
 
 /* as the game takes the player's input: whether the seat is seen from it
@@ -2619,6 +2661,7 @@ void vr_player_control_facing(
 	vr_view.hand_aiming = FALSE;
 	vr_view.seat_stick = FALSE;
 	vr_view.seat_aiming = FALSE;
+	vr_view.seat_switch = FALSE;
 	/* (the first local player's alone: the headset is one; in a cinematic
 	the scripts' facing is kept, and turns the heading after it) */
 	if (!frame->stereo || local_player_index != local_player_get_next(NONE) ||
@@ -2631,6 +2674,7 @@ void vr_player_control_facing(
 	vr_rotate(frame->head.orientation, local_forward, head);
 	vr_local_to_world(head, 0.0f, forward);
 	vr_view.driving = FALSE;
+	vr_seat_view_switch(local_player_index);
 	if (vr_seat_view_update(local_player_index, forward, before.yaw, stick_turn))
 	{
 		/* in a seat seen from it the vehicle turns the heading, and the
@@ -2661,11 +2705,13 @@ void vr_player_control_facing(
 		vr_hand_aim(frame, hand, orientation);
 		vr_rotate(orientation, local_forward, aim);
 	}
-	else if (vr_view.seat_view && vr_drive_facing(frame, forward, &facing))
+	else if (vr_drive_facing(frame, forward, &facing))
 	{
-		/* a driver steers with the off stick; the head looks around */
+		/* a driver steers with the off stick; the head looks around (seen
+		from behind, the view turns with the facing, which the game's camera
+		follows) */
 		player_control_set_facing(local_player_index, &facing);
-		vr_view.set_yaw = player_control_get_facing_angles(local_player_index)->yaw;
+		vr_view.set_yaw = vr_view.seat_view ? player_control_get_facing_angles(local_player_index)->yaw : before.yaw;
 		vr_view.driving = TRUE;
 		/* (no aim assist turning the facing, and so the wheels) */
 		vr_view.aiming = TRUE;
@@ -2838,6 +2884,12 @@ int vr_render_drive(
 	void)
 {
 	return vr_view.driving;
+}
+
+int vr_render_seat_switch(
+	void)
+{
+	return vr_view.seat_switch;
 }
 
 int vr_render_seat_weapon_hidden(
@@ -3075,6 +3127,8 @@ void vr_view_reset(
 	vr_view.driving = FALSE;
 	vr_view.handles_held = 0;
 	vr_view.handles_taken = FALSE;
+	vr_view.seat_switch = FALSE;
+	vr_view.view_switches = vr_input_view_switches();
 	vr_view.seat_eye_valid = FALSE;
 	vr_view.eye_crouch_tick = NONE;
 	vr_view.head_top_valid = FALSE;

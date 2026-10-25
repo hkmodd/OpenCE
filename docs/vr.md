@@ -294,7 +294,13 @@ What sets the size the world is seen at, each measured or derived:
   vehicle's pitch and roll not tilting the horizon. Getting in, the seat's
   forward is put ahead of the head; getting out, the heading on foot goes
   on from the seat's; both with a blink. The main hand's stick turns the
-  seat's view. The eyes are the seated unit's head as it sat down, held in
+  seat's view, and in a seat with a view of the game's own behind it (the
+  seat's third-person camera, or the passenger camera) the move hand's
+  stick click switches between the two (`vr_seat_view_switch`): it writes
+  `vr.vehicle_view` as the settings' screen does, the eyes blink, and the
+  director cuts between the cameras rather than flying from one to the
+  other; a driver steers by the off stick in either. The eyes are the
+  seated unit's head as it sat down, held in
   the frame of its seat's node turned about the vehicle's up alone
   (`vr_seat_eye`): the head as drawn sank as a gunner's gun aimed up (its
   breech rising into the eyes) and bowed with a Ghost's driver's facing;

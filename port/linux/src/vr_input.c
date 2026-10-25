@@ -839,6 +839,15 @@ void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struc
 			hand_gestures[hand][VR_CONTROL_TRIGGER] = gesture_bindings[weapon][VR_CONTROL_TRIGGER];
 			hand_gestures[hand][VR_CONTROL_GRIP] = gesture_bindings[weapon][VR_CONTROL_GRIP];
 		}
+		/* (in a seat with a view behind it the move hand's click switches the
+		view, vr_view.c, and presses nothing: a seated player's crouch only
+		moves the chase camera) */
+		if (settings->seat_switch)
+		{
+			hand_bindings[move_index][VR_CONTROL_CLICK] = VR_BIND_NONE;
+			if (frame->hand[move_index].buttons & ~input->held[move_index] & VR_BUTTON_STICK)
+				input->view_switches++;
+		}
 		vr_bind_hand(pad, main_hand, hand_bindings[main_index],
 			input->physical || input->holster || input->grabbing[main_index] || settings->handles ? VR_BIND_NONE :
 			bindings[VR_ROLE_MAIN][VR_CONTROL_GRIP]);
@@ -1160,6 +1169,7 @@ static void vr_input_settings_read(struct vr_input_settings *settings)
 	settings->seat_stick = vr_render_seat_stick();
 	settings->drive = vr_render_drive();
 	settings->handles = vr_render_handles();
+	settings->seat_switch = vr_render_seat_switch();
 	settings->room = vr_render_room(settings->room_offset);
 	settings->aim_pitch = vr_render_aim_pitch();
 	settings->pistol_grip = vr_render_pistol_grip();
@@ -1320,6 +1330,11 @@ void vr_input_aim_turn(float radians)
 int vr_input_room_walking(void)
 {
 	return vr_input_state.room_walking;
+}
+
+unsigned long vr_input_view_switches(void)
+{
+	return vr_input_state.view_switches;
 }
 
 float vr_input_turn(void)

@@ -626,6 +626,7 @@ static void director_choose_game_perspective(
 	director_perspective perspective;
 	short following;
 	long unit_index;
+	boolean interpolate;
 	struct director *director = director_get(local_player_index);
 
 	unit_index = player_control_get_unit_index(local_player_index);
@@ -637,6 +638,10 @@ static void director_choose_game_perspective(
 		following = TRUE;
 	if (vr_seat_view)
 		following = FALSE;
+	/* port: the headset's seat view switched (a stick's click or the
+	settings) cuts, under the eyes' blink, rather than flying the camera
+	between the seat and behind the vehicle */
+	interpolate = !force && vr_seat_view == vr_seat_views[local_player_index];
 	if (force || director->seat_state != perspective ||
 		passenger != passenger_views[local_player_index] || vr_seat_view != vr_seat_views[local_player_index])
 	{
@@ -648,7 +653,7 @@ static void director_choose_game_perspective(
 				director_set_camera(
 					local_player_index,
 					(director_camera_update_proc)following_camera_update,
-					!force);
+					interpolate);
 			}
 		}
 		else if (force || director->camera_proc == (director_camera_update_proc)following_camera_update)
@@ -657,7 +662,7 @@ static void director_choose_game_perspective(
 			director_set_camera(
 				local_player_index,
 				(director_camera_update_proc)first_person_camera_update,
-				!force);
+				interpolate);
 		}
 
 		director->seat_state = perspective;

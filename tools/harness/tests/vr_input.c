@@ -24,6 +24,7 @@ static struct vr_input_settings settings_of(int left_handed, float snap_angle, i
     settings.seat_stick = 0;
     settings.drive = 0;
     settings.handles = 0;
+    settings.seat_switch = 0;
     settings.room = 0;
     settings.room_offset[0] = settings.room_offset[1] = 0;
     settings.aim_pitch = 0;
@@ -1451,6 +1452,52 @@ int main(int argc, char **argv)
         settings.left_handed = 0;
         vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
         CHECK(!input.left_handed, "right-handed set: the right, the swap forgotten");
+        return 0;
+    }
+    CASE("seat-switch") {
+        for (index = 0; index < 2; index++)
+        {
+            int move_hand = index ? VR_HAND_RIGHT : VR_HAND_LEFT, aim_hand = !move_hand;
+
+            /* in a seat with a view behind it the move hand's click switches the view, once a press, and does not
+            crouch; the aiming hand's click still zooms (a tank's cannon, a passenger's weapon) */
+            memset(&input, 0, sizeof(input));
+            settings = settings_of(index, 0.5f, 0);
+            settings.seat_switch = 1;
+            frame_of(&frame);
+            frame.hand[move_hand].buttons = VR_BUTTON_STICK;
+            vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+            CHECK(input.view_switches == 1, "a click switches the view (%lu)", input.view_switches);
+            CHECK(!(pad.buttons & VR_PAD_LEFT_THUMB), "and does not crouch");
+            vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+            CHECK(input.view_switches == 1, "held, once (%lu)", input.view_switches);
+            frame.hand[move_hand].buttons = 0;
+            vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+            frame.hand[move_hand].buttons = VR_BUTTON_STICK;
+            vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+            CHECK(input.view_switches == 2, "another click switches back (%lu)", input.view_switches);
+            frame.hand[move_hand].buttons = 0;
+            frame.hand[aim_hand].buttons = VR_BUTTON_STICK;
+            vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+            CHECK(input.view_switches == 2 && (pad.buttons & VR_PAD_RIGHT_THUMB),
+                "the aiming hand's click zooms and switches nothing (%lu)", input.view_switches);
+            /* in the menus a click switches nothing, nor does one held as they close */
+            frame_of(&frame);
+            vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+            frame.hand[move_hand].buttons = VR_BUTTON_STICK;
+            vr_input_update(&input, &frame, &settings, 1, SECONDS, &pad);
+            CHECK(input.view_switches == 2, "not in the menus (%lu)", input.view_switches);
+            vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+            CHECK(input.view_switches == 2, "nor held as they close (%lu)", input.view_switches);
+            /* on foot, or in a seat seen only from it, the click crouches */
+            frame_of(&frame);
+            vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+            settings.seat_switch = 0;
+            frame.hand[move_hand].buttons = VR_BUTTON_STICK;
+            vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+            CHECK(input.view_switches == 2 && (pad.buttons & VR_PAD_LEFT_THUMB),
+                "on foot the click crouches (%lu)", input.view_switches);
+        }
         return 0;
     }
     CASE("handles") {
