@@ -77,6 +77,18 @@ wheels' limits as the vehicle's definition has them (degrees, left positive
 and right negative); mirrored while the vehicle backs, as the game turns the
 wheels against the facing then, so that they turn as the stick does */
 float vr_drive_steer(float x, float left_limit, float right_limit, int backing);
+/* a mounted gun aimed by its handles (vr.vehicle_aim "hand", a gunner's
+seat): the barrel from the grips' place `grip` through the mount's `pivot`
+ahead of them, as handles behind a pivot turn a gun: the hands raised lower
+the barrel, moved left turn it right. The handles are held `lever` metres
+from the pivot at the least: hands pushed nearer push it ahead, and so
+turn nothing and never come round it (LOCAL space, metres; `aim` of length
+1). 0 with the grips at the pivot or not finite, nothing changed */
+int vr_handles_aim(const float grip[3], float pivot[3], float lever, float aim[3]);
+/* where the pivot of handles taken at `grip` goes: `lever` metres ahead of
+them along the barrel's `aim` (of length 1), so that the gun does not jump
+as they are taken */
+void vr_handles_pivot(const float grip[3], const float aim[3], float lever, float pivot[3]);
 /* a two-bone arm (in any one frame of axes): the elbow of an arm from
 `shoulder` to `wrist`, its bones `upper` and `lower` long, bent toward
 `bend` (a direction off the line between them). A wrist beyond the arm's

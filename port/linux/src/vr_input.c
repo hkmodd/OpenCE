@@ -770,7 +770,7 @@ void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struc
 		/* (the main grip pressed at a shoulder puts the weapon away there or
 		draws the one there, vr_view.c; by a weapon on the ground, takes it;
 		held on, it strikes nothing) */
-		if ((main_pressed & VR_BUTTON_GRIP) && settings->gestures && !input->physical)
+		if ((main_pressed & VR_BUTTON_GRIP) && settings->gestures && !input->physical && !settings->handles)
 		{
 			int side = vr_at_shoulder(frame, main_hand);
 
@@ -840,11 +840,12 @@ void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struc
 			hand_gestures[hand][VR_CONTROL_GRIP] = gesture_bindings[weapon][VR_CONTROL_GRIP];
 		}
 		vr_bind_hand(pad, main_hand, hand_bindings[main_index],
-			input->physical || input->holster || input->grabbing[main_index] ? VR_BIND_NONE :
+			input->physical || input->holster || input->grabbing[main_index] || settings->handles ? VR_BIND_NONE :
 			bindings[VR_ROLE_MAIN][VR_CONTROL_GRIP]);
-		/* (with the gestures the off grip's action is at the head alone) */
+		/* (with the gestures the off grip's action is at the head alone; on a
+		gun's handles, none) */
 		vr_bind_hand(pad, off_hand, hand_bindings[off_index],
-			settings->gestures ? VR_BIND_NONE : bindings[VR_ROLE_OFF][VR_CONTROL_GRIP]);
+			settings->gestures || settings->handles ? VR_BIND_NONE : bindings[VR_ROLE_OFF][VR_CONTROL_GRIP]);
 		for (hand = 0; hand < VR_HAND_COUNT; hand++)
 		{
 			if (throw_gesture)
@@ -915,7 +916,7 @@ void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struc
 			flashlight toggles; at the main hand, the main grip let go, it
 			takes the weapon there: vr_physical_hands' with the hands as they
 			hold) */
-			if ((off_pressed & VR_BUTTON_GRIP) && off_hand->tracked && !input->physical)
+			if ((off_pressed & VR_BUTTON_GRIP) && off_hand->tracked && !input->physical && !settings->handles)
 			{
 				if (vr_at_head(frame, off_hand))
 				{
@@ -1158,6 +1159,7 @@ static void vr_input_settings_read(struct vr_input_settings *settings)
 	settings->move_turn = vr_input_move_turn;
 	settings->seat_stick = vr_render_seat_stick();
 	settings->drive = vr_render_drive();
+	settings->handles = vr_render_handles();
 	settings->room = vr_render_room(settings->room_offset);
 	settings->aim_pitch = vr_render_aim_pitch();
 	settings->pistol_grip = vr_render_pistol_grip();

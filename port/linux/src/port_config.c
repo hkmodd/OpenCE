@@ -315,9 +315,10 @@ static const struct config_setting config_settings[] =
 	{ "vr.vehicle_aim", _config_string, "\"hand\"", "HALO_VR_VEHICLE_AIM", _environment_value, _platform_desktop,
 		"With display.vr, what aims in a vehicle's seat (a gun's, a tank's\n"
 		"cannon, where a Banshee flies): \"hand\", where the aiming controller\n"
-		"points (a passenger's own weapon in that hand), \"stick\", its stick\n"
-		"as a gamepad's right stick, or \"head\"; the head looks around freely\n"
-		"with the first two, the crosshair where the shot lands." },
+		"points (a passenger's own weapon in that hand; a gunner's seat's gun\n"
+		"by its handles, the grips held), \"stick\", its stick as a gamepad's\n"
+		"right stick, or \"head\"; the head looks around freely with the first\n"
+		"two, the crosshair where the shot lands." },
 	{ "vr.vehicle_steering", _config_string, "\"drive\"", "HALO_VR_VEHICLE_STEERING", _environment_value,
 		_platform_desktop,
 		"With display.vr, how a Warthog's or a Ghost's driver steers:\n"

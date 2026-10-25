@@ -388,5 +388,36 @@ int main(int argc, char **argv)
         vr_quaternion_between(to, to, turn);
         CHECK(close_to(turn[3], 1, 1e-6f), "no turn from a direction to itself");
     }
+    CASE("handles") {
+        /* both grips 25 cm behind the pivot, the gun level ahead */
+        float grip[3] = {0, -0.35f, -0.35f}, ahead[3] = {0, 0, -1}, pivot[3], aim[3];
+        float raised[3] = {0, -0.25f, -0.35f}, lowered[3] = {0, -0.45f, -0.35f}, left[3] = {-0.1f, -0.35f, -0.35f};
+        float bad[3] = {NAN, 0, 0}, pushed[3];
+        int step;
+        vr_handles_pivot(grip, ahead, 0.25f, pivot);
+        CHECK(same3(pivot, 0, -0.35f, -0.6f), "the pivot ahead of the grips along the aim");
+        CHECK(vr_handles_aim(grip, pivot, 0.25f, aim) && same3(aim, 0, 0, -1), "taken: the gun does not jump");
+        CHECK(vr_handles_aim(raised, pivot, 0.25f, aim) && aim[1] < -0.3f && aim[2] < 0,
+            "the hands raised lower the barrel (%f)", (double)aim[1]);
+        CHECK(close_to(atan2f(-aim[1], -aim[2]), atan2f(0.1f, 0.25f), 1e-5f), "by the lever's angle");
+        CHECK(same3(pivot, 0, -0.35f, -0.6f), "the pivot stays, the hands no nearer it");
+        CHECK(vr_handles_aim(lowered, pivot, 0.25f, aim) && aim[1] > 0.3f, "the hands lowered raise it (%f)",
+            (double)aim[1]);
+        CHECK(vr_handles_aim(left, pivot, 0.25f, aim) && aim[0] > 0.3f, "the hands left swing it right (%f)",
+            (double)aim[0]);
+        CHECK(close_to(aim[0] * aim[0] + aim[1] * aim[1] + aim[2] * aim[2], 1, 1e-5f), "of length 1");
+        CHECK(vr_handles_aim(grip, pivot, 0.25f, aim) && same3(aim, 0, 0, -1), "back where they took them");
+        /* the hands pushed ahead half a metre, 5 cm a frame, push the pivot: the gun turns nothing, never round */
+        memcpy(pushed, grip, sizeof(pushed));
+        for (step = 0; step < 10; step++)
+        {
+            pushed[2] -= 0.05f;
+            CHECK(vr_handles_aim(pushed, pivot, 0.25f, aim) && same3(aim, 0, 0, -1), "pushed ahead, still ahead (%f)",
+                (double)aim[2]);
+        }
+        CHECK(close_to(pivot[2], pushed[2] - 0.25f, 1e-5f), "the pivot the lever ahead of them (%f)", (double)pivot[2]);
+        CHECK(!vr_handles_aim(pivot, pivot, 0.25f, aim), "the grips at the pivot: no aim");
+        CHECK(!vr_handles_aim(bad, pivot, 0.25f, aim), "not a number: no aim");
+    }
     return 0;
 }

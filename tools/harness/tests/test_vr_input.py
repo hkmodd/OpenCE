@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from harness import CHECK_FAILED, build, mutated, read, run
 
 CASES = ["gameplay", "move", "menus", "menu-button", "turn", "seat", "drive", "room", "gestures", "hands", "ray",
-         "bindings", "swap", "throw", "grab", "bare", "physical", "dual", "layout", "seat-secondary"]
+         "bindings", "swap", "throw", "grab", "bare", "physical", "dual", "layout", "seat-secondary", "handles"]
 CONTROLS = {
     "left-handed-ignored": (("main_index = input->left_handed ? VR_HAND_LEFT : VR_HAND_RIGHT;",
                              "main_index = VR_HAND_RIGHT;"), "gameplay"),
@@ -46,14 +46,14 @@ CONTROLS = {
     "punch-any-way": (("along > VR_PUNCH_ALONG * speed", "along > -speed"), "gestures"),
     "crouch-no-hysteresis": (("input->crouched = height < input->standing - VR_CROUCH_RISE;",
                               "input->crouched = height < input->standing - VR_CROUCH_DEPTH;"), "gestures"),
-    "holster-strikes": (("input->holster || input->grabbing[main_index] ? VR_BIND_NONE :",
-                         "input->grabbing[main_index] ? VR_BIND_NONE :"), "hands"),
+    "holster-strikes": (("input->holster || input->grabbing[main_index] || settings->handles ? VR_BIND_NONE :",
+                         "input->grabbing[main_index] || settings->handles ? VR_BIND_NONE :"), "hands"),
     "shoulder-while-held": (("main_pressed = main_hand->buttons & ~input->held[main_index];",
                              "main_pressed = main_hand->buttons;"), "hands"),
     "shoulders-crossed": (("return place[0] > 0.0f ? VR_HAND_RIGHT : VR_HAND_LEFT;", "return place[0] > 0.0f ? VR_HAND_LEFT : VR_HAND_RIGHT;"),
                           "hands"),
-    "grab-strikes": (("input->holster || input->grabbing[main_index] ? VR_BIND_NONE :", "input->holster ? VR_BIND_NONE :"),
-                     "grab"),
+    "grab-strikes": (("input->holster || input->grabbing[main_index] || settings->handles ? VR_BIND_NONE :",
+                      "input->holster || settings->handles ? VR_BIND_NONE :"), "grab"),
     "grab-held-on": (("input->grab_seconds[hand] <= VR_GRAB_SECONDS && ", ""), "grab"),
     "grab-out-of-reach": ((" && settings->grab_reach[hand])\n", ")\n"), "grab"),
     "taken-stays": (("if (input->grab_pending > 0.0f && (input->grab_hand == VR_HAND_LEFT) != (input->left_handed != 0))",
@@ -146,6 +146,12 @@ CONTROLS = {
     "throw-speed-of-the-moment": (("input->throw_speed[index] -= VR_THROW_FALL * seconds;",
                                    "input->throw_speed[index] = 0.0f;"), "throw"),
     "throw-on-press": (("return was_held && !held &&", "return !was_held && held &&"), "throw"),
+    "handles-main-grip-binds": (("input->grabbing[main_index] || settings->handles ? VR_BIND_NONE :",
+                                 "input->grabbing[main_index] ? VR_BIND_NONE :"), "handles"),
+    "handles-off-grip-binds": (("settings->gestures || settings->handles ? VR_BIND_NONE :",
+                                "settings->gestures ? VR_BIND_NONE :"), "handles"),
+    "handles-swap": (("(off_pressed & VR_BUTTON_GRIP) && off_hand->tracked && !input->physical && !settings->handles)",
+                      "(off_pressed & VR_BUTTON_GRIP) && off_hand->tracked && !input->physical)"), "handles"),
     "seat-throws": (("throw_gesture = settings->throw_gesture && !settings->seated;",
                      "throw_gesture = settings->throw_gesture;"), "seat-secondary"),
     "punch-after-menus": (("\t\tinput->main_position_valid = 0;\n\t\tfor (hand", "\t\tfor (hand"), "throw"),

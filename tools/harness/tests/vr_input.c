@@ -23,6 +23,7 @@ static struct vr_input_settings settings_of(int left_handed, float snap_angle, i
     settings.move_turn = 0;
     settings.seat_stick = 0;
     settings.drive = 0;
+    settings.handles = 0;
     settings.room = 0;
     settings.room_offset[0] = settings.room_offset[1] = 0;
     settings.aim_pitch = 0;
@@ -1450,6 +1451,38 @@ int main(int argc, char **argv)
         settings.left_handed = 0;
         vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
         CHECK(!input.left_handed, "right-handed set: the right, the swap forgotten");
+        return 0;
+    }
+    CASE("handles") {
+        /* a gunner's seat aimed by its handles: the grips hold them, pressing neither the melee nor the flashlight
+        (the bindings without the gestures), and the trigger still fires */
+        memset(&input, 0, sizeof(input));
+        settings = settings_of(0, 0.5f, 0);
+        settings.on_foot = 0;
+        settings.handles = 1;
+        frame_of(&frame);
+        frame.hand[VR_HAND_LEFT].grip.position[0] = 0.14f;
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
+        frame.hand[VR_HAND_RIGHT].buttons = VR_BUTTON_GRIP | VR_BUTTON_TRIGGER;
+        frame.hand[VR_HAND_RIGHT].trigger = 1.0f;
+        for (index = 0; index < 3; index++)
+        {
+            vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+            CHECK(pad.analog[VR_PAD_B] == 0 && pad.analog[VR_PAD_WHITE] == 0, "the grips press nothing (%d, %d)",
+                pad.analog[VR_PAD_B], pad.analog[VR_PAD_WHITE]);
+            CHECK(pad.analog[VR_PAD_RIGHT_TRIGGER] == 255, "the trigger fires (%d)", pad.analog[VR_PAD_RIGHT_TRIGGER]);
+        }
+        /* with the gestures, one hand on them by the other: no weapon handed over */
+        memset(&input, 0, sizeof(input));
+        settings.gestures = 1;
+        frame_of(&frame);
+        frame.hand[VR_HAND_LEFT].grip.position[0] = 0.14f;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        frame.hand[VR_HAND_RIGHT].grip.position[0] = 0.6f;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(input.swaps == 0 && !input.left_handed, "no swap (%lu)", input.swaps);
         return 0;
     }
     CASE("seat-secondary") {

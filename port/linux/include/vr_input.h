@@ -117,6 +117,9 @@ struct vr_input_settings
 	sideways push turns the facing (vr_view.c), its forward push is the
 	throttle, and the pad's left stick has no sideways (no strafing) */
 	int drive;
+	/* a gunner's seat aimed by its handles (vr_view.c's vr_handles): the
+	grips hold them, pressing nothing and making no gesture */
+	int handles;
 	/* room scale (vr.roomscale), on foot: how far the head has stepped from
 	where the body stands (LOCAL x and z, metres), which the body walks
 	after while the off stick is still */

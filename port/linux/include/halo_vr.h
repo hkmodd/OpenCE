@@ -210,6 +210,9 @@ int vr_render_reticle(void);
 /* in a seat with vr.vehicle_aim "stick": the main hand's stick is the
 pad's right stick, the head looks around freely (vr_input.c) */
 int vr_render_seat_stick(void);
+/* in a gunner's seat with vr.vehicle_aim "hand": the grips hold the gun's
+handles and press nothing (vr_input.c) */
+int vr_render_handles(void);
 /* director_choose_game_perspective: the local player's seat is seen from
 it, not from the chase camera (vr.vehicle_view "first_person"); for the
 local view only, the shots' deterministic camera unchanged */
@@ -326,6 +329,7 @@ void vr_render_rumble_hands(float const body[2], float const weapon[2], float co
 #define vr_render_aiming() 0
 #define vr_render_reticle() 0
 #define vr_render_seat_stick() 0
+#define vr_render_handles() 0
 #define vr_render_seat_view(local_player_index) 0
 #define vr_render_drive() 0
 #define vr_render_seat_weapon_hidden() 0

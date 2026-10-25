@@ -8,7 +8,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from harness import CHECK_FAILED, build, enum_with, function, mutated, read, run, structure
 
-CASES = ["bounds", "pose", "helpers", "between", "axes", "steer", "elbow", "twist"]
+CASES = ["bounds", "pose", "helpers", "between", "axes", "steer", "elbow", "twist", "handles"]
 CONTROLS = {
     "bottom-is-top": (("bounds[2] = (float)tan(fov->down);", "bounds[2] = (float)tan(fov->up);"), "bounds"),
     "no-aspect": (("bounds[0] = (float)tan(fov->left) / aspect;", "bounds[0] = (float)tan(fov->left);"), "bounds"),
@@ -46,6 +46,13 @@ CONTROLS = {
                       "return vr_wrap_angle((float)atan2(along, q[3]));"), "twist"),
     "twist-unwrapped": (("return vr_wrap_angle(2.0f * (float)atan2(along, q[3]));",
                          "return 2.0f * (float)atan2(along, q[3]);"), "twist"),
+    # (the hand as a pointer: the controller's way, which the hands raised turn up)
+    "handles-as-pointer": (("aim[axis] = pivot[axis] - grip[axis];", "aim[axis] = grip[axis] - pivot[axis];"),
+                           "handles"),
+    "handles-pivot-behind": (("pivot[axis] = grip[axis] + aim[axis] * lever;",
+                              "pivot[axis] = grip[axis] - aim[axis] * lever;"), "handles"),
+    "handles-not-pushed": (("\tif (length < lever)\n\t\tvr_handles_pivot(grip, aim, lever, pivot);\n", ""), "handles"),
+    "handles-always-pulled": (("\tif (length < lever)\n", "\tif (1)\n"), "handles"),
 }
 
 

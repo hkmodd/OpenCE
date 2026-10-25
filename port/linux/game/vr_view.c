@@ -205,6 +205,9 @@ enum
 /* getting into a seat seen from it or out of it, the eyes blink (seconds):
 the view is turned to the seat's forward */
 #define VR_SEAT_BLINK 0.2f
+/* a gunner's seat: the handles' distance behind the gun's pivot (metres):
+the hands moved 10 cm turn the gun about 22 degrees */
+#define VR_HANDLES_LEVER 0.25f
 /* the off stick's full turn of a Ghost's facing from its forward (degrees):
 a Ghost turns toward its facing however far it is (it has no wheels whose
 turn limits it: vehicles.c's update_alien_scout_physics), short of the
@@ -404,6 +407,17 @@ static struct
 	short seat_index;
 	real seat_yaw;
 	boolean driving;
+	/* a gunner's seat seen from it, aimed by the hands on the gun's handles
+	(vr_handles): the hands that hold them (a bit for each, 0 let go), the
+	gun's pivot in LOCAL space, placed as they took them, and whether they
+	have yet (till then the gun faces ahead of the seat's view) */
+	int handles_held;
+	float handles_pivot[3];
+	boolean handles_taken;
+	/* the eyes' place in the seat (vr_seat_eye), in its node's frame, and
+	whether it is taken */
+	real_point3d seat_eye;
+	boolean seat_eye_valid;
 
 	/* room scale: where the body stands in LOCAL space (x and z), what the
 	player is doing (VR_ROOM_*), whether the unit walks after the head this
@@ -411,6 +425,9 @@ static struct
 	boolean room_valid;
 	short room_state;
 	float room_body[2];
+	/* ... and in a seat, the head's height as the player sat (LOCAL y), a
+	lean's up and down taken from it */
+	float room_body_height;
 	boolean room;
 	boolean room_anchor_valid;
 	real_point3d room_anchor;
@@ -448,9 +465,12 @@ static void vr_settings_read(
 	vr_view.vignette_strength = PIN(vr_view.vignette_strength, 0.0f, 1.0f);
 }
 
+static boolean vr_gunner_seat(long unit_index);
+
 /* the hand that aims the weapon it holds: the main controller, tracked,
 with vr.aim "hand", the player on foot or, in a seat seen from it with
-vr.vehicle_aim "hand", holding a weapon (a passenger); else NULL */
+vr.vehicle_aim "hand", holding a weapon (a passenger: not a gunner, whose
+hands hold the gun's handles); else NULL */
 static struct vr_hand const *vr_aiming_hand(
 	struct vr_frame const *frame,
 	short local_player_index)
@@ -469,7 +489,8 @@ static struct vr_hand const *vr_aiming_hand(
 	if (!unit)
 		return NULL;
 	if (unit->object.parent_object_index != NONE &&
-		(!vr_view.seat_view || vr_view.seat_aim != _vr_seat_aim_hand || unit->unit.current_weapon_index < 0 ||
+		(!vr_view.seat_view || vr_view.seat_aim != _vr_seat_aim_hand || vr_gunner_seat(unit_index) ||
+			unit->unit.current_weapon_index < 0 ||
 			unit_inventory_get_weapon(unit_index, unit->unit.current_weapon_index) == NONE))
 	{
 		return NULL;
@@ -518,6 +539,20 @@ static boolean vr_seat_of(
 	return TRUE;
 }
 
+/* the unit is in a gunner's seat (not a driver's: a tank's cannon, a
+flier's guns) seen from it, with vr.vehicle_aim "hand": the hands hold the
+gun's handles (vr_handles), not a weapon of their own */
+static boolean vr_gunner_seat(
+	long unit_index)
+{
+	long vehicle_index;
+	struct unit_seat const *seat;
+
+	return vr_view.seat_view && vr_view.seat_aim == _vr_seat_aim_hand &&
+		vr_seat_of(unit_index, &vehicle_index, &seat) && TEST_FLAG(seat->flags, _unit_seat_gunner_bit) &&
+		!TEST_FLAG(seat->flags, _unit_seat_driver_bit);
+}
+
 /* the view's heading in a seat seen from it: the vehicle's yaw, as drawn
 this frame (blended between the ticks: its own yaw, taken as the game ticks,
 would turn the view in 30 Hz steps against the smoothly drawn vehicle) when
@@ -549,6 +584,61 @@ static real vr_seat_heading(
 			yaw += vr_wrap_angle(vr_yaw_of(blended[0].forward.n, 0.0f) - vr_yaw_of(ticked[0].forward.n, 0.0f));
 	}
 	return vr_wrap_angle(yaw + vr_view.seat_yaw);
+}
+
+/* where the eyes are in a seat seen from it: the seated unit's head as it
+sat down (its entry animation over), held there in the frame of its seat's
+node turned about the vehicle's up alone. Not the head as drawn, whose
+animations carry the eyes about while the player's head is still: a
+gunner's with the gun's elevation (the eyes sinking as the gun aims up,
+its breech rising into them), a Ghost's driver's leaning into a turn and
+bowing as the facing pitches with the head. A turret's seat (a Warthog's
+gun's) still carries them round as the gun turns, as its gunner stands
+behind it. FALSE: no head to take it from */
+static boolean vr_seat_eye(
+	real_point3d *eye)
+{
+	long vehicle_index;
+	struct unit_seat const *seat;
+	struct unit_datum *unit = unit_try_and_get(vr_view.unit_index);
+	struct object_marker head, marker;
+	real_matrix4x3 const *root, *node;
+	real_point3d origin, place;
+	real_vector3d forward;
+	real yaw, cosine, sine;
+	short node_index = 0;
+
+	if (!unit || !vr_seat_of(vr_view.unit_index, &vehicle_index, &seat) ||
+		object_get_marker_by_name(vr_view.unit_index, "head", &head, 1) <= 0)
+	{
+		return FALSE;
+	}
+	if (object_get_marker_by_name(vehicle_index, seat->marker_name, &marker, 1) > 0)
+		node_index = marker.node_index;
+	/* (the seat's node in the vehicle's root node's frame: its origin, and
+	its turn about the up) */
+	root = object_get_node_matrix(vehicle_index, 0);
+	node = object_get_node_matrix(vehicle_index, node_index);
+	matrix4x3_inverse_transform_point(root, &node->position, &origin);
+	matrix4x3_inverse_transform_normal(root, &node->forward, &forward);
+	yaw = forward.i * forward.i + forward.j * forward.j > 1e-6f ? (real)atan2(forward.j, forward.i) : 0.0f;
+	cosine = (real)cos(yaw);
+	sine = (real)sin(yaw);
+	if (!vr_view.seat_eye_valid || unit->unit.animation.state == _unit_state_entering_seat)
+	{
+		matrix4x3_inverse_transform_point(root, &head.matrix.position, &place);
+		place.x -= origin.x;
+		place.y -= origin.y;
+		vr_view.seat_eye.x = place.x * cosine + place.y * sine;
+		vr_view.seat_eye.y = place.y * cosine - place.x * sine;
+		vr_view.seat_eye.z = place.z - origin.z;
+		vr_view.seat_eye_valid = unit->unit.animation.state != _unit_state_entering_seat;
+	}
+	place.x = origin.x + vr_view.seat_eye.x * cosine - vr_view.seat_eye.y * sine;
+	place.y = origin.y + vr_view.seat_eye.x * sine + vr_view.seat_eye.y * cosine;
+	place.z = origin.z + vr_view.seat_eye.z;
+	matrix4x3_transform_point(root, &place, eye);
+	return TRUE;
 }
 
 int vr_render_seat_view(
@@ -605,6 +695,9 @@ static boolean vr_seat_view_update(
 		object_get_orientation(vehicle_index, &vehicle_forward, NULL);
 		vr_view.seat_vehicle_index = vehicle_index;
 		vr_view.seat_index = unit->unit.parent_seat_index;
+		vr_view.handles_held = 0;
+		vr_view.handles_taken = FALSE;
+		vr_view.seat_eye_valid = FALSE;
 		vr_view.seat_yaw = vr_wrap_angle(vr_yaw_of(seat_forward.n, 0.0f) - vr_yaw_of(vehicle_forward.n, 0.0f) -
 			vr_yaw_of(head_forward, 0.0f));
 		vr_blink(VR_SEAT_BLINK);
@@ -671,6 +764,50 @@ static void vr_hand_aim(
 	{
 		vr_hand_pointing(hand, vr_view.aim_pitch, orientation);
 	}
+}
+
+/* the gun's aim (LOCAL) from the hands on its handles: the grips held (the
+grip pressed), their middle, through the pivot placed as they took them
+along the gun's `current` aim (again whenever a hand takes them or lets
+go, so that the gun does not jump); FALSE with none held, the gun staying
+where it aims */
+static boolean vr_handles(
+	struct vr_frame const *frame,
+	float const current[3],
+	float aim[3])
+{
+	float grip[3] = { 0.0f, 0.0f, 0.0f };
+	int held = 0, count = 0, hand, axis;
+
+	for (hand = 0; hand < VR_HAND_COUNT; hand++)
+	{
+		struct vr_hand const *state = &frame->hand[hand];
+
+		if (!state->tracked || !(state->buttons & VR_BUTTON_GRIP))
+			continue;
+		held |= 1 << hand;
+		count++;
+		for (axis = 0; axis < 3; axis++)
+			grip[axis] += state->grip.position[axis];
+	}
+	if (held != vr_view.handles_held)
+	{
+		platform_log("vr: the gun's handles %s", !held ? "let go" : held == 3 ? "held by both hands" :
+			held == 1 << VR_HAND_LEFT ? "held by the left hand" : "held by the right hand");
+	}
+	if (!count)
+	{
+		vr_view.handles_held = 0;
+		return FALSE;
+	}
+	for (axis = 0; axis < 3; axis++)
+		grip[axis] /= (float)count;
+	if (held != vr_view.handles_held)
+	{
+		vr_handles_pivot(grip, current, VR_HANDLES_LEVER, vr_view.handles_pivot);
+		vr_view.handles_held = held;
+	}
+	return vr_handles_aim(grip, vr_view.handles_pivot, VR_HANDLES_LEVER, aim);
 }
 
 /* ---------- the weapon in the hand */
@@ -1276,6 +1413,7 @@ static float vr_room_follow(
 	if (!vr_view.room_scale)
 	{
 		vr_view.room_body[0] = vr_view.room_body[1] = 0.0f;
+		vr_view.room_body_height = 0.0f;
 		vr_view.room_valid = FALSE;
 		vr_view.room_anchor_valid = FALSE;
 		return VR_HEAD_REACH;
@@ -1284,6 +1422,7 @@ static float vr_room_follow(
 	{
 		vr_view.room_body[0] = frame->head.position[0];
 		vr_view.room_body[1] = frame->head.position[2];
+		vr_view.room_body_height = state == _vr_room_seated ? frame->head.position[1] : 0.0f;
 		vr_view.room_valid = TRUE;
 		vr_view.room_state = state;
 		vr_view.room_coast = 0.0f;
@@ -1355,7 +1494,7 @@ static void vr_head_offset(
 	real length;
 
 	offset[0] = frame->head.position[0] - vr_view.room_body[0];
-	offset[1] = frame->head.position[1];
+	offset[1] = frame->head.position[1] - vr_view.room_body_height;
 	offset[2] = frame->head.position[2] - vr_view.room_body[1];
 	/* (on foot the body follows the head across the room, not up and down:
 	a crouch, however deep, is the head's own, and the walls test below
@@ -1807,19 +1946,11 @@ short vr_render_windows(
 	player = windows[0];
 	console = windows[1];
 	anchor = player.render_camera.position;
-	/* (seen from a seat, the eyes at the unit's head as it is drawn: the
-	first person's camera there is the unit's standing eye height over its
-	origin, inside the vehicle's body; astromaddie's) */
+	/* (seen from a seat, the eyes at the unit's head, held in the seat
+	(vr_seat_eye): the first person's camera there is the unit's standing
+	eye height over its origin, inside the vehicle's body; astromaddie's) */
 	if (vr_view.seat_view && !cinematic_in_progress())
-	{
-		struct object_marker marker;
-
-		if (unit_try_and_get(vr_view.unit_index) &&
-			object_get_marker_by_name(vr_view.unit_index, "head", &marker, 1) > 0)
-		{
-			anchor = marker.matrix.position;
-		}
-	}
+		vr_seat_eye(&anchor);
 	if (!vr_view.seat_view && !cinematic_in_progress())
 		vr_eye_height(frame, player.local_player_index, &anchor);
 	/* (in a cinematic the head looks around its shot, without a letterbox;
@@ -2553,6 +2684,36 @@ void vr_player_control_facing(
 		vr_input_aim_turn(0.0f);
 		return;
 	}
+	else if (frame->controllers && vr_gunner_seat(player_control_get_unit_index(local_player_index)))
+	{
+		/* a gunner's seat seen from it: the hands on the gun's handles turn it
+		about its pivot (vr_handles); let go, it stays where it aims. Till
+		they first take them, the gun faces ahead of the seat's view, not the
+		way the player faced on foot */
+		real_vector3d current;
+		float level[3];
+
+		vector3d_from_euler_angles2d(&current, &before);
+		vr_world_to_local(current.n, vr_view.heading, level);
+		if (!vr_view.handles_taken)
+			memcpy(level, local_forward, sizeof(level));
+		vr_view.seat_aiming = TRUE;
+		if (vr_handles(frame, level, aim))
+		{
+			vr_view.handles_taken = TRUE;
+		}
+		else if (vr_view.handles_taken)
+		{
+			vr_view.set_yaw = before.yaw;
+			vr_view.aiming = TRUE;
+			vr_input_aim_turn(0.0f);
+			return;
+		}
+		else
+		{
+			memcpy(aim, level, sizeof(aim));
+		}
+	}
 	else if (vr_view.seat_aim == _vr_seat_aim_hand && frame->controllers &&
 		frame->hand[vr_view.main_hand].tracked && player_control_get_unit_index(local_player_index) != NONE &&
 		unit_get(player_control_get_unit_index(local_player_index))->object.parent_object_index != NONE)
@@ -2659,6 +2820,12 @@ int vr_render_reticle(
 	void)
 {
 	return !vr_view.drawing_reticle && ((vr_view.aiming && vr_view.hand_aiming) || vr_view.seat_aiming);
+}
+
+int vr_render_handles(
+	void)
+{
+	return vr_view.handles_held != 0 || (vr_view.seat_aiming && vr_gunner_seat(vr_view.unit_index));
 }
 
 int vr_render_seat_stick(
@@ -2906,6 +3073,9 @@ void vr_view_reset(
 	vr_view.seat_aiming = FALSE;
 	vr_view.seat_view = FALSE;
 	vr_view.driving = FALSE;
+	vr_view.handles_held = 0;
+	vr_view.handles_taken = FALSE;
+	vr_view.seat_eye_valid = FALSE;
 	vr_view.eye_crouch_tick = NONE;
 	vr_view.head_top_valid = FALSE;
 	vr_view.pistol_grip = FALSE;

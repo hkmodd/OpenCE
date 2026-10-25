@@ -294,12 +294,26 @@ What sets the size the world is seen at, each measured or derived:
   vehicle's pitch and roll not tilting the horizon. Getting in, the seat's
   forward is put ahead of the head; getting out, the heading on foot goes
   on from the seat's; both with a blink. The main hand's stick turns the
-  seat's view.
+  seat's view. The eyes are the seated unit's head as it sat down, held in
+  the frame of its seat's node turned about the vehicle's up alone
+  (`vr_seat_eye`): the head as drawn sank as a gunner's gun aimed up (its
+  breech rising into the eyes) and bowed with a Ghost's driver's facing;
+  a turret's gunner is still carried round as the gun turns. A seated
+  lean's height is taken from where the player sat, as its sideways and
+  ahead are.
 - What aims in a seat (`vr.vehicle_aim`): the main hand's aim (a gun, a
   tank's cannon, where a flier goes; a passenger's own weapon is held in
   the hand as on foot), its stick as the pad's right stick (`vr_input.c`:
   the facing turns as a pad turns it, the view with the facing or, seen
-  from the seat, with the vehicle), or the head. A Warthog's or a Ghost's
+  from the seat, with the vehicle), or the head. In a gunner's seat (not
+  a driver's) the hands work the gun's handles (`vr_handles`,
+  `vr_handles_aim`): the gun aims from the grips held (their middle)
+  through a pivot `VR_HANDLES_LEVER` ahead of them, placed along the gun's
+  aim as a hand takes them or lets go, so that it does not jump, and
+  pushed ahead by hands nearer it than that, so that they never come
+  round it; till they first take them the gun faces ahead of the seat's
+  view, and let go it stays. The grips there press nothing and make no
+  gesture (`vr_input.c`'s settings' handles). A Warthog's or a Ghost's
   driver steers with the off stick (`vr.vehicle_steering`,
   `vr_drive_steer`): the facing is the vehicle's forward turned in
   proportion to its sideways push up to the wheels' limits (read from the

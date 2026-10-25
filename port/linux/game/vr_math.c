@@ -312,4 +312,29 @@ float vr_drive_steer(float x, float left_limit, float right_limit, int backing)
 	return backing ? -angle : angle;
 }
 
+int vr_handles_aim(const float grip[3], float pivot[3], float lever, float aim[3])
+{
+	float length;
+	int axis;
+
+	for (axis = 0; axis < 3; axis++)
+		aim[axis] = pivot[axis] - grip[axis];
+	length = (float)sqrt(aim[0] * aim[0] + aim[1] * aim[1] + aim[2] * aim[2]);
+	if (!vr_finite(aim, 3) || !vr_finite(&lever, 1) || !(length > 1e-3f))
+		return 0;
+	for (axis = 0; axis < 3; axis++)
+		aim[axis] /= length;
+	if (length < lever)
+		vr_handles_pivot(grip, aim, lever, pivot);
+	return 1;
+}
+
+void vr_handles_pivot(const float grip[3], const float aim[3], float lever, float pivot[3])
+{
+	int axis;
+
+	for (axis = 0; axis < 3; axis++)
+		pivot[axis] = grip[axis] + aim[axis] * lever;
+}
+
 #endif
