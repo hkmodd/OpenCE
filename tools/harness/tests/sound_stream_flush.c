@@ -9,6 +9,7 @@ static unsigned long status[8],completed[8];
 #define mixer_lock 0
 #define pthread_mutex_lock(...) ((void)lock_depth++)
 #define pthread_mutex_unlock(...) ((void)lock_depth--)
+#define stream_lock() ((void)lock_depth++)
 #define channel_get(i) (&dsound_globals.channels[i])
 #define sound_cache_sound_hardware_unlock(...) ((void)unlocks++)
 #define interrupt_time_error(...) CHECK(FALSE,"invalid completion")
