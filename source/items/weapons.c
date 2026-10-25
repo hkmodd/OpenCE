@@ -234,6 +234,7 @@ symbols in this file:
 #include "units/units.h"
 #include "halo_vr.h" /* port: port/linux/game/vr_view.c */
 #include "dual_wield.h" /* port: port/linux/game/dual_wield.c */
+#include "game/player_rumble.h"
 
 #ifdef HALO_PORT_MAXIMUM_NETWORK_PLAYERS
 #include "bitmaps/bitmap_group.h"
@@ -2900,7 +2901,12 @@ static void weapon_trigger_fire(
 			negate_vector3d(&unit->unit.aiming_vector, &damage.direction);
 			damage.epicenter= unit->object.bounding_sphere_center;
 			damage.origin= damage.epicenter;
+			/* port: its vibration felt in the hand that holds the weapon (a
+			headset's controllers, player_rumble.c) */
+			rumble_set_impulse_hand(weapon_index==dual_wield_weapon(owner_object_index) ?
+				_rumble_hand_other : _rumble_hand_weapon);
 			object_cause_damage(&damage, owner_object_index, NONE, NONE, NONE, NULL);
+			rumble_set_impulse_hand(_rumble_hand_body);
 		}
 
 		if (weapon_definition->weapon.weapon_type==_weapon_type_plasma_pistol && trigger_index==1)

@@ -20,6 +20,8 @@ it; the macros at the end stand in for the hooks there.
 struct render_window;
 struct render_camera;
 union real_rectangle2d;
+union real_point3d;
+union real_vector3d;
 struct icon_hud_element_definition;
 struct real_matrix4x3;
 struct animation_graph;
@@ -146,13 +148,16 @@ void vr_resolve_scope(unsigned int texture, int width, int height, int x0, int y
 /* where the scope's image is held this frame (LOCAL space, facing +z) and
 its width in metres */
 void vr_scope_place(const struct vr_pose *pose, float width);
-/* the game's crosshair, drawn alone at the HUD's middle: the back buffer's
-square (x0, y0 to x1, y1 in its pixels, rows from the top) is the reticle's
-picture this frame, in place of the ring */
-void vr_resolve_reticle(unsigned int texture, int width, int height, int x0, int y0, int x1, int y1);
-/* the aiming reticle this frame: where the shot lands (LOCAL space), red
-over a target the game would aim at */
-void vr_reticle_place(const float position[3], int target);
+/* the reticles: the weapon in hand's (0) and the other hand's weapon's (1:
+dual_wield.c) */
+#define VR_RETICLE_COUNT 2
+/* a weapon's crosshair, drawn alone at the HUD's middle: the back buffer's
+square (x0, y0 to x1, y1 in its pixels, rows from the top) is that
+reticle's picture this frame, in place of the ring */
+void vr_resolve_reticle(int reticle, unsigned int texture, int width, int height, int x0, int y0, int x1, int y1);
+/* an aiming reticle this frame: where its weapon's shot lands (LOCAL
+space), red over a target the game would aim it at */
+void vr_reticle_place(int reticle, const float position[3], int target);
 /* the eyes black for this long (a cinematic's cut, vr_view.c) */
 void vr_blink(float seconds);
 /* the comfort vignette this frame: 0 none, 1 the eyes' field closed to
@@ -179,8 +184,16 @@ void vr_render_weapon_posed(void);
 backs drawn too (viewmodel_projection_begin, view_fov.c) */
 void vr_render_weapon_drawing(int drawing);
 /* first_person_weapons.c: the first-person arms' drawing begins (TRUE) or
-ends: mirrored in the left hand, their triangles' winding turned over */
-void vr_render_hands_drawing(int drawing);
+ends, those of a first-person weapon (its index: the weapon in hand's or
+the other hand's, first_person_weapons.h): mirrored in the left hand, their
+triangles' winding turned over */
+void vr_render_hands_drawing(int drawing, short weapon);
+/* first_person_weapons.c: the camera the weapon the unit's headset's
+other hand holds (dual_wield.c) is posed from this frame, behind that hand
+as the weapon in hand's is behind its own (vr_render_weapon_camera); 0 for
+none (not the headset's unit, that hand not tracked, the weapon in hand
+not held in the hand) */
+int vr_render_other_hand_camera(long unit_index, struct render_camera *camera);
 /* render_window: the HUD's pass starts on a clear ground */
 void vr_render_hud_begin(void);
 /* a new map: the heading is taken again from the game's facing
@@ -254,6 +267,10 @@ int vr_render_shot_from_hand(long unit_index);
 holds there is held: its place, forward where it points (the world's,
 this frame); 0 for none (not the headset's unit, the hand not tracked) */
 int vr_render_off_hand_grip(long unit_index, struct real_matrix4x3 *grip);
+/* dual_wield.c: where the first-person weapon in the unit's headset's
+other hand has its muzzle this frame, and the way its barrel points (the
+world's); 0 for none (that weapon not drawn in first person) */
+int vr_render_other_hand_muzzle(long unit_index, union real_point3d *origin, union real_vector3d *forward);
 /* vr_input.c: the other hand may hold a weapon of its own (by a VR
 server's rules: dual_wield.c) */
 int vr_render_dual_wield(void);
@@ -268,6 +285,14 @@ struct icon_hud_element_definition const *vr_render_prompt_icon(struct icon_hud_
 /* hud_weapon.c: the zoomed view is the scope's: the HUD's zoom-only
 elements are not drawn */
 int vr_render_zoom_hidden(void);
+/* player_rumble.c: the gamepad's motors are the headset's controllers'
+(the first gamepad's: xinput_sdl.c) */
+int vr_render_rumble(short gamepad_index);
+/* player_rumble.c: the left and the right controllers' vibration (0 to 1)
+for the motors' speeds (0 to 1, the left and the right) of the body's
+impulses (hits, blasts), of the weapon in hand's shots and of the other
+hand's weapon's (vr_input.c's vr_rumble_hands) */
+void vr_render_rumble_hands(float const body[2], float const weapon[2], float const other[2], float hands[2]);
 
 #else
 
@@ -283,7 +308,8 @@ int vr_render_zoom_hidden(void);
 #define vr_render_weapon_camera(camera) ((void)0)
 #define vr_render_weapon_posed() ((void)0)
 #define vr_render_weapon_drawing(drawing) ((void)0)
-#define vr_render_hands_drawing(drawing) ((void)0)
+#define vr_render_hands_drawing(drawing, weapon) ((void)0)
+#define vr_render_other_hand_camera(unit_index, camera) 0
 #define vr_render_hud_begin() ((void)0)
 #define vr_view_reset() ((void)0)
 #define vr_player_control_facing(local_player_index) ((void)0)
@@ -307,10 +333,13 @@ int vr_render_zoom_hidden(void);
 #define vr_render_shot_origin(unit_index, origin) 0
 #define vr_render_shot_from_hand(unit_index) 0
 #define vr_render_off_hand_grip(unit_index, grip) 0
+#define vr_render_other_hand_muzzle(unit_index, origin, forward) 0
 #define vr_render_dual_wield() 0
 #define vr_render_carries_four(unit_index) 0
 #define vr_render_prompt_icon(icon) (icon)
 #define vr_render_zoom_hidden() 0
+#define vr_render_rumble(gamepad_index) 0
+#define vr_render_rumble_hands(body, weapon, other, hands) ((void)0)
 #define vr_frame_begin() 0
 #define vr_frame_finish() ((void)0)
 #define vr_frame_seconds(seconds) 0

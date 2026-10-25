@@ -650,6 +650,35 @@ long player_aim_projectile_preview(
 	return target_object_index;
 }
 
+/* port: the aim assist of player_aim_projectile_preview alone, from the
+ray itself (a shot from a headset's hand) */
+real player_aim_assist_level(long player_index, real_point3d const *position, real_vector3d const *direction)
+{
+	struct player_datum *player= player_get(player_index);
+	long aiming_unit_index= unit_get_aiming_unit_index(player->unit_index);
+	struct aim_assist_parameters parameters;
+	struct aim_assist_target target;
+	real autoaim_level= 0.f;
+
+	match_assert(
+		"c:\\halo\\SOURCE\\game\\aim_assist.c",
+		79,
+		global_current_collision_user_depth < MAXIMUM_COLLISION_USER_STACK_DEPTH);
+	global_current_collision_users[global_current_collision_user_depth++] = _collision_user_aim_assist;
+	if (unit_get_aim_assist_parameters(aiming_unit_index, unit_get_zoom_level(aiming_unit_index), &parameters) &&
+		aim_assist(&parameters, position, direction, player->unit_index, player->team_index, &target))
+	{
+		autoaim_level= target.autoaim_level;
+	}
+	match_assert(
+		"c:\\halo\\SOURCE\\game\\aim_assist.c",
+		140,
+		global_current_collision_user_depth > 1);
+	--global_current_collision_user_depth;
+
+	return autoaim_level;
+}
+
 /* port: firing keeps the original aim-assist bookkeeping */
 long player_aim_projectile(long player_index, real_point3d const *position, real_vector3d *direction)
 {

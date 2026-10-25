@@ -66,6 +66,10 @@ long player_aim_projectile(
 /* port: the same shot direction, without recording a shot's aim-assist
 target or timestamp (the local passenger reticle's read-only query). */
 long player_aim_projectile_preview(long player_index, real_point3d const *position, real_vector3d *direction);
+/* port: how fully the player's aim assist takes a target along a ray (0 to
+1), as a shot from a headset's hand along it is aimed (a headset's other
+hand's reticle, port/linux/game/vr_view.c) */
+real player_aim_assist_level(long player_index, real_point3d const *position, real_vector3d const *direction);
 long local_player_aim_assist(
 	short local_player_index,
 	real *autoaim_level,

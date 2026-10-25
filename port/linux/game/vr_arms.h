@@ -33,6 +33,12 @@ struct vr_arms_pose
 	/* the other hand belongs on the weapon: held there with both hands, or
 	in an animation of its own (a reload, a grenade's throw) */
 	boolean off_on_weapon;
+	/* the other hand cups a pistol held with both hands: at the weapon's
+	hand, beside it, not at its controller */
+	boolean off_supports;
+	/* the other arm is not drawn (vr_arms_hide_other: the other hand holds a
+	weapon of its own, dual_wield.c): it is left as it is */
+	boolean off_hidden;
 	/* how far the other controller's grip and trigger are pressed (0 to 1):
 	its hand's fingers close with them */
 	real off_squeeze, off_trigger;
@@ -55,5 +61,9 @@ follows the head once that has turned more than VR_ARMS_BODY_TURN from it
 void vr_arms_body(real_vector3d const *head_forward, real heading, float forward[3]);
 /* a new map, a new view: the body faces the head again */
 void vr_arms_reset(void);
+/* the first-person weapon's other arm (the one not holding the weapon) not
+drawn: each hand holds a weapon of its own (dual_wield.c), drawn as its
+weapon's arms are (vr_view.c) */
+void vr_arms_hide_other(real_matrix4x3 *matrices, short count, struct animation_graph *graph);
 
 #endif

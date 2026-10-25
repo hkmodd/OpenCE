@@ -159,8 +159,11 @@ void render_particles(
 			particle_index = data_next_index(particle_data, particle_index))
 		{
 			struct particle_datum *particle = particle_get(particle_index);
+			/* port: of either of the local player's first-person weapons,
+			the one in hand or the one in a headset's other hand
+			(first_person_weapons.h) */
 			boolean owned_by_local_player =
-				particle->local_player_index == local_player_index;
+				FIRST_PERSON_WEAPON_OF_LOCAL_PLAYER(particle->local_player_index, local_player_index);
 
 			/* port: not the first-person weapon's with it hidden (view_fov.c) */
 			if (render_location_visible(&particle->location) &&

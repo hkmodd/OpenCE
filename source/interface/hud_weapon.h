@@ -31,8 +31,12 @@ void hud_update_weapon(
 void hud_render_weapon_interface(
 	struct player_datum *player);
 /* port: the player's crosshairs alone, as hud_render_weapon_interface draws
-them: a headset's reticle (port/linux/game/vr_view.c) */
+them: a headset's reticle (port/linux/game/vr_view.c); or a weapon's (the
+one in a headset's other hand, NONE: the player's), red if `aimed` (NONE:
+as the player's aim is) */
 void hud_weapon_port_draw_crosshairs(
-	struct player_datum *player);
+	struct player_datum *player,
+	long weapon_index,
+	short aimed);
 
 #endif // __HUD_WEAPON_H

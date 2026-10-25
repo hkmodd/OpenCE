@@ -61,6 +61,7 @@ cutscenes are drawn as always, onto the flat screen held in the room.
 #include "cutscene/cinematics.h"
 #include "game/players.h"
 #include "game/game.h"
+#include "game/aim_assist.h"
 #include "interface/first_person_weapons.h"
 #include "interface/hud.h"
 #include "items/items.h"
@@ -103,7 +104,7 @@ void halo_vr_resolve_eye(int eye);
 /* ... and a rectangle of it (the screen's coordinates) into the scope's,
 or the reticle's picture */
 void halo_vr_resolve_scope(short x0, short y0, short x1, short y1);
-void halo_vr_resolve_reticle(short x0, short y0, short x1, short y1);
+void halo_vr_resolve_reticle(short reticle, short x0, short y0, short x1, short y1);
 
 /* the body's neck under the head (first_person_legs.c): this far behind
 the eyes, along the body (metres: further than a person's, 10 cm, as the
@@ -263,10 +264,12 @@ static struct
 	/* the models' barrels, the next replaced */
 	struct vr_weapon_fit fits[VR_WEAPON_FITS];
 	short next_fit;
-	/* the reticle is placed this frame (vr_reticle), and the game's
-	crosshair is being drawn for it (vr_render_hud_begin); the barrel's
-	direction in the world, as the hand holds it this frame */
-	boolean reticle_placed;
+	/* the reticles placed this frame (vr_reticle: the weapon in hand's
+	and the other hand's weapon's, and whether that one is on a target),
+	and the game's crosshair is being drawn for them (vr_render_hud_begin);
+	the barrel's direction in the world, as the hand holds it this frame */
+	boolean reticle_placed[VR_RETICLE_COUNT];
+	boolean other_reticle_aimed;
 	boolean drawing_reticle;
 	real_vector3d barrel;
 	/* the scope's window this frame, and its field */
@@ -373,6 +376,16 @@ static struct
 	at the grip, along where the hand points */
 	boolean off_grip_valid;
 	struct render_camera off_grip;
+	/* the weapon the other hand holds (dual_wield.c), posed and drawn in
+	first person as the weapon in hand is (first_person_weapons.c's other
+	hand's): its camera behind that hand, its muzzle and its barrel's way in
+	the world, as the hand holds it this frame, and its arms mirrored (in the
+	left hand) */
+	boolean other_valid;
+	struct render_camera other_camera;
+	real_point3d other_muzzle;
+	real_vector3d other_barrel;
+	boolean other_arms_mirrored;
 	/* the times the other hand's weapon went to the main hand, as last
 	seen (vr_input.c) */
 	unsigned long off_transfers;
@@ -637,13 +650,15 @@ static boolean vr_drive_facing(
 }
 
 /* the aim's orientation: the hand's, or with the off hand holding the
-weapon too, from the main hand to it (vr_two_handed) */
+weapon too, from the main hand to it (vr_two_handed); never with a weapon
+of the off hand's own in it (dual_wield.c) */
 static void vr_hand_aim(
 	struct vr_frame const *frame,
 	struct vr_hand const *hand,
 	float orientation[4])
 {
-	if (!vr_two_handed(frame, vr_view.main_hand == VR_HAND_LEFT, vr_view.pistol_grip, vr_view.aim_pitch,
+	if (dual_wield_weapon(vr_view.unit_index) != NONE ||
+		!vr_two_handed(frame, vr_view.main_hand == VR_HAND_LEFT, vr_view.pistol_grip, vr_view.aim_pitch,
 		orientation))
 	{
 		vr_hand_pointing(hand, vr_view.aim_pitch, orientation);
@@ -1194,12 +1209,13 @@ offset from the grip (vr_weapon_muzzle, until the model's is learnt). In
 either hand the model is as the right hand holds it, never mirrored (the
 arms are: vr_arms_mirror) */
 static void vr_weapon_in_hand(
+	long weapon_index,
 	float const aim[4],
 	float model[4],
 	float muzzle[3])
 {
 	static float const local_forward[3] = { 0.0f, 0.0f, -1.0f };
-	struct vr_weapon_fit const *fit = vr_weapon_fit(vr_held_weapon());
+	struct vr_weapon_fit const *fit = vr_weapon_fit(weapon_index);
 	float turn[4], from_grip[3];
 	int axis;
 
@@ -1506,11 +1522,50 @@ static void vr_hud_bounds(
 	bounds->y1 = tangent * 0.75f;
 }
 
-/* the reticle: where the held weapon's shot meets the world, in LOCAL
-space (the eyes' mapping of it reversed), red when the game's crosshair
-would be (the aim assist's target fully in the aim). A weapon in the hand
-shoots from its muzzle along its barrel as the hand holds it this frame
-(the shot's own ray is the last tick's); in a seat, the shot's ray */
+/* a reticle where a shot from `origin` along `forward` meets the world, in
+LOCAL space (the eyes' mapping of it reversed) */
+static void vr_reticle_along(
+	struct vr_frame const *frame,
+	real_point3d const *anchor,
+	real heading,
+	float const head[3],
+	int reticle,
+	real_point3d const *origin,
+	real_vector3d const *forward,
+	boolean aimed)
+{
+	real_point3d target;
+	real_vector3d ray;
+	struct collision_result collision;
+	float world[3], local[3], position[3];
+	struct unit_datum *unit = unit_try_and_get(vr_view.unit_index);
+	long ignored = vr_view.unit_index;
+	int axis;
+
+	/* (in a seat, the vehicle is not in the way) */
+	if (unit && unit->object.parent_object_index != NONE)
+		ignored = unit->object.parent_object_index;
+	/* (as far as the passengers' reticle looks: 128 units) */
+	scale_vector3d(forward, 128.0f, &ray);
+	if (collision_test_vector(_collision_test_for_projectiles_flags, origin, &ray, ignored, &collision))
+		target = collision.point;
+	else
+		point_from_line3d(origin, forward, 128.0f, &target);
+	for (axis = 0; axis < 3; axis++)
+		world[axis] = (target.n[axis] - anchor->n[axis]) / VR_UNITS_PER_METRE;
+	vr_world_to_local(world, heading, local);
+	for (axis = 0; axis < 3; axis++)
+		position[axis] = frame->head.position[axis] - head[axis] + local[axis];
+	vr_reticle_place(reticle, position, aimed);
+	vr_view.reticle_placed[reticle] = TRUE;
+}
+
+/* the reticles: where the held weapon's shot meets the world, red when the
+game's crosshair would be (the aim assist's target fully in the aim). A
+weapon in the hand shoots from its muzzle along its barrel as the hand
+holds it this frame (the shot's own ray is the last tick's); in a seat,
+the shot's ray. The other hand's weapon's (dual_wield.c) from its own
+muzzle, red as the aim assist takes its own shot's target */
 static void vr_reticle(
 	struct vr_frame const *frame,
 	short local_player_index,
@@ -1518,14 +1573,10 @@ static void vr_reticle(
 	real heading,
 	float const head[3])
 {
-	real_point3d origin, target;
-	real_vector3d forward, ray;
-	struct collision_result collision;
-	float world[3], local[3], position[3];
+	real_point3d origin;
+	real_vector3d forward;
 	long weapon_index = vr_aimed_weapon();
 	struct unit_datum *unit = unit_try_and_get(vr_view.unit_index);
-	long ignored = vr_view.unit_index;
-	int axis;
 
 	if (weapon_index == NONE)
 		return;
@@ -1538,22 +1589,16 @@ static void vr_reticle(
 	{
 		return;
 	}
-	/* (in a seat, the vehicle is not in the way) */
-	if (unit && unit->object.parent_object_index != NONE)
-		ignored = unit->object.parent_object_index;
-	/* (as far as the passengers' reticle looks: 128 units) */
-	scale_vector3d(&forward, 128.0f, &ray);
-	if (collision_test_vector(_collision_test_for_projectiles_flags, &origin, &ray, ignored, &collision))
-		target = collision.point;
-	else
-		point_from_line3d(&origin, &forward, 128.0f, &target);
-	for (axis = 0; axis < 3; axis++)
-		world[axis] = (target.n[axis] - anchor->n[axis]) / VR_UNITS_PER_METRE;
-	vr_world_to_local(world, heading, local);
-	for (axis = 0; axis < 3; axis++)
-		position[axis] = frame->head.position[axis] - head[axis] + local[axis];
-	vr_reticle_place(position, player_control_get_autoaim_level(local_player_index) >= 1.0f);
-	vr_view.reticle_placed = TRUE;
+	vr_reticle_along(frame, anchor, heading, head, 0, &origin, &forward,
+		player_control_get_autoaim_level(local_player_index) >= 1.0f);
+	if (vr_view.other_valid && unit && unit->unit.player_index != NONE &&
+		first_person_weapon_get_local_index(dual_wield_weapon(vr_view.unit_index)) >= FIRST_PERSON_WEAPON_OTHER_HAND)
+	{
+		vr_view.other_reticle_aimed = player_aim_assist_level(unit->unit.player_index, &vr_view.other_muzzle,
+			&vr_view.other_barrel) >= 1.0f;
+		vr_reticle_along(frame, anchor, heading, head, 1, &vr_view.other_muzzle, &vr_view.other_barrel,
+			vr_view.other_reticle_aimed);
+	}
 }
 
 /* the scope's window, while the aiming hand's weapon is zoomed: from its
@@ -1589,7 +1634,7 @@ static boolean vr_scope_window(
 	if (!(magnification >= 1.0f && magnification <= 100.0f))
 		magnification = 1.0f;
 	vr_hand_aim(frame, hand, aim.orientation);
-	vr_weapon_in_hand(aim.orientation, model, along);
+	vr_weapon_in_hand(weapon_index, aim.orientation, model, along);
 	for (axis = 0; axis < 3; axis++)
 		offset[axis] = head[axis] + hand->grip.position[axis] + along[axis] - frame->head.position[axis];
 	vr_camera_from_pose(&camera, &aim, offset, anchor, heading);
@@ -1731,7 +1776,7 @@ short vr_render_windows(
 	vr_view.stereo = FALSE;
 	vr_view.weapon_in_hand = FALSE;
 	vr_view.scope = FALSE;
-	vr_view.reticle_placed = FALSE;
+	csmemset(vr_view.reticle_placed, 0, sizeof(vr_view.reticle_placed));
 	for (window_index = 0; window_index < MAXIMUM_WINDOWS + 1; window_index++)
 		vr_view.pass_of_window[window_index] = _vr_render_pass_none;
 	frame = vr_frame_get();
@@ -1878,7 +1923,9 @@ short vr_render_windows(
 	{
 		float both[4];
 
+		/* (not with a weapon of the off hand's own in it, dual_wield.c) */
 		vr_input_weapon_hands(vr_view.weapon_in_hand && !vr_view.bare &&
+			dual_wield_weapon(vr_view.unit_index) == NONE &&
 			vr_two_handed(frame, vr_view.main_hand == VR_HAND_LEFT, vr_view.pistol_grip, vr_view.aim_pitch, both));
 	}
 	if (vr_view.weapon_in_hand)
@@ -1891,7 +1938,7 @@ short vr_render_windows(
 
 		vr_hand_aim(frame, hand, aim.orientation);
 		model = aim;
-		vr_weapon_in_hand(aim.orientation, model.orientation, along);
+		vr_weapon_in_hand(vr_held_weapon(), aim.orientation, model.orientation, along);
 		vr_rotate(model.orientation, vr_weapon_grip, grip);
 		for (axis = 0; axis < 3; axis++)
 			offset[axis] = head[axis] + hand->grip.position[axis] - grip[axis] - frame->head.position[axis];
@@ -1903,6 +1950,32 @@ short vr_render_windows(
 		vr_camera_from_pose(&muzzle, &aim, offset, &anchor, heading);
 		vr_view.muzzle = muzzle.position;
 		vr_view.barrel = muzzle.forward;
+	}
+	/* (the other hand's weapon, behind that hand as the weapon in hand is
+	behind its own, along where that hand points) */
+	vr_view.other_valid = FALSE;
+	if (vr_view.weapon_in_hand && vr_view.off_grip_valid && dual_wield_weapon(vr_view.unit_index) != NONE)
+	{
+		struct vr_hand const *hand = &frame->hand[vr_view.main_hand == VR_HAND_LEFT ? VR_HAND_RIGHT : VR_HAND_LEFT];
+		struct vr_pose aim = hand->aim, model;
+		float grip[3], along[3];
+		struct render_camera muzzle = player.rasterizer_camera;
+		int axis;
+
+		vr_hand_pointing(hand, vr_view.aim_pitch, aim.orientation);
+		model = aim;
+		vr_weapon_in_hand(dual_wield_weapon(vr_view.unit_index), aim.orientation, model.orientation, along);
+		vr_rotate(model.orientation, vr_weapon_grip, grip);
+		for (axis = 0; axis < 3; axis++)
+			offset[axis] = head[axis] + hand->grip.position[axis] - grip[axis] - frame->head.position[axis];
+		vr_view.other_camera = player.rasterizer_camera;
+		vr_camera_from_pose(&vr_view.other_camera, &model, offset, &anchor, heading);
+		for (axis = 0; axis < 3; axis++)
+			offset[axis] = head[axis] + hand->grip.position[axis] + along[axis] - frame->head.position[axis];
+		vr_camera_from_pose(&muzzle, &aim, offset, &anchor, heading);
+		vr_view.other_muzzle = muzzle.position;
+		vr_view.other_barrel = muzzle.forward;
+		vr_view.other_valid = TRUE;
 	}
 	if ((vr_view.weapon_in_hand && !vr_view.bare) || (vr_view.seat_aiming && !vr_view.cinematic))
 		vr_reticle(frame, player.local_player_index, &anchor, heading, head);
@@ -1963,20 +2036,21 @@ void vr_render_weapon_camera(
 }
 
 /* where the model's barrel is, from its pose (before the arms are
-mirrored: the weapon never is) */
+mirrored: the weapon never is): the first-person weapon `weapon`'s (the
+weapon in hand's or the other hand's, first_person_weapons.h), the weapon
+`weapon_index`, posed from `camera` */
 static void vr_weapon_learn(
-	void)
+	short weapon,
+	struct render_camera const *camera,
+	long weapon_index)
 {
-	struct render_camera const *camera = &vr_view.weapon_camera;
 	struct vr_weapon_fit *fit;
 	struct object_marker marker;
 	real_vector3d left, relative;
 	float muzzle[3], forward[3], length;
-	long weapon_index;
 	int axis;
 
-	weapon_index = vr_held_weapon();
-	if (weapon_index == NONE || !first_person_weapon_idle(render.local_player_index) ||
+	if (weapon_index == NONE || !first_person_weapon_idle(weapon) ||
 		first_person_weapon_get_marker_by_name(weapon_index, "primary trigger", &marker, 1) < 1)
 	{
 		return;
@@ -2034,14 +2108,18 @@ normal, the barrel's side of the camera from the model's learnt muzzle):
 the right hand that holds the weapon becomes a left hand on its grip, the
 other a right hand. The weapon stays as it is, as the right hand holds it,
 its markers (its muzzle's, its flashlight's) with it; FALSE if not
-mirrored */
+mirrored. The first-person weapon `weapon`'s (the weapon in hand's or the
+other hand's, first_person_weapons.h), the weapon `weapon_index`, posed from
+`camera` */
 static boolean vr_arms_mirror(
 	real_matrix4x3 *matrices,
 	short node_count,
-	boolean all)
+	boolean all,
+	short weapon,
+	struct render_camera const *camera,
+	long weapon_index)
 {
-	struct render_camera const *camera = &vr_view.weapon_camera;
-	struct vr_weapon_fit const *fit = all ? NULL : vr_weapon_fit(vr_held_weapon());
+	struct vr_weapon_fit const *fit = all ? NULL : vr_weapon_fit(weapon_index);
 	boolean arms[MAXIMUM_NODES_PER_ANIMATION];
 	real_vector3d normal;
 	real_point3d middle;
@@ -2049,7 +2127,7 @@ static boolean vr_arms_mirror(
 
 	if (node_count > MAXIMUM_NODES_PER_ANIMATION)
 		return FALSE;
-	if (!all && first_person_weapon_arm_nodes(render.local_player_index, arms, node_count) <= 0)
+	if (!all && first_person_weapon_arm_nodes(weapon, arms, node_count) <= 0)
 		return FALSE;
 	cross_product3d(&camera->up, &camera->forward, &normal);
 	if (!(normalize3d(&normal) > 0.0f))
@@ -2088,20 +2166,40 @@ static boolean vr_arms_mirror(
 
 /* each arm its own (vr.arms "free"): from its shoulder, the weapon's hand
 holding the weapon (or with `empty` hands, none: as the hands are bare),
-the other its controller (vr_arms.c) */
+the other its controller (vr_arms.c). With `other`, the arms of the weapon
+the other hand holds (dual_wield.c): its weapon's hand that other hand, its
+other arm not drawn; and while that weapon is drawn, the weapon in hand's
+other arm is not either (each hand holds its own) */
 static void vr_arms_update(
 	struct animation_graph *graph,
 	real_matrix4x3 *matrices,
 	short count,
-	boolean empty)
+	boolean empty,
+	boolean other)
 {
 	struct vr_frame const *frame = vr_frame_get();
 	struct vr_arms_pose pose;
 	short main_hand = vr_view.main_hand, off_hand = main_hand == VR_HAND_LEFT ? VR_HAND_RIGHT : VR_HAND_LEFT;
+	boolean other_drawn = other ||
+		first_person_weapon_get_animation_graph(render.local_player_index + FIRST_PERSON_WEAPON_OTHER_HAND) != NULL;
 	float orientation[4];
 
-	if (!vr_view.arms_free || !graph)
+	if (!graph)
 		return;
+	/* (the hand that holds this one weapon its weapon's hand) */
+	if (other)
+	{
+		short hand = main_hand;
+
+		main_hand = off_hand;
+		off_hand = hand;
+	}
+	if (!vr_view.arms_free)
+	{
+		if (other_drawn)
+			vr_arms_hide_other(matrices, count, graph);
+		return;
+	}
 	pose.head = vr_view.head_camera.position;
 	pose.head_forward = vr_view.head_camera.forward;
 	pose.head_up = vr_view.head_camera.up;
@@ -2116,18 +2214,24 @@ static void vr_arms_update(
 	pose.off_grip = vr_view.grips[off_hand].position;
 	pose.off_forward = vr_view.grips[off_hand].forward;
 	pose.off_up = vr_view.grips[off_hand].up;
-	/* (a pistol held with both hands: the other hand cups the weapon's, at
-	its controller, not where its animations hold it, away from a pistol) */
-	pose.off_on_weapon = !empty && ((!vr_view.bare && !vr_view.pistol_grip &&
+	/* (a pistol held with both hands: the other hand cups the weapon's, not
+	where its animations hold it, away from a pistol; not with a weapon of
+	its own, its arm then not drawn) */
+	pose.off_hidden = other_drawn;
+	pose.off_supports = !empty && !other_drawn && !vr_view.bare && vr_view.pistol_grip &&
+		vr_two_handed(frame, pose.main_left, vr_view.pistol_grip, vr_view.aim_pitch, orientation) == VR_HELD_SUPPORT;
+	pose.off_on_weapon = !empty && !other_drawn && ((!vr_view.bare && !vr_view.pistol_grip &&
 		vr_two_handed(frame, pose.main_left, vr_view.pistol_grip, vr_view.aim_pitch, orientation)) ||
 		first_person_weapon_off_hand_busy(render.local_player_index));
 	pose.off_squeeze = frame->hand[off_hand].squeeze;
 	pose.off_trigger = frame->hand[off_hand].trigger;
-	pose.main_bare = vr_view.bare || empty;
+	pose.main_bare = !other && (vr_view.bare || empty);
 	pose.main_squeeze = frame->hand[main_hand].squeeze;
 	pose.main_trigger = frame->hand[main_hand].trigger;
 	pose.seconds = frame->display_period;
 	vr_arms_pose(matrices, count, graph, &pose);
+	if (other_drawn)
+		vr_arms_hide_other(matrices, count, graph);
 }
 
 /* `in`, along `from`'s axes (its left `from_left`), along `to`'s instead */
@@ -2183,6 +2287,32 @@ static boolean vr_empty_hands_pose(
 	return TRUE;
 }
 
+/* the weapon the other hand holds (dual_wield.c), posed from behind that
+hand (first_person_weapon_other_hand_render_update): where its model's
+barrel is; in the left hand its arms mirrored (the weapon never is); its
+weapon's arm from that hand's shoulder, its other arm not drawn */
+static void vr_other_hand_posed(
+	void)
+{
+	short weapon = (short)(render.local_player_index + FIRST_PERSON_WEAPON_OTHER_HAND);
+	struct animation_graph *graph = first_person_weapon_get_animation_graph(weapon);
+	long weapon_index = dual_wield_weapon(vr_view.unit_index);
+	real_matrix4x3 *matrices;
+	short count;
+
+	vr_view.other_arms_mirrored = FALSE;
+	matrices = first_person_weapon_get_node_matrices(weapon, &count);
+	if (!vr_view.other_valid || !graph || count <= 0 || count > MAXIMUM_NODES_PER_ANIMATION)
+		return;
+	vr_weapon_learn(weapon, &vr_view.other_camera, weapon_index);
+	if (vr_view.main_hand == VR_HAND_RIGHT)
+	{
+		vr_view.other_arms_mirrored = vr_arms_mirror(matrices, count, FALSE, weapon, &vr_view.other_camera,
+			weapon_index);
+	}
+	vr_arms_update(graph, matrices, count, FALSE, TRUE);
+}
+
 void vr_render_weapon_posed(
 	void)
 {
@@ -2208,15 +2338,22 @@ void vr_render_weapon_posed(
 	else if (vr_empty_hands_pose())
 	{
 		if (vr_view.main_hand == VR_HAND_LEFT)
-			vr_view.arms_mirrored = vr_arms_mirror(vr_view.empty_pose, vr_view.empty_count, TRUE);
-		vr_arms_update(vr_view.empty_graph, vr_view.empty_pose, vr_view.empty_count, TRUE);
+		{
+			vr_view.arms_mirrored = vr_arms_mirror(vr_view.empty_pose, vr_view.empty_count, TRUE,
+				render.local_player_index, &vr_view.weapon_camera, NONE);
+		}
+		vr_arms_update(vr_view.empty_graph, vr_view.empty_pose, vr_view.empty_count, TRUE, FALSE);
 		vr_view.empty_posed = TRUE;
 		return;
 	}
-	vr_weapon_learn();
+	vr_weapon_learn(render.local_player_index, &vr_view.weapon_camera, vr_held_weapon());
 	if (vr_view.main_hand == VR_HAND_LEFT)
-		vr_view.arms_mirrored = vr_arms_mirror(matrices, count, FALSE);
-	vr_arms_update(graph, matrices, count, FALSE);
+	{
+		vr_view.arms_mirrored = vr_arms_mirror(matrices, count, FALSE, render.local_player_index,
+			&vr_view.weapon_camera, vr_held_weapon());
+	}
+	vr_arms_update(graph, matrices, count, FALSE, FALSE);
+	vr_other_hand_posed();
 }
 
 int vr_render_empty_hands(
@@ -2247,9 +2384,42 @@ void vr_render_weapon_drawing(
 }
 
 void vr_render_hands_drawing(
-	int drawing)
+	int drawing,
+	short weapon)
 {
-	halo_vr_mirror_winding(drawing && VR_RENDER_WORLD() && vr_view.stereo && vr_view.arms_mirrored);
+	boolean mirrored = weapon >= FIRST_PERSON_WEAPON_OTHER_HAND ? vr_view.other_arms_mirrored : vr_view.arms_mirrored;
+
+	halo_vr_mirror_winding(drawing && VR_RENDER_WORLD() && vr_view.stereo && mirrored);
+}
+
+int vr_render_other_hand_camera(
+	long unit_index,
+	struct render_camera *camera)
+{
+	if (!vr_view.stereo || !vr_view.other_valid || unit_index == NONE || unit_index != vr_view.unit_index)
+		return FALSE;
+	camera->position = vr_view.other_camera.position;
+	camera->forward = vr_view.other_camera.forward;
+	camera->up = vr_view.other_camera.up;
+	return TRUE;
+}
+
+int vr_render_other_hand_muzzle(
+	long unit_index,
+	real_point3d *origin,
+	real_vector3d *forward)
+{
+	long weapon_index = unit_index == NONE ? NONE : dual_wield_weapon(unit_index);
+
+	/* (the weapon drawn in first person, in the other hand) */
+	if (!vr_view.stereo || !vr_view.other_valid || unit_index == NONE || unit_index != vr_view.unit_index ||
+		weapon_index == NONE || first_person_weapon_get_local_index(weapon_index) < FIRST_PERSON_WEAPON_OTHER_HAND)
+	{
+		return FALSE;
+	}
+	*origin = vr_view.other_muzzle;
+	*forward = vr_view.other_barrel;
+	return TRUE;
 }
 
 /* the HUD's ground: nothing, so that the panel shows only the HUD. Before
@@ -2262,21 +2432,32 @@ void vr_render_hud_begin(
 {
 	long player_index = render.local_player_index == NONE ? NONE :
 		local_player_get_player_index(render.local_player_index);
+	int reticle;
 
 	halo_vr_clear_transparent();
-	if (!vr_view.reticle_placed || player_index == NONE || player_get(player_index)->unit_index == NONE ||
-		!hud_scripted_globals->show_hud)
-	{
+	if (player_index == NONE || player_get(player_index)->unit_index == NONE || !hud_scripted_globals->show_hud)
 		return;
+	for (reticle = 0; reticle < VR_RETICLE_COUNT; reticle++)
+	{
+		if (!vr_view.reticle_placed[reticle])
+			continue;
+		vr_view.drawing_reticle = TRUE;
+		rasterizer_hud_begin();
+		if (reticle)
+		{
+			hud_weapon_port_draw_crosshairs(player_get(player_index), dual_wield_weapon(vr_view.unit_index),
+				(short)vr_view.other_reticle_aimed);
+		}
+		else
+		{
+			hud_weapon_port_draw_crosshairs(player_get(player_index), NONE, NONE);
+		}
+		rasterizer_hud_end();
+		vr_view.drawing_reticle = FALSE;
+		halo_vr_resolve_reticle((short)reticle, 320 - VR_CROSSHAIR_HALF, 240 - VR_CROSSHAIR_HALF,
+			320 + VR_CROSSHAIR_HALF, 240 + VR_CROSSHAIR_HALF);
+		halo_vr_clear_transparent();
 	}
-	vr_view.drawing_reticle = TRUE;
-	rasterizer_hud_begin();
-	hud_weapon_port_draw_crosshairs(player_get(player_index));
-	rasterizer_hud_end();
-	vr_view.drawing_reticle = FALSE;
-	halo_vr_resolve_reticle(320 - VR_CROSSHAIR_HALF, 240 - VR_CROSSHAIR_HALF, 320 + VR_CROSSHAIR_HALF,
-		240 + VR_CROSSHAIR_HALF);
-	halo_vr_clear_transparent();
 }
 
 /* ---------- aiming */
@@ -2423,6 +2604,21 @@ int vr_render_zoom_hidden(
 	void)
 {
 	return vr_view.scope;
+}
+
+int vr_render_rumble(
+	short gamepad_index)
+{
+	return gamepad_index == 0 && vr_active();
+}
+
+void vr_render_rumble_hands(
+	float const body[2],
+	float const weapon[2],
+	float const other[2],
+	float hands[2])
+{
+	vr_input_rumble_hands(body, weapon, other, hands);
 }
 
 int vr_render_reticle(

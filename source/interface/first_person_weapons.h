@@ -15,7 +15,25 @@ header included in hcex build.
 
 /* ---------- constants */
 
+/* port: the first-person weapons: each local player's weapon in hand, its
+index the local player's, and the weapon a headset's player holds in the
+other hand, FIRST_PERSON_WEAPON_OTHER_HAND more (port/linux/game/dual_wield.c);
+effects and particles on either take its index for their local player's */
+enum
+{
+	FIRST_PERSON_WEAPON_OTHER_HAND= 4,
+	NUMBER_OF_FIRST_PERSON_WEAPONS= 2*FIRST_PERSON_WEAPON_OTHER_HAND,
+};
+
 /* ---------- macros */
+
+/* port: the local player a first-person weapon's index is of, and whether
+an index (an effect's, a particle's) is a first-person weapon of that local
+player's */
+#define FIRST_PERSON_WEAPON_LOCAL_PLAYER(index) ((short)((index)%FIRST_PERSON_WEAPON_OTHER_HAND))
+#define FIRST_PERSON_WEAPON_OF_LOCAL_PLAYER(index, local_player_index) \
+	((index)>=0 && (index)<NUMBER_OF_FIRST_PERSON_WEAPONS && \
+	FIRST_PERSON_WEAPON_LOCAL_PLAYER(index)==(local_player_index))
 
 /* ---------- structures */
 

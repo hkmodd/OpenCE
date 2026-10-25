@@ -22,6 +22,11 @@ model's node matrices, once posed, are posed again, arm by arm:
   vr_two_handed) and while an animation of its own plays (the weapon
   readied, reloaded, a grenade thrown, a melee: first_person_weapon_off_
   hand_busy), blended there and back over VR_ARMS_BLEND seconds.
+- A pistol held with both hands (vr_two_handed's support: the other grip
+  squeezed at the weapon's hand) the other hand cups: held as at its
+  controller, but at the weapon's hand's grip, beside it on its own side
+  (VR_ARMS_SUPPORT_*), its fingers closed about it; it follows the weapon,
+  not its controller, blended there and back as on the weapon.
 - With the weapon put away (the hands bare, vr_view.c) the weapon's hand
   is free too: where it held the weapon, its fingers its controller's.
 - The free hand's fingers are the controller's: open at rest, closed as
@@ -74,6 +79,11 @@ flashlight) are the weapon's hand's, which keeps its place.
 /* the other hand goes to the weapon, or back to its controller, in this
 long (seconds) */
 #define VR_ARMS_BLEND 0.15f
+/* the other hand cupping a pistol: its grip from the weapon's hand's, along
+that grip's axes (metres: ahead, to the other hand's side, up) */
+#define VR_ARMS_SUPPORT_AHEAD 0.0f
+#define VR_ARMS_SUPPORT_SIDE 0.035f
+#define VR_ARMS_SUPPORT_UP -0.01f
 /* the free hand's fingers: how far closed at rest (of their whole curl),
 and how far a closed finger bends at its knuckle and at its middle joint
 (radians: 70 and 100 degrees) */
@@ -154,8 +164,10 @@ static struct
 	boolean body_valid;
 	real body_yaw;
 	/* how far the other hand is on the weapon: 0 at its controller, 1 on
-	the weapon as animated */
+	the weapon as animated; and how far it cups a pistol held with both
+	hands (0 at its controller, 1 at the weapon's hand) */
 	real off_on_weapon;
+	real off_support;
 } vr_arms;
 
 /* ---------- private code */
@@ -446,10 +458,40 @@ static void vr_arms_out_of(
 		out[axis] = axes[0][axis] * v[0] + axes[1][axis] * v[1] + axes[2][axis] * v[2];
 }
 
-/* where the other hand holds its controller, as the weapon's hand holds
-the weapon's grip against the main controller, mirrored across the
-controller's upright plane: the turn of the other hand from its animated
-pose, and its wrist's place (FALSE when the hands have no axes) */
+/* the grip the other hand holds (world units): its controller's, or
+`support` of the way to the weapon's hand's grip beside it on the other
+hand's side, along that grip's axes (a pistol cupped); FALSE when the
+weapon's grip has no axes */
+static boolean vr_arms_off_grip(
+	struct vr_arms_pose const *pose,
+	float support,
+	real_point3d *grip,
+	real_vector3d *forward,
+	real_vector3d *up)
+{
+	float main_axes[3][3], beside[3];
+	float side = pose->main_left ? -1.0f : 1.0f;
+	int axis;
+
+	if (!vr_arms_grip_axes(&pose->main_forward, &pose->main_up, main_axes))
+		return FALSE;
+	for (axis = 0; axis < 3; axis++)
+	{
+		beside[axis] = (float)pose->main_grip.n[axis] + (main_axes[0][axis] * VR_ARMS_SUPPORT_AHEAD +
+			main_axes[1][axis] * side * VR_ARMS_SUPPORT_SIDE + main_axes[2][axis] * VR_ARMS_SUPPORT_UP) *
+			VR_UNITS_PER_METRE;
+		grip->n[axis] = pose->off_grip.n[axis] + (beside[axis] - pose->off_grip.n[axis]) * support;
+		forward->n[axis] = pose->off_forward.n[axis] + (pose->main_forward.n[axis] - pose->off_forward.n[axis]) *
+			support;
+		up->n[axis] = pose->off_up.n[axis] + (pose->main_up.n[axis] - pose->off_up.n[axis]) * support;
+	}
+	return TRUE;
+}
+
+/* where the other hand holds its grip (vr_arms_off_grip), as the weapon's
+hand holds the weapon's grip against the main controller, mirrored across
+the controller's upright plane: the turn of the other hand from its
+animated pose, and its wrist's place (FALSE when the hands have no axes) */
 static boolean vr_arms_free_hand(
 	real_matrix4x3 const *matrices,
 	struct vr_arms_pose const *pose,
@@ -458,10 +500,13 @@ static boolean vr_arms_free_hand(
 {
 	float main_axes[3][3], off_axes[3][3], hand[3][3], animated[3][3], wanted[3][3], columns[3][3];
 	float offset[3], local[3], along[3], across[3];
+	real_point3d off_grip;
+	real_vector3d off_forward, off_up;
 	int axis, k;
 
-	if (!vr_arms_grip_axes(&pose->main_forward, &pose->main_up, main_axes) ||
-		!vr_arms_grip_axes(&pose->off_forward, &pose->off_up, off_axes) ||
+	if (!vr_arms_off_grip(pose, vr_arms.off_support, &off_grip, &off_forward, &off_up) ||
+		!vr_arms_grip_axes(&pose->main_forward, &pose->main_up, main_axes) ||
+		!vr_arms_grip_axes(&off_forward, &off_up, off_axes) ||
 		!vr_arms_hand_axes(matrices, _vr_arm_weapon, hand) || !vr_arms_hand_axes(matrices, _vr_arm_off, animated))
 	{
 		return FALSE;
@@ -473,7 +518,7 @@ static boolean vr_arms_free_hand(
 	local[1] = -local[1];
 	vr_arms_out_of(off_axes, local, offset);
 	for (axis = 0; axis < 3; axis++)
-		wrist[axis] = (float)pose->off_grip.n[axis] + offset[axis];
+		wrist[axis] = (float)off_grip.n[axis] + offset[axis];
 	vr_arms_into(main_axes, hand[0], local);
 	local[1] = -local[1];
 	vr_arms_out_of(off_axes, local, along);
@@ -499,30 +544,29 @@ static boolean vr_arms_free_hand(
 }
 
 /* the free hand's fingers closed `curl` (0 open, 1 a fist; the index's
-`index_curl`), `t` of the way from as they are */
+`index_curl`), `t` of the way from as they are; the hand is the player's
+right (as it is drawn: the arms mirrored or not) or left */
 static void vr_arms_fingers(
 	real_matrix4x3 *matrices,
 	struct animation_graph *graph,
 	short count,
 	short arm,
+	boolean right,
 	float index_curl,
 	float curl,
 	float t)
 {
-	float hand[3][3], axis[3], tip[3], palm;
+	float hand[3][3], axis[3];
+	/* (the palm's side of the hand: the hand's z, along it across its
+	knuckles from the index to the pinky, on a right hand, its back on a
+	left; not where an animation curls a finger, which may be straight or
+	bent back) */
+	float palm = right ? 1.0f : -1.0f;
 	short finger;
 	int k;
 
 	if (!(t > 0.0f) || !vr_arms_hand_axes(matrices, arm, hand))
 		return;
-	/* (the palm's side of the hand: where the animation curls the middle
-	finger, against the hand's z, which is its back on one hand and its palm
-	on the other) */
-	finger = vr_arms.bent[arm][_vr_bent_middle][0];
-	if (finger == NONE)
-		return;
-	vr_arms_point_offset(&matrices[finger].position, &matrices[vr_arms.bent[arm][_vr_bent_middle][2]].position, tip);
-	palm = tip[0] * hand[2][0] + tip[1] * hand[2][1] + tip[2] * hand[2][2] > 0.0f ? 1.0f : -1.0f;
 	/* (a turn about y by a positive angle takes x toward -z) */
 	for (k = 0; k < 3; k++)
 		axis[k] = -palm * hand[1][k];
@@ -643,6 +687,7 @@ void vr_arms_reset(
 {
 	vr_arms.body_valid = FALSE;
 	vr_arms.off_on_weapon = 1.0f;
+	vr_arms.off_support = 0.0f;
 }
 
 void vr_arms_pose(
@@ -680,12 +725,19 @@ void vr_arms_pose(
 	}
 	memcpy(animated, matrices, sizeof(*matrices) * count);
 
-	/* the other hand: on the weapon, at its controller, or between */
-	target = pose->off_on_weapon || !pose->main_valid || !pose->off_valid ? 1.0f : 0.0f;
-	step = pose->seconds > 0.0f && pose->seconds < 0.1f ? pose->seconds / VR_ARMS_BLEND : 0.1f / VR_ARMS_BLEND;
-	vr_arms.off_on_weapon = target > vr_arms.off_on_weapon ? MIN(target, vr_arms.off_on_weapon + step) :
-		MAX(target, vr_arms.off_on_weapon - step);
-	free_hand = vr_arms.off_on_weapon < 1.0f && pose->main_valid && pose->off_valid &&
+	/* the other hand: on the weapon, at its controller, or between (none
+	while that arm is not drawn: as it was) */
+	if (!pose->off_hidden)
+	{
+		target = pose->off_on_weapon || !pose->main_valid || !pose->off_valid ? 1.0f : 0.0f;
+		step = pose->seconds > 0.0f && pose->seconds < 0.1f ? pose->seconds / VR_ARMS_BLEND : 0.1f / VR_ARMS_BLEND;
+		vr_arms.off_on_weapon = target > vr_arms.off_on_weapon ? MIN(target, vr_arms.off_on_weapon + step) :
+			MAX(target, vr_arms.off_on_weapon - step);
+		target = pose->off_supports ? 1.0f : 0.0f;
+		vr_arms.off_support = target > vr_arms.off_support ? MIN(target, vr_arms.off_support + step) :
+			MAX(target, vr_arms.off_support - step);
+	}
+	free_hand = !pose->off_hidden && vr_arms.off_on_weapon < 1.0f && pose->main_valid && pose->off_valid &&
 		vr_arms_free_hand(animated, pose, free_turn, free_wrist);
 	if (!free_hand)
 		memcpy(free_turn, none, sizeof(free_turn));
@@ -714,11 +766,13 @@ void vr_arms_pose(
 				matrix->position.n[axis] = place[axis] + turned[axis];
 			vr_arms_turn(matrix, free_turn);
 		}
-		vr_arms_fingers(matrices, graph, count, _vr_arm_off, pose->off_trigger, pose->off_squeeze,
+		/* (closed about a pistol it cups) */
+		vr_arms_fingers(matrices, graph, count, _vr_arm_off, pose->main_left,
+			MAX(pose->off_trigger, vr_arms.off_support), MAX(pose->off_squeeze, vr_arms.off_support),
 			1.0f - vr_arms.off_on_weapon);
 	}
 	if (pose->main_bare)
-		vr_arms_fingers(matrices, graph, count, _vr_arm_weapon, pose->main_trigger, pose->main_squeeze, 1.0f);
+		vr_arms_fingers(matrices, graph, count, _vr_arm_weapon, !pose->main_left, pose->main_trigger, pose->main_squeeze, 1.0f);
 
 	/* the shoulders, either side of the neck */
 	for (axis = 0; axis < 3; axis++)
@@ -751,7 +805,39 @@ void vr_arms_pose(
 		}
 		shoulder[2] -= VR_ARMS_SHOULDER_DOWN * VR_UNITS_PER_METRE;
 		bend[2] -= 1.0f;
+		if (arm == _vr_arm_off && pose->off_hidden)
+			continue;
 		vr_arms_reach(matrices, animated, arm, shoulder, bend, arm == _vr_arm_off ? free_turn : none);
+	}
+}
+
+void vr_arms_hide_other(
+	real_matrix4x3 *matrices,
+	short count,
+	struct animation_graph *graph)
+{
+	real_point3d at;
+	short upper, index;
+
+	if (!graph || count <= 0 || count > MAXIMUM_NODES_PER_ANIMATION || count > graph->nodes.count)
+		return;
+	if (graph != vr_arms.graph)
+		vr_arms_find_bones(graph, count);
+	if (!vr_arms.found)
+		return;
+	upper = vr_arms.bones[_vr_arm_off][_vr_arm_upper];
+	if (upper < 0 || upper >= count)
+		return;
+	/* (every node of it gathered to a point at its shoulder, of no size:
+	its triangles have none) */
+	at = matrices[upper].position;
+	for (index = 0; index < count; index++)
+	{
+		if (vr_arms_under(graph, index, upper))
+		{
+			matrices[index].scale = 0.0f;
+			matrices[index].position = at;
+		}
 	}
 }
 

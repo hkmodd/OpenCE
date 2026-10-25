@@ -40,6 +40,7 @@ with their unit, and with what it rides.
 #include "camera/observer.h"
 #include "cutscene/cinematics.h"
 #include "game/players.h"
+#include "interface/first_person_weapons.h"
 #include "render/render_cameras.h"
 #include "units/units.h"
 #include "halo_vr.h"
@@ -147,7 +148,9 @@ struct interpolated_first_person
 
 static struct interpolated_object *interpolated_objects;
 static struct interpolated_camera interpolated_cameras[MAXIMUM_LOCAL_PLAYERS];
-static struct interpolated_first_person interpolated_first_person[MAXIMUM_LOCAL_PLAYERS];
+/* (each first-person weapon's: a local player's in hand, or in a
+headset's other hand) */
+static struct interpolated_first_person interpolated_first_person[NUMBER_OF_FIRST_PERSON_WEAPONS];
 static long interpolation_tick;
 static long interpolation_frame;
 static boolean interpolation_rendering;
@@ -495,7 +498,7 @@ void render_interpolation_reset(void)
 			interpolated_objects[index].object_index = NONE;
 	}
 	memset(interpolated_cameras, 0, sizeof(interpolated_cameras));
-	for (index = 0; index < MAXIMUM_LOCAL_PLAYERS; index++)
+	for (index = 0; index < NUMBER_OF_FIRST_PERSON_WEAPONS; index++)
 	{
 		interpolated_first_person[index].node_count = 0;
 		interpolated_first_person[index].has_previous = FALSE;
@@ -907,7 +910,7 @@ void render_interpolation_first_person(
 	short node_index;
 
 	if (!interpolation_rendering ||
-		local_player_index < 0 || local_player_index >= MAXIMUM_LOCAL_PLAYERS ||
+		local_player_index < 0 || local_player_index >= NUMBER_OF_FIRST_PERSON_WEAPONS ||
 		node_count <= 0 || node_count > MAXIMUM_INTERPOLATED_NODES)
 	{
 		return;

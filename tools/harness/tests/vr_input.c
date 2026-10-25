@@ -571,20 +571,39 @@ int main(int argc, char **argv)
             close_to(forward[2], -cosf(0.5f), 1e-4f), "the aim's -z turned 0.5 up (%f, %f, %f)", (double)forward[0],
             (double)forward[1], (double)forward[2]);
 
-        /* the rumble: the weapon's hand feels both motors, the other the left, and the right while it holds it too */
+        /* the rumble: the body's, the weapon's hand feels both motors, the other the left, and the right while it
+        holds it too; each weapon's shots the hand that holds it, the weapon in hand's both while both hold it */
         {
             float amplitude[VR_HAND_COUNT];
+            float const body[2] = { 0.2f, 0.9f }, still[2] = { 0.0f, 0.0f };
 
-            vr_rumble_hands(0.2f, 0.9f, 0, 0, amplitude);
+            vr_rumble_hands(body, 0.0f, 0.0f, 0, 0, amplitude);
             CHECK(close_to(amplitude[VR_HAND_RIGHT], 0.9f, 1e-6f) && close_to(amplitude[VR_HAND_LEFT], 0.2f, 1e-6f),
-                "one hand: the weapon's feels the shots, the other the hits (%f, %f)",
+                "one hand: the weapon's feels the light motor, the other the heavy (%f, %f)",
                 (double)amplitude[VR_HAND_LEFT], (double)amplitude[VR_HAND_RIGHT]);
-            vr_rumble_hands(0.2f, 0.9f, 0, 1, amplitude);
+            vr_rumble_hands(body, 0.0f, 0.0f, 0, 1, amplitude);
             CHECK(close_to(amplitude[VR_HAND_LEFT], 0.9f, 1e-6f) && close_to(amplitude[VR_HAND_RIGHT], 0.9f, 1e-6f),
-                "both hands on it: both feel the shots");
-            vr_rumble_hands(0.2f, 0.9f, 1, 0, amplitude);
+                "both hands on it: both feel the light motor");
+            vr_rumble_hands(body, 0.0f, 0.0f, 1, 0, amplitude);
             CHECK(close_to(amplitude[VR_HAND_LEFT], 0.9f, 1e-6f) && close_to(amplitude[VR_HAND_RIGHT], 0.2f, 1e-6f),
                 "left-handed: mirrored");
+            vr_rumble_hands(still, 0.7f, 0.0f, 0, 0, amplitude);
+            CHECK(close_to(amplitude[VR_HAND_RIGHT], 0.7f, 1e-6f) && amplitude[VR_HAND_LEFT] == 0.0f,
+                "the weapon in hand's shot: its hand only (%f, %f)",
+                (double)amplitude[VR_HAND_LEFT], (double)amplitude[VR_HAND_RIGHT]);
+            vr_rumble_hands(still, 0.7f, 0.0f, 0, 1, amplitude);
+            CHECK(close_to(amplitude[VR_HAND_LEFT], 0.7f, 1e-6f) && close_to(amplitude[VR_HAND_RIGHT], 0.7f, 1e-6f),
+                "held with both hands: both");
+            vr_rumble_hands(still, 0.0f, 0.6f, 0, 0, amplitude);
+            CHECK(close_to(amplitude[VR_HAND_LEFT], 0.6f, 1e-6f) && amplitude[VR_HAND_RIGHT] == 0.0f,
+                "the other hand's weapon's shot: that hand only (%f, %f)",
+                (double)amplitude[VR_HAND_LEFT], (double)amplitude[VR_HAND_RIGHT]);
+            vr_rumble_hands(still, 0.0f, 0.6f, 1, 0, amplitude);
+            CHECK(close_to(amplitude[VR_HAND_RIGHT], 0.6f, 1e-6f) && amplitude[VR_HAND_LEFT] == 0.0f,
+                "left-handed: the other hand the right");
+            vr_rumble_hands(body, 0.95f, 0.5f, 0, 0, amplitude);
+            CHECK(close_to(amplitude[VR_HAND_RIGHT], 0.95f, 1e-6f) && close_to(amplitude[VR_HAND_LEFT], 0.5f, 1e-6f),
+                "all at once: each hand the strongest of its own");
         }
         return 0;
     }

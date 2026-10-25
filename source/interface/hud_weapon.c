@@ -414,6 +414,10 @@ static boolean weapon_hud_state_index_valid(
 
 /* ---------- globals */
 
+/* port: the crosshairs drawn are aimed (red, TRUE) or not, whatever the
+player's aim's state (hud_weapon_port_draw_crosshairs; NONE: as that is) */
+static short crosshairs_port_aimed = NONE;
+
 static struct weapon_hud_globals *weapon_hud_globals = NULL;
 /* port: a crosshair's bad sequence or bitmap was reported (once) */
 static boolean crosshair_bad_bitmap_reported = FALSE;
@@ -998,6 +1002,10 @@ static void crosshairs_draw(
 		struct crosshair_hud_state *crosshair = get_crosshair_state(player->local_player_index);
 		struct weapon_hud_interface_definition *root_definition = weapon_hud_interface_definition_get(hud_index);
 		short map_type_flags = global_scenario_get()->type != _scenario_type_main_menu;
+		/* port: the aim's state (red over a target), or the weapon's own drawn
+		alone for a headset's other hand (hud_weapon_port_draw_crosshairs) */
+		long aimed = crosshairs_port_aimed != NONE ? crosshairs_port_aimed :
+			crosshair->states[_crosshair_state_aim].value.reference_data;
 
 		SET_FLAG(map_type_flags, 1, local_player_count() == 1);
 		SET_FLAG(map_type_flags, 2, local_player_count() > 1);
@@ -1101,7 +1109,7 @@ static void crosshairs_draw(
 									if (TEST_FLAG(item->flags, _hud_crosshair_flashes_bit))
 									{
 										frame_index = 0;
-										if (state->value.reference_data > 0)
+										if (aimed > 0)
 										{
 											color = get_flash_color(&item->colors, 0);
 											goto draw_crosshair;
@@ -1109,7 +1117,7 @@ static void crosshairs_draw(
 									}
 									else
 									{
-										frame_index = (short)state->value.reference_data;
+										frame_index = (short)aimed;
 									}
 									goto use_flat_color;
 
@@ -1126,7 +1134,7 @@ static void crosshairs_draw(
 											TEST_FLAG(item->flags, _hud_crosshair_not_on_default_zoom_bit);
 									}
 									if (TEST_FLAG(item->flags, _hud_crosshair_flashes_bit) &&
-										crosshair->states[_crosshair_state_aim].value.reference_data > 0)
+										aimed > 0)
 									{
 										color = get_flash_color(&item->colors, 0);
 										goto draw_crosshair;
@@ -2154,15 +2162,20 @@ void hud_render_weapon_interface(
 /* port: the player's crosshairs alone (its weapon's, or a gunner's seat's),
 for a headset's reticle (port/linux/game/vr_view.c) */
 void hud_weapon_port_draw_crosshairs(
-	struct player_datum *player)
+	struct player_datum *player,
+	long weapon_index,
+	short aimed)
 {
 	struct unit_datum *unit = unit_get(player->unit_index);
-	long weapon_index = unit_inventory_get_weapon(
-		player->unit_index,
-		unit->unit.current_weapon_index);
 	struct weapon_interface_state weapon_state;
 	long hud_index;
 
+	if (weapon_index == NONE)
+	{
+		weapon_index = unit_inventory_get_weapon(
+			player->unit_index,
+			unit->unit.current_weapon_index);
+	}
 	if (weapon_index == NONE &&
 		unit->object.parent_object_index != NONE &&
 		unit->unit.parent_seat_index != NONE)
@@ -2190,11 +2203,13 @@ void hud_weapon_port_draw_crosshairs(
 		weapon_build_weapon_interface_state(
 			weapon_index,
 			&weapon_state);
+		crosshairs_port_aimed = aimed;
 		crosshairs_draw(
 			player,
 			weapon_index,
 			hud_index,
 			&weapon_state);
+		crosshairs_port_aimed = NONE;
 	}
 }
 

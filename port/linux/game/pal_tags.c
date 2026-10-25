@@ -40,6 +40,7 @@ the files: nothing played or sent between machines.
 #include "cache/cache_files.h"
 #include "game/game_globals.h"
 #include "game/players.h"
+#include "interface/first_person_weapons.h"
 #include "items/projectile_definitions.h"
 #include "items/weapon_definitions.h"
 #include "models/model_animation_definitions.h"
@@ -145,15 +146,16 @@ static struct
 	/* the loaded map's graphs (tag indices) of pal_first_person_animations,
 	NONE where the map has not the graph or not the PAL frame count */
 	long first_person_graphs[NUMBEROF(pal_first_person_animations)];
-	/* each local player's first-person animation and how far through its
-	next frame it is (pal_tags_first_person_advance) */
+	/* each first-person weapon's animation (a local player's weapon in
+	hand, or in a headset's other hand) and how far through its next frame
+	it is (pal_tags_first_person_advance) */
 	struct
 	{
 		long graph_index;
 		short animation_index;
 		short frame_index;
 		real fraction;
-	} advancing[MAXIMUM_LOCAL_PLAYERS];
+	} advancing[NUMBER_OF_FIRST_PERSON_WEAPONS];
 } pal_tags;
 
 /* ---------- private code */
@@ -413,7 +415,7 @@ boolean pal_tags_first_person_advance(
 {
 	short index;
 
-	if (local_player_index < 0 || local_player_index >= MAXIMUM_LOCAL_PLAYERS)
+	if (local_player_index < 0 || local_player_index >= NUMBER_OF_FIRST_PERSON_WEAPONS)
 		return TRUE;
 	/* (another animation, or this one again from its start; not a state
 	holding its last frame, first_person_weapon_next_state) */
@@ -447,7 +449,7 @@ real pal_tags_first_person_fraction(
 	short animation_index,
 	short frame_index)
 {
-	if (local_player_index < 0 || local_player_index >= MAXIMUM_LOCAL_PLAYERS ||
+	if (local_player_index < 0 || local_player_index >= NUMBER_OF_FIRST_PERSON_WEAPONS ||
 		pal_tags.advancing[local_player_index].graph_index != graph_index ||
 		pal_tags.advancing[local_player_index].animation_index != animation_index ||
 		frame_index < pal_tags.advancing[local_player_index].frame_index ||

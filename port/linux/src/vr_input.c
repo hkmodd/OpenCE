@@ -1068,12 +1068,21 @@ int vr_two_handed(struct vr_frame const *frame, int left_handed, int pistol_grip
 	return VR_HELD_BOTH;
 }
 
-void vr_rumble_hands(float left, float right, int left_handed, int both, float amplitude[VR_HAND_COUNT])
+void vr_rumble_hands(float const body[2], float weapon, float other, int left_handed, int both,
+	float amplitude[VR_HAND_COUNT])
 {
 	int main_index = left_handed ? VR_HAND_LEFT : VR_HAND_RIGHT;
+	float held = body[0] > body[1] ? body[0] : body[1];
+	float spare = both ? held : body[0];
 
-	amplitude[main_index] = left > right ? left : right;
-	amplitude[!main_index] = both ? amplitude[main_index] : left;
+	if (weapon > held)
+		held = weapon;
+	if (both && weapon > spare)
+		spare = weapon;
+	if (other > spare)
+		spare = other;
+	amplitude[main_index] = held;
+	amplitude[!main_index] = spare;
 }
 
 int vr_ray_panel(struct vr_pose const *aim, struct vr_pose const *panel, float width, float height, float *u,
@@ -1196,11 +1205,18 @@ int vr_input_left_handed(void)
 as the SDL controllers' do, xinput_sdl.c) */
 void vr_input_rumble(float left, float right)
 {
+	vr_haptic(VR_HAND_LEFT, left, 0.1f);
+	vr_haptic(VR_HAND_RIGHT, right, 0.1f);
+}
+
+void vr_input_rumble_hands(float const body[2], float const weapon[2], float const other[2], float hands[2])
+{
 	float amplitude[VR_HAND_COUNT];
 
-	vr_rumble_hands(left, right, vr_input_left_handed(), vr_input_both_hands, amplitude);
-	vr_haptic(VR_HAND_LEFT, amplitude[VR_HAND_LEFT], 0.1f);
-	vr_haptic(VR_HAND_RIGHT, amplitude[VR_HAND_RIGHT], 0.1f);
+	vr_rumble_hands(body, weapon[0] > weapon[1] ? weapon[0] : weapon[1], other[0] > other[1] ? other[0] : other[1],
+		vr_input_left_handed(), vr_input_both_hands, amplitude);
+	hands[0] = amplitude[VR_HAND_LEFT];
+	hands[1] = amplitude[VR_HAND_RIGHT];
 }
 
 void vr_input_weapon_hands(int both)

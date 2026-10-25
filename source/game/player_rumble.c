@@ -46,6 +46,7 @@ symbols in this file:
 #include "math/periodic_functions.h"
 #include "memory/data.h"
 #include "saved games/game_state.h"
+#include "halo_vr.h" /* port: port/linux/game/vr_view.c */
 
 /* ---------- constants */
 
@@ -83,12 +84,20 @@ struct rumble_motor_values
 
 /* ---------- prototypes */
 
+/* port: and of the impulses felt in one hand (NONE: every impulse) */
 static struct rumble_motor_values rumble_calculate(
-	struct rumble_player *player);
+	struct rumble_player *player,
+	short hand);
+static void rumble_hands(
+	struct rumble_player *player,
+	short gamepad_index,
+	struct rumble_motor_values *motors);
 
 /* ---------- globals */
 
 static struct rumble_globals *rumble_globals;
+/* port: what the impulses started now are felt in (rumble_set_impulse_hand) */
+static short rumble_impulse_hand = _rumble_hand_body;
 
 /* ---------- public code */
 
@@ -186,6 +195,8 @@ void rumble_player_impulse(
 		impulse = &player->impulses[7];
 
 	*impulse = *rumble_definition;
+	/* port: felt in the body or in a hand (rumble_hands) */
+	impulse->hand = (byte)rumble_impulse_hand;
 
 	motor_scale = (1.0f - rumble_definition->scale_floor) * scale +
 		rumble_definition->scale_floor;
@@ -286,7 +297,7 @@ void rumble_update(
 	{
 		struct rumble_player *player =
 			&rumble_globals->players[local_player_index];
-		struct rumble_motor_values motors = rumble_calculate(player);
+		struct rumble_motor_values motors = rumble_calculate(player, NONE);
 		long player_index;
 
 		for (impulse_index = 0;
@@ -307,6 +318,9 @@ void rumble_update(
 					player_ui_get_single_player_local_player_from_controller(
 						(short)controller_index)))
 				{
+					/* port: a headset's controllers feel each weapon's shots
+					in the hand that holds it */
+					rumble_hands(player, (short)controller_index, &motors);
 					input_set_gamepad_rumbler_state(
 						(short)controller_index,
 						motors.left,
@@ -330,25 +344,73 @@ void rumble_update(
 	return;
 }
 
+/* port: weapons.c's, about a shot's own damage effect */
+void rumble_set_impulse_hand(
+	short hand)
+{
+	rumble_impulse_hand = hand;
+
+	return;
+}
+
 /* ---------- private code */
 
+/* port: the motors as a headset's controllers feel them (the left hand's,
+the right's: vr_render_rumble_hands), from the body's impulses and each
+weapon's shots; left as they are for any other gamepad */
+static void rumble_hands(
+	struct rumble_player *player,
+	short gamepad_index,
+	struct rumble_motor_values *motors)
+{
+	if (vr_render_rumble(gamepad_index))
+	{
+		real speeds[NUMBER_OF_RUMBLE_HANDS][NUMBER_OF_RUMBLE_MOTORS];
+		real hands[NUMBER_OF_RUMBLE_MOTORS];
+		short hand;
+
+		for (hand = 0; hand < NUMBER_OF_RUMBLE_HANDS; hand++)
+		{
+			struct rumble_motor_values values = rumble_calculate(player, hand);
+
+			speeds[hand][0] = values.left / (real)MAXIMUM_RUMBLE_MOTOR_VALUE;
+			speeds[hand][1] = values.right / (real)MAXIMUM_RUMBLE_MOTOR_VALUE;
+		}
+		vr_render_rumble_hands(speeds[_rumble_hand_body], speeds[_rumble_hand_weapon],
+			speeds[_rumble_hand_other], hands);
+		motors->left = (word)fast_ftol(PIN(hands[0] * (real)MAXIMUM_RUMBLE_MOTOR_VALUE, 0.0f,
+			(real)MAXIMUM_RUMBLE_MOTOR_VALUE));
+		motors->right = (word)fast_ftol(PIN(hands[1] * (real)MAXIMUM_RUMBLE_MOTOR_VALUE, 0.0f,
+			(real)MAXIMUM_RUMBLE_MOTOR_VALUE));
+	}
+
+	return;
+}
+
 static struct rumble_motor_values rumble_calculate(
-	struct rumble_player *player)
+	struct rumble_player *player,
+	short hand)
 {
 	struct rumble_motor_values values;
 	real motors[NUMBER_OF_RUMBLE_MOTORS];
 	real value;
 	long impulse_index;
 	long motor_index;
+	/* port: the continuous and the scripted rumble are the body's */
+	boolean body = hand == NONE || hand == _rumble_hand_body;
 
-	motors[0] = player->continuous_left;
-	motors[1] = player->continuous_right;
+	motors[0] = body ? player->continuous_left : 0.0f;
+	motors[1] = body ? player->continuous_right : 0.0f;
 
 	for (impulse_index = 0;
 		impulse_index < MAXIMUM_RUMBLE_IMPULSES;
 		impulse_index++)
 	{
 		real time = player->impulse_time[impulse_index];
+
+		/* port: only those felt in the hand asked for */
+		if (hand != NONE && player->impulses[impulse_index].hand != hand)
+			continue;
 
 		for (motor_index = 0;
 			motor_index < NUMBER_OF_RUMBLE_MOTORS;
@@ -368,7 +430,7 @@ static struct rumble_motor_values rumble_calculate(
 		}
 	}
 
-	if (rumble_globals->scripted_scale != 0.0f)
+	if (body && rumble_globals->scripted_scale != 0.0f)
 	{
 		motors[0] += rumble_globals->scripted_left_motor *
 			rumble_globals->scripted_scale;

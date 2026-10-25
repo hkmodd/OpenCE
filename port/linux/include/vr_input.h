@@ -324,10 +324,13 @@ enum
 int vr_two_handed(struct vr_frame const *frame, int left_handed, int pistol_grip, float pitch,
 	float orientation[4]);
 
-/* each hand's vibration (0 to 1) for the game's motors: the weapon's hand
-feels both, the other the left (heavy: hits, blasts) and, while it holds
-the weapon too, the right (light: the shots) */
-void vr_rumble_hands(float left, float right, int left_handed, int both, float amplitude[VR_HAND_COUNT]);
+/* each hand's vibration (0 to 1) for the game's motors (0 to 1): the
+body's (hits, blasts) the weapon's hand feels both, the other the left
+(heavy) and, while it holds the weapon too, the right (light); the weapon
+in hand's shots its hand feels, and the other while it holds it too; the
+other hand's weapon's shots that hand */
+void vr_rumble_hands(float const body[2], float weapon, float other, int left_handed, int both,
+	float amplitude[VR_HAND_COUNT]);
 
 /* where a hand's ray (its aim pose, -z along the ray) meets a panel (width
 by height metres, centred on `panel`, its face toward +z), as fractions of
@@ -342,8 +345,14 @@ frame; 0 (pad untouched) while the session is not running or has no
 controllers */
 int vr_input_gamepad(struct vr_pad *pad, int menus);
 /* xinput_sdl.c's XInputSetState: the first controller's rumble, each
-motor's speed 0 to 1, felt in the hand on its side */
+motor's speed 0 to 1, felt in the hand on its side (the game's motors as
+vr_input_rumble_hands made them) */
 void vr_input_rumble(float left, float right);
+/* vr_view.c (player_rumble.c's): the left and the right controllers'
+vibration for the game's motors' speeds (the left and the right, 0 to 1)
+of the body's impulses, of the weapon in hand's shots and of the other
+hand's weapon's, as this frame holds the weapons (vr_rumble_hands) */
+void vr_input_rumble_hands(float const body[2], float const weapon[2], float const other[2], float hands[2]);
 /* vr_view.c: the left hand holds the weapon and aims (vr.left_handed, or
 the weapon passed to it) */
 int vr_input_left_handed(void);

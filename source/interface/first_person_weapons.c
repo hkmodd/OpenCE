@@ -126,6 +126,7 @@ symbols in this file:
 #include "units/units.h"
 #include "view_fov.h" /* port: port/linux/game/view_fov.c */
 #include "halo_vr.h" /* port: port/linux/game/vr_view.c */
+#include "dual_wield.h" /* port: port/linux/game/dual_wield.c */
 #include "shaders/shader_definitions.h" /* port: (the shield's flare on the arms) */
 #include "shaders/shaders.h"
 /* port: port/linux/game/shield_color.c */
@@ -395,6 +396,16 @@ real pal_tags_first_person_fraction(short local_player_index, long graph_index, 
 /* ---------- globals */
 
 static struct first_person_weapon *first_person_weapons;
+/* port: the weapon each headset's player holds in the other hand, posed and
+drawn as the weapon in hand is (port/linux/game/dual_wield.c), its index
+FIRST_PERSON_WEAPON_OTHER_HAND more than the local player's; not in the
+game's state (a saved game has none: the hand takes its weapon up again),
+and the weapon it last took up, so that one it could not is not taken up
+again each tick */
+static struct first_person_weapon first_person_weapon_other_hands[MAXIMUM_NUMBER_OF_LOCAL_PLAYERS];
+static long first_person_weapon_other_hand_taken[MAXIMUM_NUMBER_OF_LOCAL_PLAYERS];
+typedef char verify_first_person_weapon_other_hand[
+	FIRST_PERSON_WEAPON_OTHER_HAND==MAXIMUM_NUMBER_OF_LOCAL_PLAYERS ? 1 : -1];
 /* port: the first-person animations each local player's hands were last
 drawn with: a headset's player with no weapon left holds up empty hands
 posed in them (first_person_weapon_draw_empty_hands, vr_view.c) */
@@ -402,6 +413,14 @@ static boolean first_person_weapon_hands_drawn[MAXIMUM_NUMBER_OF_LOCAL_PLAYERS];
 static long first_person_weapon_hands_animations[MAXIMUM_NUMBER_OF_LOCAL_PLAYERS];
 
 static void first_person_weapon_draw_empty_hands(
+	short local_player_index,
+	long unit_index);
+/* port: a weapon in hand or in the other hand drawn, posed, updated */
+static void first_person_weapon_draw_weapon(
+	short index);
+static void first_person_weapon_other_hand_render_update(
+	short local_player_index);
+static void first_person_weapon_other_hand_update(
 	short local_player_index,
 	long unit_index);
 
@@ -455,6 +474,16 @@ void first_person_weapons_initialize_for_new_map(
 		first_person_weapons[local_player_index].current_sound_index= NONE;
 		first_person_weapons[local_player_index].current_sound_state= NONE;
 		first_person_weapon_hands_drawn[local_player_index]= FALSE; /* port */
+		/* port: and the other hand's */
+		csmemset(
+			&first_person_weapon_other_hands[local_player_index],
+			0,
+			sizeof(first_person_weapon_other_hands[local_player_index]));
+		first_person_weapon_other_hands[local_player_index].unit_index= NONE;
+		first_person_weapon_other_hands[local_player_index].weapon_index= NONE;
+		first_person_weapon_other_hands[local_player_index].current_sound_index= NONE;
+		first_person_weapon_other_hands[local_player_index].current_sound_state= NONE;
+		first_person_weapon_other_hand_taken[local_player_index]= NONE;
 	}
 
 	return;
@@ -471,7 +500,8 @@ long first_person_weapon_get_local_index(
 {
 	short local_player_index;
 
-	for (local_player_index=0; local_player_index<MAXIMUM_NUMBER_OF_LOCAL_PLAYERS; local_player_index++)
+	/* port: and the other hands' (first_person_weapon_other_hands) */
+	for (local_player_index=0; local_player_index<NUMBER_OF_FIRST_PERSON_WEAPONS; local_player_index++)
 	{
 		struct first_person_weapon *first_person_weapon= first_person_weapon_get(local_player_index);
 
@@ -481,7 +511,7 @@ long first_person_weapon_get_local_index(
 		}
 	}
 
-	return (local_player_index==MAXIMUM_NUMBER_OF_LOCAL_PLAYERS) ? NONE : local_player_index;
+	return (local_player_index==NUMBER_OF_FIRST_PERSON_WEAPONS) ? NONE : local_player_index;
 }
 
 void first_person_weapon_draw(
@@ -492,12 +522,28 @@ void first_person_weapon_draw(
 		return;
 	if (render.local_player_index!=NONE)
 	{
-		struct first_person_weapon *first_person_weapon= first_person_weapon_get(render.local_player_index);
+		first_person_weapon_draw_weapon(render.local_player_index);
+		/* port: and the weapon in a headset's other hand (dual_wield.c) */
+		first_person_weapon_draw_weapon((short)(render.local_player_index+FIRST_PERSON_WEAPON_OTHER_HAND));
+	}
 
-		if (local_player_get_player_index(render.local_player_index)!=NONE)
+	return;
+}
+
+/* port: first_person_weapon_draw's, for a local player's weapon in hand or
+in the other hand */
+static void first_person_weapon_draw_weapon(
+	short index)
+{
+	short local_player_index= FIRST_PERSON_WEAPON_LOCAL_PLAYER(index);
+
+	{
+		struct first_person_weapon *first_person_weapon= first_person_weapon_get(index);
+
+		if (local_player_get_player_index(local_player_index)!=NONE)
 		{
 			long unit_index= player_get(
-				local_player_get_player_index(render.local_player_index))->unit_index;
+				local_player_get_player_index(local_player_index))->unit_index;
 
 			if (unit_index!=NONE &&
 				first_person_weapon->visible &&
@@ -537,10 +583,10 @@ void first_person_weapon_draw(
 					}
 
 					/* port: not the weapon in a headset's bare hands, put away at a
-					shoulder (vr_view.c) */
+					shoulder (vr_view.c; the other hand's is held) */
 					if (first_person_weapon->weapon_node_remapping_table_valid &&
 						weapon_definition->weapon.interface_definition.first_person_model.index!=NONE &&
-						!vr_render_bare_hands())
+						(index>=FIRST_PERSON_WEAPON_OTHER_HAND || !vr_render_bare_hands()))
 					{
 						model_remap_node_matrices_to_match_animation_graph(
 							weapon_definition->weapon.interface_definition.first_person_model.index,
@@ -599,7 +645,7 @@ void first_person_weapon_draw(
 							first_person_weapon->hands_node_remapping_table);
 						/* port: the arms mirrored in the headset's left hand, the weapon
 						not (vr_view.c) */
-						vr_render_hands_drawing(TRUE);
+						vr_render_hands_drawing(TRUE, index);
 						render_model(
 							first_person_interface->hands.index,
 							0.0f,
@@ -614,18 +660,21 @@ void first_person_weapon_draw(
 							first_person_weapon->weapon_index,
 							0,
 							FLAG(_render_model_first_person_bit));
-						vr_render_hands_drawing(FALSE);
+						vr_render_hands_drawing(FALSE, index);
 						/* port: the animations the hands were drawn with */
-						first_person_weapon_hands_drawn[render.local_player_index]= TRUE;
-						first_person_weapon_hands_animations[render.local_player_index]=
-							weapon_definition->weapon.interface_definition.first_person_animations.index;
+						if (index<FIRST_PERSON_WEAPON_OTHER_HAND)
+						{
+							first_person_weapon_hands_drawn[local_player_index]= TRUE;
+							first_person_weapon_hands_animations[local_player_index]=
+								weapon_definition->weapon.interface_definition.first_person_animations.index;
+						}
 					}
 				}
 			}
 			/* port: a headset's player with no weapon left: empty hands */
-			else if (unit_index!=NONE)
+			else if (unit_index!=NONE && index<FIRST_PERSON_WEAPON_OTHER_HAND)
 			{
-				first_person_weapon_draw_empty_hands(render.local_player_index, unit_index);
+				first_person_weapon_draw_empty_hands(local_player_index, unit_index);
 			}
 		}
 	}
@@ -670,7 +719,7 @@ static void first_person_weapon_draw_empty_hands(
 		animations_index,
 		node_matrices,
 		first_person_weapon->hands_node_remapping_table);
-	vr_render_hands_drawing(TRUE);
+	vr_render_hands_drawing(TRUE, local_player_index);
 	render_model(
 		first_person_interface->hands.index,
 		0.0f,
@@ -685,7 +734,7 @@ static void first_person_weapon_draw_empty_hands(
 		unit_index,
 		0,
 		FLAG(_render_model_first_person_bit));
-	vr_render_hands_drawing(FALSE);
+	vr_render_hands_drawing(FALSE, local_player_index);
 
 	return;
 }
@@ -703,8 +752,10 @@ short first_person_weapon_get_marker_by_name(
 	{
 		short local_player_index= first_person_weapon_index_from_weapon_index(weapon_index);
 
+		/* port: the local player's (the index may be the other hand's) */
 		if (local_player_index!=NONE &&
-			director_get_perspective(local_player_index)==_director_perspective_first_person)
+			director_get_perspective(FIRST_PERSON_WEAPON_LOCAL_PLAYER(local_player_index))==
+				_director_perspective_first_person)
 		{
 			struct first_person_weapon *first_person_weapon= first_person_weapon_get(local_player_index);
 			struct weapon_definition *weapon_definition= weapon_definition_get(weapon->definition_index);
@@ -754,7 +805,38 @@ void first_person_weapon_render_update(
 				first_person_weapon_build_node_matrices(render.local_player_index);
 			}
 		}
+		/* port: and the weapon in a headset's other hand (dual_wield.c) */
+		first_person_weapon_other_hand_render_update(render.local_player_index);
 	}
+
+	return;
+}
+
+/* port: the weapon in a headset's other hand, posed from that hand
+(vr_render_other_hand_camera, vr_view.c) as the weapon in hand is posed
+from its own, when the weapon in hand would be seen */
+static void first_person_weapon_other_hand_render_update(
+	short local_player_index)
+{
+	short index= (short)(local_player_index+FIRST_PERSON_WEAPON_OTHER_HAND);
+	struct first_person_weapon *first_person_weapon= first_person_weapon_get(index);
+	struct render_camera camera= render.camera;
+	boolean visible;
+
+	if (first_person_weapon->unit_index==NONE || first_person_weapon->weapon_index==NONE)
+	{
+		return;
+	}
+	visible= director_get_perspective(local_player_index)==_director_perspective_first_person &&
+		(player_control_get_zoom_level(local_player_index)==NONE || vr_render_zoom_hidden()) &&
+		!vr_render_seat_weapon_hidden() &&
+		vr_render_other_hand_camera(first_person_weapon->unit_index, &render.camera);
+	first_person_weapon_set_visibility(index, visible);
+	if (first_person_weapon->visible)
+	{
+		first_person_weapon_build_node_matrices(index);
+	}
+	render.camera= camera;
 
 	return;
 }
@@ -765,7 +847,10 @@ short first_person_weapon_get_marker_by_name_render(
 	struct object_marker *markers,
 	short maximum_marker_count)
 {
-	if (render.local_player_index==first_person_weapon_index_from_weapon_index(weapon_index))
+	short index= first_person_weapon_index_from_weapon_index(weapon_index);
+
+	/* port: the local player's (the index may be the other hand's) */
+	if (index!=NONE && render.local_player_index==FIRST_PERSON_WEAPON_LOCAL_PLAYER(index))
 	{
 		return first_person_weapon_get_marker_by_name(
 			weapon_index,
@@ -1045,11 +1130,8 @@ struct real_matrix4x3 *first_person_weapon_get_node_matrix(
 	struct weapon_definition *weapon_definition;
 	struct animation_graph *animation_graph;
 
-	match_assert(
-		"c:\\halo\\SOURCE\\interface\\first_person_weapons.c",
-		1433,
-		local_player_index>=0 && local_player_index<MAXIMUM_NUMBER_OF_LOCAL_PLAYERS);
-	first_person_weapon = &first_person_weapons[local_player_index];
+	/* port: or the other hand's (first_person_weapon_get) */
+	first_person_weapon = first_person_weapon_get(local_player_index);
 	/* port: the last matrices built when the weapon is gone (an effect or
 	particle on it asking before first_person_weapon_forget_weapon stopped
 	them was a NULL weapon, and a crash) */
@@ -1093,8 +1175,52 @@ void first_person_weapons_update(
 				first_person_weapon_switch_weapons(local_player_index);
 			}
 			first_person_weapon_update(local_player_index);
+			/* port: and the weapon in a headset's other hand (dual_wield.c) */
+			first_person_weapon_other_hand_update(local_player_index, unit_index);
 		}
 	}
+
+	return;
+}
+
+/* port: the weapon a headset's player holds in the other hand, taken up as
+the hand takes it (the unit readying it there sends it the message that
+readies it, first_person_weapon_index_from_weapon_index) and let go of as
+the hand lets it go; nothing while that hand holds none */
+static void first_person_weapon_other_hand_update(
+	short local_player_index,
+	long unit_index)
+{
+	short index= (short)(local_player_index+FIRST_PERSON_WEAPON_OTHER_HAND);
+	struct first_person_weapon *first_person_weapon= first_person_weapon_get(index);
+	long weapon_index= unit_index!=NONE && dual_wield_any() ? dual_wield_weapon(unit_index) : NONE;
+
+	if (weapon_index==NONE && first_person_weapon->unit_index==NONE)
+	{
+		return;
+	}
+	/* (taken up as a weapon is readied: drawn into the hand) */
+	if (first_person_weapon->unit_index!=unit_index)
+	{
+		first_person_weapon_other_hand_taken[local_player_index]= weapon_index;
+		first_person_weapon_new_unit(index, unit_index);
+		if (weapon_index!=NONE)
+		{
+			first_person_weapon_message(index, _first_person_weapon_message_ready);
+		}
+	}
+	else if (first_person_weapon->weapon_index!=weapon_index &&
+		first_person_weapon_other_hand_taken[local_player_index]!=weapon_index)
+	{
+		first_person_weapon_other_hand_taken[local_player_index]= weapon_index;
+		first_person_weapon_message(index, _first_person_weapon_message_ready);
+	}
+	if (weapon_index==NONE)
+	{
+		first_person_weapon->unit_index= NONE;
+		return;
+	}
+	first_person_weapon_update(index);
 
 	return;
 }
@@ -1387,7 +1513,8 @@ static void first_person_weapon_build_node_matrices(
 	(first_person_weapon_update) takes the facing change since the last
 	frame as a tick's worth: move the last facing on once a tick. */
 	{
-		static long last_render_ticks[MAXIMUM_LOCAL_PLAYERS] = { NONE, NONE, NONE, NONE };
+		/* port: and the other hands' */
+		static long last_render_ticks[NUMBER_OF_FIRST_PERSON_WEAPONS] = { NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE };
 
 		if (!halo_interpolation_enabled() || last_render_ticks[local_player_index] != game_time_get())
 		{
@@ -1850,6 +1977,11 @@ static void first_person_weapon_switch_weapons(
 			first_person_weapon->unit_index,
 			unit->unit.current_weapon_index);
 
+		/* port: the other hand's, the weapon it holds (dual_wield.c) */
+		if (local_player_index>=FIRST_PERSON_WEAPON_OTHER_HAND)
+		{
+			weapon_index= dual_wield_weapon(first_person_weapon->unit_index);
+		}
 		if (weapon_index!=NONE)
 		{
 			struct weapon_datum *weapon= weapon_get(weapon_index);
@@ -2119,8 +2251,10 @@ static void first_person_weapon_update(
 			first_person_weapon_next_state(local_player_index);
 		}
 
+		/* port: the local player's (the index may be the other hand's) */
 		if (sound_definition_index!=NONE &&
-			director_get_perspective(local_player_index)==_director_perspective_first_person)
+			director_get_perspective(FIRST_PERSON_WEAPON_LOCAL_PLAYER(local_player_index))==
+				_director_perspective_first_person)
 		{
 			first_person_weapon->current_sound_index= object_impulse_sound_new(
 				first_person_weapon->weapon_index,
@@ -2314,10 +2448,11 @@ static void first_person_weapon_update(
 			}
 		}
 
-		/* port: nor is posed (turned about in the hand) */
+		/* port: nor is posed (turned about in the hand); the local player's
+		aim (the index may be the other hand's) */
 		if (vr_render_hand_holds(first_person_weapon->unit_index) ||
-			player_control_get_autoaim_level(local_player_index)!=0.0f ||
-			player_control_get_zoom_level(local_player_index)!=NONE ||
+			player_control_get_autoaim_level(FIRST_PERSON_WEAPON_LOCAL_PLAYER(local_player_index))!=0.0f ||
+			player_control_get_zoom_level(FIRST_PERSON_WEAPON_LOCAL_PLAYER(local_player_index))!=NONE ||
 			first_person_weapon->firing_push_back!=0.0f ||
 			first_person_weapon->position.i!=0.0f ||
 			first_person_weapon->position.j!=0.0f ||
@@ -2623,10 +2758,15 @@ static void model_remap_node_matrices_to_match_animation_graph(
 static struct first_person_weapon *first_person_weapon_get(
 	short local_player_index)
 {
+	/* port: or the other hand's (first_person_weapon_other_hands) */
 	match_assert(
 		"c:\\halo\\SOURCE\\interface\\first_person_weapons.c",
 		1433,
-		local_player_index>=0 && local_player_index<MAXIMUM_NUMBER_OF_LOCAL_PLAYERS);
+		local_player_index>=0 && local_player_index<NUMBER_OF_FIRST_PERSON_WEAPONS);
+	if (local_player_index>=FIRST_PERSON_WEAPON_OTHER_HAND)
+	{
+		return &first_person_weapon_other_hands[local_player_index-FIRST_PERSON_WEAPON_OTHER_HAND];
+	}
 
 	return &first_person_weapons[local_player_index];
 }
@@ -2652,6 +2792,12 @@ static short first_person_weapon_index_from_weapon_index(
 					weapon_index==unit->unit.weapon_object_indices[unit->unit.current_weapon_index])
 				{
 					return local_player_index;
+				}
+				/* port: the weapon a headset's player holds in the other hand
+				(port/linux/game/dual_wield.c) */
+				if (dual_wield_any() && weapon_index==dual_wield_weapon(unit_index))
+				{
+					return (short)(local_player_index+FIRST_PERSON_WEAPON_OTHER_HAND);
 				}
 			}
 		}

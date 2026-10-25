@@ -18,6 +18,18 @@ enum
 	NUMBER_OF_RUMBLE_MOTORS = 2,
 };
 
+/* port: what an impulse is felt in: the body (hits, blasts: the motors as
+always), or the shots of the weapon in hand or of the one in a headset's
+other hand (dual_wield.c), which its controllers feel in the hand that
+holds it (rumble_update, vr_input.c's vr_rumble_hands) */
+enum
+{
+	_rumble_hand_body = 0,
+	_rumble_hand_weapon,
+	_rumble_hand_other,
+	NUMBER_OF_RUMBLE_HANDS
+};
+
 /* ---------- structures */
 
 struct rumble_motor
@@ -33,7 +45,10 @@ struct rumble_definition
 {
 	struct rumble_motor motors[NUMBER_OF_RUMBLE_MOTORS];
 	real scale_floor;
-	byte unused[16];
+	/* port: an impulse's (rumble_player_impulse's copy): what it is felt
+	in, a _rumble_hand_* (unused in the tags) */
+	byte hand;
+	byte unused[15];
 };
 
 /* ---------- prototypes/PLAYER_RUMBLE.C */
@@ -66,5 +81,9 @@ void rumble_dispose_from_old_map(
 	void);
 void rumble_update(
 	void);
+/* port: the impulses started from now on are felt in this (a
+_rumble_hand_*: weapons.c, about a shot's own damage effect) */
+void rumble_set_impulse_hand(
+	short hand);
 
 #endif // __PLAYER_RUMBLE_H

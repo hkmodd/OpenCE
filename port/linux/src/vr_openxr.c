@@ -205,12 +205,12 @@ static struct
 	int running, exiting, lost;
 	int64_t format;
 
-	struct vr_swapchain eyes[2], panel, scope, reticle, beam;
-	/* the reticle's pictures, white and red (vr_reticle_pictures), and the
-	game's crosshair this frame (vr_resolve_reticle), in place of them */
+	struct vr_swapchain eyes[2], panel, scope, reticle[VR_RETICLE_COUNT], beam;
+	/* the reticles' pictures, white and red (vr_reticle_pictures), and each
+	weapon's crosshair this frame (vr_resolve_reticle), in place of them */
 	GLuint reticle_pictures[2];
-	GLuint crosshair;
-	int crosshair_drawn;
+	GLuint crosshair[VR_RETICLE_COUNT];
+	int crosshair_drawn[VR_RETICLE_COUNT];
 	/* the beam's picture (vr_beam_picture) */
 	GLuint beam_picture;
 	GLuint framebuffers[2];
@@ -236,11 +236,12 @@ static struct
 	float positions[3][3];
 	int positions_valid;
 	unsigned long frames, frames_without_eyes;
-	/* the reticle this frame: where it is, and whether over a target */
-	int reticle_placed, reticle_target;
+	/* the reticles this frame: whether placed, where, and whether over a
+	target */
+	int reticle_placed[VR_RETICLE_COUNT], reticle_target[VR_RETICLE_COUNT];
 	/* the eyes are black for this many seconds more (vr_blink) */
 	float blink;
-	float reticle_position[3];
+	float reticle_position[VR_RETICLE_COUNT][3];
 	/* the scope's image is drawn this frame, where it is held, its width */
 	int scope_drawn;
 	struct vr_pose scope_pose;
@@ -913,10 +914,14 @@ static int vr_create_session(void)
 	}
 	if (!vr_create_swapchain(&vr.panel, VR_PANEL_WIDTH, VR_PANEL_HEIGHT) ||
 		!vr_create_swapchain(&vr.scope, VR_SCOPE_SIZE, VR_SCOPE_SIZE) ||
-		!vr_create_swapchain(&vr.reticle, VR_CROSSHAIR_SIZE, VR_CROSSHAIR_SIZE) ||
 		!vr_create_swapchain(&vr.beam, VR_BEAM_WIDTH, VR_BEAM_LENGTH))
 	{
 		return 0;
+	}
+	for (index = 0; index < VR_RETICLE_COUNT; index++)
+	{
+		if (!vr_create_swapchain(&vr.reticle[index], VR_CROSSHAIR_SIZE, VR_CROSSHAIR_SIZE))
+			return 0;
 	}
 	platform_log("vr: eyes %ldx%ld (recommended %ux%u, vr.resolution_scale %.2f), %u images", width, height,
 		views[0].recommendedImageRectWidth, views[0].recommendedImageRectHeight, scale,
@@ -1006,15 +1011,20 @@ static void vr_beam_picture(void)
 
 static int vr_create_drawing(long width, long height)
 {
+	int index;
+
 	glGenFramebuffers(2, vr.framebuffers);
 	vr_reticle_pictures();
 	vr_beam_picture();
-	glGenTextures(1, &vr.crosshair);
-	glBindTexture(GL_TEXTURE_2D, vr.crosshair);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, VR_CROSSHAIR_SIZE, VR_CROSSHAIR_SIZE, 0, GL_RGBA, GL_UNSIGNED_BYTE,
-		NULL);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glGenTextures(VR_RETICLE_COUNT, vr.crosshair);
+	for (index = 0; index < VR_RETICLE_COUNT; index++)
+	{
+		glBindTexture(GL_TEXTURE_2D, vr.crosshair[index]);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, VR_CROSSHAIR_SIZE, VR_CROSSHAIR_SIZE, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+			NULL);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	}
 	glBindTexture(GL_TEXTURE_2D, 0);
 	glGenVertexArrays(1, &vr.vertex_array);
 	glGenTextures(1, &vr.mirror);
@@ -1517,9 +1527,12 @@ static int vr_simulate_create(void)
 	vr.scope.width = vr.scope.height = VR_SCOPE_SIZE;
 	vr.scope.image_count = 1;
 	vr.scope.images[0] = vr_simulated_image(VR_SCOPE_SIZE, VR_SCOPE_SIZE);
-	vr.reticle.width = vr.reticle.height = VR_CROSSHAIR_SIZE;
-	vr.reticle.image_count = 1;
-	vr.reticle.images[0] = vr_simulated_image(VR_CROSSHAIR_SIZE, VR_CROSSHAIR_SIZE);
+	for (eye = 0; eye < VR_RETICLE_COUNT; eye++)
+	{
+		vr.reticle[eye].width = vr.reticle[eye].height = VR_CROSSHAIR_SIZE;
+		vr.reticle[eye].image_count = 1;
+		vr.reticle[eye].images[0] = vr_simulated_image(VR_CROSSHAIR_SIZE, VR_CROSSHAIR_SIZE);
+	}
 	vr.beam.width = VR_BEAM_WIDTH;
 	vr.beam.height = VR_BEAM_LENGTH;
 	vr.beam.image_count = 1;
@@ -1844,8 +1857,11 @@ void vr_dispose(void)
 			xrDestroySwapchain(vr.panel.handle);
 		if (vr.scope.handle != XR_NULL_HANDLE)
 			xrDestroySwapchain(vr.scope.handle);
-		if (vr.reticle.handle != XR_NULL_HANDLE)
-			xrDestroySwapchain(vr.reticle.handle);
+		for (eye = 0; eye < VR_RETICLE_COUNT; eye++)
+		{
+			if (vr.reticle[eye].handle != XR_NULL_HANDLE)
+				xrDestroySwapchain(vr.reticle[eye].handle);
+		}
 		if (vr.beam.handle != XR_NULL_HANDLE)
 			xrDestroySwapchain(vr.beam.handle);
 		if (vr.local != XR_NULL_HANDLE)
@@ -1866,15 +1882,16 @@ void vr_dispose(void)
 			glDeleteTextures(1, &vr.eyes[eye].images[0]);
 		glDeleteTextures(1, &vr.panel.images[0]);
 		glDeleteTextures(1, &vr.scope.images[0]);
-		glDeleteTextures(1, &vr.reticle.images[0]);
+		for (eye = 0; eye < VR_RETICLE_COUNT; eye++)
+			glDeleteTextures(1, &vr.reticle[eye].images[0]);
 		glDeleteTextures(1, &vr.beam.images[0]);
 	}
 	if (vr.reticle_pictures[0])
 		glDeleteTextures(2, vr.reticle_pictures);
 	if (vr.beam_picture)
 		glDeleteTextures(1, &vr.beam_picture);
-	if (vr.crosshair)
-		glDeleteTextures(1, &vr.crosshair);
+	if (vr.crosshair[0])
+		glDeleteTextures(VR_RETICLE_COUNT, vr.crosshair);
 	if (vr.framebuffers[0])
 	{
 		glDeleteFramebuffers(2, vr.framebuffers);
@@ -2044,7 +2061,9 @@ int vr_frame_begin(void)
 			vr_end_frame(NULL, 0);
 		vr.frame_begun = 1;
 		vr.eyes_drawn[0] = vr.eyes_drawn[1] = 0;
-		vr.scope_drawn = vr.reticle_placed = vr.crosshair_drawn = 0;
+		vr.scope_drawn = 0;
+		memset(vr.reticle_placed, 0, sizeof(vr.reticle_placed));
+		memset(vr.crosshair_drawn, 0, sizeof(vr.crosshair_drawn));
 		vr.frames++;
 		vr_simulate_frame();
 		vr.stereo_frames++;
@@ -2078,7 +2097,9 @@ int vr_frame_begin(void)
 		return 0;
 	vr.frame_begun = 1;
 	vr.eyes_drawn[0] = vr.eyes_drawn[1] = 0;
-	vr.scope_drawn = vr.reticle_placed = vr.crosshair_drawn = 0;
+	vr.scope_drawn = 0;
+	memset(vr.reticle_placed, 0, sizeof(vr.reticle_placed));
+	memset(vr.crosshair_drawn, 0, sizeof(vr.crosshair_drawn));
 	vr.frames++;
 	if (vr.last_display_time && vr.frame_state.predictedDisplayTime > vr.last_display_time)
 		vr.display_seconds = (double)(vr.frame_state.predictedDisplayTime - vr.last_display_time) * 1e-9;
@@ -2399,47 +2420,50 @@ void vr_blink(float seconds)
 		vr.blink = seconds;
 }
 
-void vr_reticle_place(const float position[3], int target)
+void vr_reticle_place(int reticle, const float position[3], int target)
 {
-	if (!vr_finite(position, 3))
+	if (reticle < 0 || reticle >= VR_RETICLE_COUNT || !vr_finite(position, 3))
 		return;
-	memcpy(vr.reticle_position, position, sizeof(vr.reticle_position));
-	vr.reticle_target = target != 0;
-	vr.reticle_placed = 1;
+	memcpy(vr.reticle_position[reticle], position, sizeof(vr.reticle_position[reticle]));
+	vr.reticle_target[reticle] = target != 0;
+	vr.reticle_placed[reticle] = 1;
 }
 
-/* the reticle's layer: its picture into its image, a quad where the shot
+/* a reticle's layer: its picture into its image, a quad where the shot
 lands, facing the head, as wide to the eye wherever it is */
-static int vr_reticle_layer(XrCompositionLayerQuad *quad)
+static int vr_reticle_layer(int reticle, XrCompositionLayerQuad *quad)
 {
 	float offset[3], distance, yaw, pitch, turn[4] = { 0.0f, 0.0f, 0.0f, 0.0f }, tilt[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	float both[4];
 	GLuint image;
 	int axis;
 
-	if (!vr.reticle_placed || vr_input_menus())
+	if (!vr.reticle_placed[reticle] || vr_input_menus())
 		return 0;
 	for (axis = 0; axis < 3; axis++)
-		offset[axis] = vr.frame.head.position[axis] - vr.reticle_position[axis];
+		offset[axis] = vr.frame.head.position[axis] - vr.reticle_position[reticle][axis];
 	distance = sqrtf(offset[0] * offset[0] + offset[1] * offset[1] + offset[2] * offset[2]);
 	if (!(distance > 0.05f))
 		return 0;
-	image = vr_acquire(&vr.reticle);
+	image = vr_acquire(&vr.reticle[reticle]);
 	if (!image)
 		return 0;
-	/* (the game's crosshair as the HUD drew it, or the ring) */
-	if (vr.crosshair_drawn)
+	/* (the weapon's crosshair as the HUD drew it, or the ring) */
+	if (vr.crosshair_drawn[reticle])
 	{
-		vr_draw_picture(vr.crosshair, image, VR_CROSSHAIR_SIZE, VR_CROSSHAIR_SIZE);
+		vr_draw_picture(vr.crosshair[reticle], image, VR_CROSSHAIR_SIZE, VR_CROSSHAIR_SIZE);
 	}
 	else
 	{
-		vr_copy(vr.reticle_pictures[vr.reticle_target], VR_RETICLE_SIZE, VR_RETICLE_SIZE, image, VR_CROSSHAIR_SIZE,
-			VR_CROSSHAIR_SIZE, 1);
+		vr_copy(vr.reticle_pictures[vr.reticle_target[reticle]], VR_RETICLE_SIZE, VR_RETICLE_SIZE, image,
+			VR_CROSSHAIR_SIZE, VR_CROSSHAIR_SIZE, 1);
 	}
 	if (vr.dumping)
-		vr_dump_texture(image, VR_CROSSHAIR_SIZE, VR_CROSSHAIR_SIZE, "reticle", vr.rows_from_top, 1);
-	vr_release(&vr.reticle);
+	{
+		vr_dump_texture(image, VR_CROSSHAIR_SIZE, VR_CROSSHAIR_SIZE, reticle ? "reticle1" : "reticle", vr.rows_from_top,
+			1);
+	}
+	vr_release(&vr.reticle[reticle]);
 	/* (its +z toward the head: a turn about +y, then a tilt about +x) */
 	yaw = (float)atan2(offset[0], offset[2]);
 	pitch = (float)-asin(offset[1] / distance);
@@ -2453,23 +2477,23 @@ static int vr_reticle_layer(XrCompositionLayerQuad *quad)
 	quad->layerFlags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
 	quad->space = vr.local;
 	quad->eyeVisibility = XR_EYE_VISIBILITY_BOTH;
-	quad->subImage.swapchain = vr.reticle.handle;
+	quad->subImage.swapchain = vr.reticle[reticle].handle;
 	quad->subImage.imageRect.extent.width = VR_CROSSHAIR_SIZE;
 	quad->subImage.imageRect.extent.height = VR_CROSSHAIR_SIZE;
-	quad->pose.position.x = vr.reticle_position[0];
-	quad->pose.position.y = vr.reticle_position[1];
-	quad->pose.position.z = vr.reticle_position[2];
+	quad->pose.position.x = vr.reticle_position[reticle][0];
+	quad->pose.position.y = vr.reticle_position[reticle][1];
+	quad->pose.position.z = vr.reticle_position[reticle][2];
 	quad->pose.orientation.x = both[0];
 	quad->pose.orientation.y = both[1];
 	quad->pose.orientation.z = both[2];
 	quad->pose.orientation.w = both[3];
-	quad->size.width = quad->size.height = vr.crosshair_drawn ? distance * 2.0f * VR_CROSSHAIR_TANGENT :
+	quad->size.width = quad->size.height = vr.crosshair_drawn[reticle] ? distance * 2.0f * VR_CROSSHAIR_TANGENT :
 		distance * VR_RETICLE_ANGLE;
 	if (vr.dumping)
 	{
-		platform_log("vr: frame %lu reticle at %.3f %.3f %.3f, %.2f m, %s", vr.stereo_frames,
-			vr.reticle_position[0], vr.reticle_position[1], vr.reticle_position[2], distance,
-			vr.reticle_target ? "on a target" : "no target");
+		platform_log("vr: frame %lu reticle %d at %.3f %.3f %.3f, %.2f m, %s", vr.stereo_frames, reticle,
+			vr.reticle_position[reticle][0], vr.reticle_position[reticle][1], vr.reticle_position[reticle][2],
+			distance, vr.reticle_target[reticle] ? "on a target" : "no target");
 	}
 	return 1;
 }
@@ -2554,10 +2578,10 @@ static int vr_beam_layer(XrCompositionLayerQuad *quad)
 	return 1;
 }
 
-void vr_resolve_reticle(unsigned int texture, int width, int height, int x0, int y0, int x1, int y1)
+void vr_resolve_reticle(int reticle, unsigned int texture, int width, int height, int x0, int y0, int x1, int y1)
 {
-	if (!vr.frame_begun || !vr.frame.stereo || !vr.crosshair || x1 <= x0 || y1 <= y0 || x0 < 0 || y0 < 0 ||
-		x1 > width || y1 > height)
+	if (reticle < 0 || reticle >= VR_RETICLE_COUNT || !vr.frame_begun || !vr.frame.stereo || !vr.crosshair[reticle] ||
+		x1 <= x0 || y1 <= y0 || x0 < 0 || y0 < 0 || x1 > width || y1 > height)
 	{
 		return;
 	}
@@ -2565,7 +2589,7 @@ void vr_resolve_reticle(unsigned int texture, int width, int height, int x0, int
 	glBindFramebuffer(GL_READ_FRAMEBUFFER, vr.framebuffers[0]);
 	glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, 0);
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, vr.framebuffers[1]);
-	glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, vr.crosshair, 0);
+	glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, vr.crosshair[reticle], 0);
 	glDisable(GL_SCISSOR_TEST);
 	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 	glBlitFramebuffer(x0, y0, x1, y1, 0, 0, VR_CROSSHAIR_SIZE, VR_CROSSHAIR_SIZE, GL_COLOR_BUFFER_BIT, GL_LINEAR);
@@ -2573,7 +2597,7 @@ void vr_resolve_reticle(unsigned int texture, int width, int height, int x0, int
 	glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
 	glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-	vr.crosshair_drawn = 1;
+	vr.crosshair_drawn[reticle] = 1;
 }
 
 void vr_scope_place(const struct vr_pose *pose, float width)
@@ -2798,11 +2822,11 @@ int vr_present(unsigned int texture, int width, int height)
 {
 	XrCompositionLayerProjectionView views[2];
 	XrCompositionLayerProjection projection;
-	XrCompositionLayerQuad quad, scope, reticle, beam;
-	const XrCompositionLayerBaseHeader *layers[5];
+	XrCompositionLayerQuad quad, scope, reticles[VR_RETICLE_COUNT], beam;
+	const XrCompositionLayerBaseHeader *layers[4 + VR_RETICLE_COUNT];
 	uint32_t layer_count = 0;
 	GLuint image;
-	int eye, stereo;
+	int eye, stereo, reticle;
 
 	if (!vr.frame_begun)
 		return 0;
@@ -2853,9 +2877,12 @@ int vr_present(unsigned int texture, int width, int height)
 		if (vr_beam_layer(&beam))
 			layers[layer_count++] = (const XrCompositionLayerBaseHeader *)&beam;
 	}
-	/* the reticle, over the world and the HUD (the scope's is its own) */
-	if (stereo && vr.frame_state.shouldRender && vr_reticle_layer(&reticle))
-		layers[layer_count++] = (const XrCompositionLayerBaseHeader *)&reticle;
+	/* the reticles, over the world and the HUD (the scope's is its own) */
+	for (reticle = 0; reticle < VR_RETICLE_COUNT; reticle++)
+	{
+		if (stereo && vr.frame_state.shouldRender && vr_reticle_layer(reticle, &reticles[reticle]))
+			layers[layer_count++] = (const XrCompositionLayerBaseHeader *)&reticles[reticle];
+	}
 	/* the scope's picture, over the HUD: it is nearer */
 	if (stereo && vr.scope_drawn && vr.frame_state.shouldRender)
 	{

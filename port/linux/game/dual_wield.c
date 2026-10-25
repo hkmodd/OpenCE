@@ -6,8 +6,11 @@ network_vr_body.c), told its controls once a tick from that hand's trigger
 (weapon_owner_update, as the unit tells its weapon in hand), so that its
 rate of fire, heat, ammunition, reloads and effects are the weapon's own.
 Its shots leave its muzzle along where that hand points. The player sees
-it in their hand, as the world model it is (the first-person weapon is the
-weapon in hand's alone).
+it in their hand as its first-person model, posed and drawn as the weapon in
+hand is, its own animations played as it fires and reloads and its arm the
+hand's (first_person_weapons.c's other hand, vr_view.c), the weapon in
+hand's other arm then not drawn: each hand holds its own. Its shots leave
+that model's muzzle.
 
 In a network game the player's machine holds it as it chooses and says so
 with the player's pose (network_vr.c); every other machine's copy of the
@@ -22,6 +25,7 @@ readied in the unit's hand the other hand's is put back if it is that one,
 and before the unit's inventory is dropped (its death) or deleted, so that
 no weapon of an inventory is ever connected to the map twice. */
 #include "cseries.h"
+#include "interface/first_person_weapons.h"
 #include "items/items.h"
 #include "items/weapons.h"
 #include "objects/objects.h"
@@ -326,21 +330,21 @@ boolean dual_wield_projectile_ray(
 {
 	long unit_index = dual_wield_holder(weapon_index);
 	struct object_marker marker;
-	real_matrix4x3 grip, inverse;
-	real_matrix4x3 const *nodes;
+	real_matrix4x3 grip, world, inverse;
 	real_point3d muzzle;
 
+	/* (drawn in first person in the headset's hand: from the muzzle drawn,
+	along its barrel, as the weapon in hand's) */
+	if (unit_index != NONE && vr_render_other_hand_muzzle(unit_index, origin, forward))
+		return TRUE;
 	if (unit_index == NONE || (!vr_render_off_hand_grip(unit_index, &grip) && !dual_wield_posed_grip(unit_index, &grip)))
 		return FALSE;
 	/* (its muzzle where it is on the weapon held at the hand: from its
-	root's frame as the game holds it) */
-	nodes = (real_matrix4x3 const *)object_header_block_get(weapon_index, &object_get(weapon_index)->object.node_matrices);
-	if (object_get_marker_by_name(weapon_index, "primary trigger", &marker, 1) <= 0 ||
-		object_get(weapon_index)->object.node_matrices.size < (long)sizeof(real_matrix4x3))
-	{
-		marker.matrix.position = nodes[0].position;
-	}
-	matrix4x3_inverse(&nodes[0], &inverse);
+	origin's frame, which the hand holds, as the game holds it) */
+	object_get_world_matrix(weapon_index, &world);
+	if (object_get_marker_by_name(weapon_index, "primary trigger", &marker, 1) <= 0)
+		marker.matrix.position = world.position;
+	matrix4x3_inverse(&world, &inverse);
 	matrix4x3_transform_point(&inverse, &marker.matrix.position, &muzzle);
 	matrix4x3_transform_point(&grip, &muzzle, origin);
 	*forward = grip.forward;
@@ -359,7 +363,10 @@ long dual_wield_first_person_weapon(
 	real_matrix4x3 grip;
 	long weapon_index = dual_wield_weapon(unit_index);
 
-	return weapon_index != NONE && vr_render_off_hand_grip(unit_index, &grip) ? weapon_index : NONE;
+	/* (not drawn so where its first-person model is: first_person_weapons.c
+	draws that in the hand) */
+	return weapon_index != NONE && first_person_weapon_get_local_index(weapon_index) == NONE &&
+		vr_render_off_hand_grip(unit_index, &grip) ? weapon_index : NONE;
 }
 
 real_matrix4x3 *dual_wield_node_matrices(
@@ -391,10 +398,21 @@ real_matrix4x3 *dual_wield_node_matrices(
 	dual_wield_drawn[free_index].object_index = object_index;
 	dual_wield_drawn[free_index].frame = frame;
 	dual_wield_drawn[free_index].node_count = (short)count;
-	/* (the whole weapon moved so that its root is at the hand's grip,
-	turned as the hand points) */
-	matrix4x3_inverse(&nodes[0], &inverse);
-	matrix4x3_multiply(&grip, &inverse, &moved);
+	/* (the whole weapon moved so that its origin, which a unit's hand marker
+	holds, is at the hand's grip, turned as the hand points: its root where
+	it is from its origin) */
+	{
+		real_matrix4x3 world, root, held;
+		real_matrix4x3 const *ticked = (real_matrix4x3 const *)object_header_block_get(object_index,
+			&object->object.node_matrices);
+
+		object_get_world_matrix(object_index, &world);
+		matrix4x3_inverse(&world, &inverse);
+		matrix4x3_multiply(&inverse, &ticked[0], &root);
+		matrix4x3_multiply(&grip, &root, &held);
+		matrix4x3_inverse(&nodes[0], &inverse);
+		matrix4x3_multiply(&held, &inverse, &moved);
+	}
 	for (node_index = 0; node_index < count; node_index++)
 		matrix4x3_multiply(&moved, &nodes[node_index], &dual_wield_drawn[free_index].nodes[node_index]);
 	return dual_wield_drawn[free_index].nodes;
