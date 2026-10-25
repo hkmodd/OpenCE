@@ -58,6 +58,14 @@ def test_reads_a_line():
     assert players[1] == {"alive": False, "score": 0, "kills": 0, "deaths": 2, "ff": 0, "team": 0, "machine": 0}
 
 
+def test_reads_a_riding_line():
+    # A player in a vehicle's seat: where the vehicle faces and where its gun aims follow its weapons.
+    riding = (" player 0: (1.500 10.000 0.500) h1.00/1.00 riding g2/2 w a109/30 f0 l109/30 as35/120 st0 "
+              "thr0.00 501:60 vf109 va109/30 s0 k0 d0 f0 t0 m0")
+    players = net_compare.parse_players(riding)
+    assert players[0]["riding"] and players[0]["weapons"] == [("501", 60)] and players[0]["kills"] == 0
+
+
 def test_in_step(tmp_path):
     result = judge(*write_logs(tmp_path, client_shift=0.1))
     assert not result["problems"] and not result["divergences"]

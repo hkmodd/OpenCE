@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from harness import CHECK_FAILED, build, mutated, read, run
 
 CASES = ["gameplay", "move", "menus", "menu-button", "turn", "seat", "drive", "room", "gestures", "hands", "ray",
-         "bindings", "swap", "throw", "grab", "bare", "physical", "dual", "layout"]
+         "bindings", "swap", "throw", "grab", "bare", "physical", "dual", "layout", "seat-secondary"]
 CONTROLS = {
     "left-handed-ignored": (("main_index = input->left_handed ? VR_HAND_LEFT : VR_HAND_RIGHT;",
                              "main_index = VR_HAND_RIGHT;"), "gameplay"),
@@ -146,6 +146,8 @@ CONTROLS = {
     "throw-speed-of-the-moment": (("input->throw_speed[index] -= VR_THROW_FALL * seconds;",
                                    "input->throw_speed[index] = 0.0f;"), "throw"),
     "throw-on-press": (("return was_held && !held &&", "return !was_held && held &&"), "throw"),
+    "seat-throws": (("throw_gesture = settings->throw_gesture && !settings->seated;",
+                     "throw_gesture = settings->throw_gesture;"), "seat-secondary"),
     "punch-after-menus": (("\t\tinput->main_position_valid = 0;\n\t\tfor (hand", "\t\tfor (hand"), "throw"),
     "throw-after-menus": (("\t\t\tinput->throw_position_valid[hand] = 0;\n"
                            "\t\t\tinput->throw_speed[hand] = input->throw_peak_speed[hand] = 0.0f;\n"

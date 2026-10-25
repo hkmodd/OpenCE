@@ -1065,14 +1065,16 @@ The per-second line each machine logs (`network_test_log_players`) is:
 ```
 network test: tick <tick> player <index>: (<x> <y> <z>) h<body>/<shield>[ riding][ camo] g<grenades>/<grenades> w
   a<aim yaw>/<aim pitch> f<facing yaw> l<look yaw>/<look pitch> as<aiming screen>/<looking screen> st<animation state>
-  thr<throttle>[ <weapon tag>:<rounds>...] s<score> k<kills> d<deaths> f<team kills> t<team> m<machine>
+  thr<throttle>[ <weapon tag>:<rounds>...][ vf<vehicle yaw> va<gun yaw>/<gun pitch>] s<score> k<kills>
+  d<deaths> f<team kills> t<team> m<machine>
   [player <index>: dead s<score> k<kills> d<deaths> f<team kills> t<team> m<machine>] ...
   | items <on the ground> (+<created> -<deleted> !<failed> x<removed>) | <playing|game over> to <score to win>
   | sent <n> received <n> corrected <n> | hits <n> dealt <n> rejected <n> replayed <n>
   | local <player> camera (<x> <y> <z>) respawn <ticks> | drift <ticks> <apart> <mean> <largest>
 ```
 
-(on one line; a riding player's position is the vehicle's, angles are in
+(on one line; a riding player's position is the vehicle's, and `vf` and
+`va` where the vehicle faces and where its gun aims, angles are in
 degrees, a weapon's tag is its tag index's low 16 bits in hexadecimal, and
 its rounds are those loaded and in reserve). `drift` is the host's: how
 many ticks of the second it compared a client's move of its player with

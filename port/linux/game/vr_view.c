@@ -2753,6 +2753,19 @@ int vr_render_on_foot(
 	return vr_view.stereo && vr_view.hand_aiming && unit && unit->object.parent_object_index == NONE;
 }
 
+int vr_render_seated(
+	void)
+{
+	short local_player_index = local_player_get_next(NONE);
+	long vehicle_index;
+	struct unit_seat const *seat;
+
+	/* (the local player's unit: vr_view.unit_index is not kept in a seat
+	without a weapon of the hand's) */
+	return vr_active() && local_player_index != NONE &&
+		vr_seat_of(player_control_get_unit_index(local_player_index), &vehicle_index, &seat);
+}
+
 int vr_render_shoulder_full(
 	int side)
 {

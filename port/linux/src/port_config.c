@@ -355,7 +355,8 @@ static const struct config_setting config_settings[] =
 		"off trigger) held takes one, let go with the hand moving fast (1.5\n"
 		"m/s) throws it from the hand the way the hand threw it (a firm throw,\n"
 		"7.5 m/s, as far as the game's own), let go slowly keeps it; false, the\n"
-		"button throws as a pad's does, where the aim points." },
+		"button throws as a pad's does, where the aim points. In a vehicle's\n"
+		"seat the button is the seat's secondary trigger, held as a pad's." },
 	{ "vr.aim_pitch", _config_real, "0.0", "HALO_VR_AIM_PITCH", _environment_value, _platform_desktop,
 		"With display.vr, the weapon's barrel from where the hand points (the\n"
 		"controller's aim pose, its pointing ray), in degrees up (-45 to 45):\n"

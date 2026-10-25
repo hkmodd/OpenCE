@@ -64,7 +64,9 @@ than VR_THROW_SPEED it throws it, let go slowly it keeps it. The throw
 keeps the hand's fastest smoothed velocity and where it let go
 (vr_input_throw), which vr_view.c sends the host (network_vr_throw): the
 grenade then leaves the hand the way the hand threw it, in place of the
-aim's way (network_vr_grenade_throw). The menus' clicks throw nothing.
+aim's way (network_vr_grenade_throw). The menus' clicks throw nothing. In
+a vehicle's seat the button is the seat's secondary trigger, held as a
+pad's.
 
 The turn. The right controller's stick (the left's with vr.left_handed)
 turns the heading (vr_view.c) by
@@ -653,7 +655,7 @@ void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struc
 	unsigned long off_pressed, main_pressed;
 	unsigned char bindings[VR_ROLE_COUNT][VR_CONTROL_COUNT], gesture_bindings[VR_ROLE_COUNT][VR_CONTROL_COUNT];
 	unsigned char hand_bindings[VR_HAND_COUNT][VR_CONTROL_COUNT], hand_gestures[VR_HAND_COUNT][VR_CONTROL_COUNT];
-	int role, control;
+	int role, control, throw_gesture;
 
 	/* (the setting's hand, from when it changes; until then the hands may
 	have swapped) */
@@ -785,7 +787,10 @@ void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struc
 		if (!(main_hand->buttons & VR_BUTTON_GRIP))
 			input->holster = 0;
 		/* (a grenade thrown with the arm: its buttons held press nothing,
-		the throw presses it; bare hands neither fire nor zoom) */
+		the throw presses it; not in a seat, where the button is the seat's
+		secondary trigger, held as a pad's; bare hands neither fire nor
+		zoom) */
+		throw_gesture = settings->throw_gesture && !settings->seated;
 		memcpy(bindings, settings->bindings, sizeof(bindings));
 		/* (the hands as they hold: a trigger fires in the hand that holds the
 		weapon, holds a grenade in an empty one, nothing in one that holds the
@@ -812,7 +817,7 @@ void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struc
 			{
 				int action = bindings[role][control];
 
-				if ((settings->throw_gesture && action == VR_BIND_THROW_GRENADE) ||
+				if ((throw_gesture && action == VR_BIND_THROW_GRENADE) ||
 					((settings->bare_hands || (input->physical && !input->holding)) &&
 						(action == VR_BIND_FIRE || action == VR_BIND_ZOOM)))
 				{
@@ -842,7 +847,7 @@ void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struc
 			settings->gestures ? VR_BIND_NONE : bindings[VR_ROLE_OFF][VR_CONTROL_GRIP]);
 		for (hand = 0; hand < VR_HAND_COUNT; hand++)
 		{
-			if (settings->throw_gesture)
+			if (throw_gesture)
 			{
 				if (vr_thrown(input, &frame->hand[hand], hand, hand_gestures[hand], seconds))
 				{
@@ -1163,6 +1168,7 @@ static void vr_input_settings_read(struct vr_input_settings *settings)
 	settings->physical = strcmp(config_string("vr.hands"), "game") != 0;
 	settings->grip_toggle = config_boolean("vr.grip_toggle");
 	settings->on_foot = vr_render_on_foot();
+	settings->seated = vr_render_seated();
 	settings->shoulder_full[VR_HAND_LEFT] = vr_render_shoulder_full(VR_HAND_LEFT);
 	settings->shoulder_full[VR_HAND_RIGHT] = vr_render_shoulder_full(VR_HAND_RIGHT);
 	settings->drop = vr_rules_active();

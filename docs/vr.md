@@ -198,7 +198,8 @@ What sets the size the world is seen at, each measured or derived:
   fastest of the last moments, falling by 8 m/s a second, as a hand slows
   to let go; still counted where the tracking lost it in the swing) it
   presses the button a tenth of a second, the game's throw, and let go
-  slower it presses nothing. The throw keeps the hand's smoothed velocity
+  slower it presses nothing (in a vehicle's seat the button is held as a
+  pad's: the seat's secondary trigger). The throw keeps the hand's smoothed velocity
   at its fastest and where the hand let go; `vr_view.c` gives them, in
   the world's axes, to `network_vr_throw` (a VR server's client sends
   them to the host, distributed message 95, reliably; the host, or a

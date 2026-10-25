@@ -246,6 +246,8 @@ int vr_render_grab_reach(int hand);
 int vr_render_shoulder_full(int side);
 /* vr_input.c: the player is on foot, the weapon in the hand */
 int vr_render_on_foot(void);
+/* vr_input.c: the player sits in a vehicle's seat (seen from it or not) */
+int vr_render_seated(void);
 /* the headset's player plays by a VR server's rules: in a game with no
 network (the campaign, a local game), or in the host's that is one
 (network.vr_rules, sent with the game's settings) */
@@ -336,6 +338,7 @@ void vr_render_rumble_hands(float const body[2], float const weapon[2], float co
 #define vr_render_grab_reach(hand) 0
 #define vr_render_shoulder_full(side) 0
 #define vr_render_on_foot() 0
+#define vr_render_seated() 0
 #define vr_rules_active() 0
 #define vr_render_legs(under, forward) 0
 #define vr_render_shot_origin(unit_index, origin) 0

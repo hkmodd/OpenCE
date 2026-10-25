@@ -383,6 +383,16 @@ static void network_test_log_players(
 						weapon->weapon.magazines[0].rounds_loaded);
 				}
 			}
+			/* (riding: where the vehicle faces and where its gun aims) */
+			if (placed != object && unit_try_and_get(object->object.parent_object_index))
+			{
+				struct unit_datum *vehicle = unit_get(object->object.parent_object_index);
+
+				network_test_append(line, (int)sizeof(line), &length, " vf%.0f va%.0f/%.0f",
+					atan2(placed->object.forward.j, placed->object.forward.i) * 57.29578,
+					atan2(vehicle->unit.aiming_vector.j, vehicle->unit.aiming_vector.i) * 57.29578,
+					asin(PIN(vehicle->unit.aiming_vector.k, -1.0f, 1.0f)) * 57.29578);
+			}
 		}
 		else
 		{

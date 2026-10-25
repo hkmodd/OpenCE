@@ -114,7 +114,8 @@ ALIVE_RE = re.compile(
     r"h(?P<body>-?[\d.]+)/(?P<shield>-?[\d.]+)(?P<riding> riding)?(?P<camo> camo)? "
     r"g(?P<g0>\d+)/(?P<g1>\d+) w a(?P<yaw>-?\d+)/(?P<pitch>-?\d+) f(?P<facing>-?\d+) "
     r"l(?P<look_yaw>-?\d+)/(?P<look_pitch>-?\d+) as(?P<aim_screen>-?\d+)/(?P<look_screen>-?\d+) "
-    r"st(?P<state>-?\d+) thr(?P<throttle>[\d.]+)(?P<weapons>(?: [0-9a-f]+:-?\d+)*) ")
+    r"st(?P<state>-?\d+) thr(?P<throttle>[\d.]+)(?P<weapons>(?: [0-9a-f]+:-?\d+)*) "
+    r"(?:vf(?P<vehicle_facing>-?\d+) va(?P<vehicle_yaw>-?\d+)/(?P<vehicle_pitch>-?\d+) )?")
 DEAD_RE = re.compile(r"dead ")
 STATS_RE = re.compile(r"s(?P<score>-?\d+) k(?P<kills>-?\d+) d(?P<deaths>-?\d+) f(?P<ff>-?\d+) "
                       r"t(?P<team>-?\d+) m(?P<machine>-?\d+)$")

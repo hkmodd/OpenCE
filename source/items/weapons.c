@@ -2397,9 +2397,21 @@ boolean weapon_get_projectile_ray(long weapon_index, short trigger_index, real_p
 	struct object_marker marker;
 	real velocity = 0.0f;
 	boolean other_hand = FALSE;
+	long player_index;
+	boolean use_aiming_vector = TRUE;
 
-	if (!unit || unit->unit.player_index == NONE || trigger_index < 0 ||
-		trigger_index >= definition->weapon.triggers.count)
+	if (!unit || trigger_index < 0 || trigger_index >= definition->weapon.triggers.count)
+		return FALSE;
+	/* port: a vehicle's weapon is its gunner's, as trigger_create_projectiles
+	takes it: the gunner's player, and the shot along the barrel (its
+	marker's forward), not the vehicle's aim, which a slow turret lags */
+	player_index = unit->unit.player_index;
+	if (unit->unit.gunner_object_index != NONE)
+	{
+		player_index = unit_get(unit->unit.gunner_object_index)->unit.player_index;
+		use_aiming_vector = FALSE;
+	}
+	if (player_index == NONE)
 		return FALSE;
 	trigger = TAG_BLOCK_GET_ELEMENT(&definition->weapon.triggers, trigger_index, struct weapon_trigger_definition);
 	if (trigger->projectile.index == NONE)
@@ -2415,7 +2427,7 @@ boolean weapon_get_projectile_ray(long weapon_index, short trigger_index, real_p
 		real_vector3d right, up;
 
 		unit_adjust_projectile_ray(owner_index, origin, forward, &velocity,
-			TEST_FLAG(unit_definition->unit.flags, _unit_fires_from_camera_bit), TRUE);
+			TEST_FLAG(unit_definition->unit.flags, _unit_fires_from_camera_bit), use_aiming_vector);
 		/* port: an other hand's weapon from that hand, along where it points
 		(port/linux/game/dual_wield.c) */
 		other_hand = dual_wield_projectile_ray(weapon_index, origin, forward);
@@ -2431,7 +2443,7 @@ boolean weapon_get_projectile_ray(long weapon_index, short trigger_index, real_p
 			point_from_line3d(origin, &right, trigger->first_person_weapon_offset.y, origin);
 			point_from_line3d(origin, &up, trigger->first_person_weapon_offset.z, origin);
 		}
-		player_aim_projectile_preview(unit->unit.player_index, origin, forward);
+		player_aim_projectile_preview(player_index, origin, forward);
 	}
 	if (TEST_FLAG(trigger->flags, _weapon_trigger_uses_weapon_origin_bit))
 		*origin = marker.matrix.position;

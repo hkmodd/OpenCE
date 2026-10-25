@@ -145,6 +145,10 @@ struct vr_input_settings
 	/* the player is on foot, the weapon in the hand (vr_view.c): in a seat
 	the hands hold as the game's */
 	int on_foot;
+	/* the player sits in a vehicle's seat (vr_view.c): the grenade's button
+	is the seat's secondary trigger (the Scorpion's machine gun, the
+	Banshee's fuel rod), held as a pad's, never thrown with the arm */
+	int seated;
 	/* each shoulder (VR_HAND_LEFT, VR_HAND_RIGHT) keeps a weapon not in the
 	hand, for a grip there to draw (vr_view.c) */
 	int shoulder_full[VR_HAND_COUNT];

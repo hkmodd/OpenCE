@@ -33,6 +33,7 @@ static struct vr_input_settings settings_of(int left_handed, float snap_angle, i
     settings.physical = 0;
     settings.grip_toggle = 0;
     settings.on_foot = 1;
+    settings.seated = 0;
     settings.shoulder_full[VR_HAND_LEFT] = settings.shoulder_full[VR_HAND_RIGHT] = 0;
     settings.drop = 0;
     settings.dual = 0;
@@ -1449,6 +1450,41 @@ int main(int argc, char **argv)
         settings.left_handed = 0;
         vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
         CHECK(!input.left_handed, "right-handed set: the right, the swap forgotten");
+        return 0;
+    }
+    CASE("seat-secondary") {
+        /* in a seat the off trigger is the seat's secondary trigger, held as long as it is pulled, though the
+        throw gesture is on; on foot again it takes a grenade and presses nothing */
+        memset(&input, 0, sizeof(input));
+        settings = settings_of(0, 0.5f, 1);
+        settings.throw_gesture = 1;
+        settings.on_foot = 0;
+        settings.seated = 1;
+        frame_of(&frame);
+        frame.hand[VR_HAND_LEFT].trigger = 1.0f;
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_TRIGGER;
+        for (index = 0; index < 10; index++)
+        {
+            vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+            CHECK(pad.analog[VR_PAD_LEFT_TRIGGER] == 255, "held: the secondary trigger (%d)",
+                pad.analog[VR_PAD_LEFT_TRIGGER]);
+        }
+        frame.hand[VR_HAND_RIGHT].trigger = 1.0f;
+        frame.hand[VR_HAND_RIGHT].buttons = VR_BUTTON_TRIGGER;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(pad.analog[VR_PAD_RIGHT_TRIGGER] == 255 && pad.analog[VR_PAD_LEFT_TRIGGER] == 255,
+            "both triggers at once (%d, %d)", pad.analog[VR_PAD_RIGHT_TRIGGER], pad.analog[VR_PAD_LEFT_TRIGGER]);
+        frame_of(&frame);
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(pad.analog[VR_PAD_LEFT_TRIGGER] == 0 && input.throws == 0, "let go: released, nothing thrown (%d, %lu)",
+            pad.analog[VR_PAD_LEFT_TRIGGER], input.throws);
+        settings.seated = 0;
+        settings.on_foot = 1;
+        frame.hand[VR_HAND_LEFT].trigger = 1.0f;
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_TRIGGER;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(pad.analog[VR_PAD_LEFT_TRIGGER] == 0, "on foot: a grenade held, nothing pressed (%d)",
+            pad.analog[VR_PAD_LEFT_TRIGGER]);
         return 0;
     }
     fprintf(stderr, "no case %s\n", case_name);
