@@ -92,6 +92,13 @@ struct animation_graph *first_person_weapon_get_animation_graph(
 away, reloaded, a grenade thrown, a melee (port/linux/game/vr_arms.c) */
 boolean first_person_weapon_off_hand_busy(
 	short local_player_index);
+/* port: marks the animation graph's nodes the hands' model is drawn with and
+the weapon's is not (the arms, the hands; `node_count` of them), and
+returns the count marked (port/linux/game/vr_view.c) */
+short first_person_weapon_arm_nodes(
+	short local_player_index,
+	boolean *arm_nodes,
+	short node_count);
 
 /* ---------- globals */
 

@@ -382,12 +382,21 @@ int main(int argc, char **argv)
         CHECK(pad.analog[VR_PAD_WHITE] == 0, "the off grip at the body is no flashlight");
         frame.hand[VR_HAND_LEFT].buttons = 0;
         vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
-        frame.hand[VR_HAND_LEFT].grip.position[0] = -0.1f;
-        frame.hand[VR_HAND_LEFT].grip.position[1] = 0.05f;
-        frame.hand[VR_HAND_LEFT].grip.position[2] = 0.0f;
+        /* (by the ear is a shoulder, not the flashlight) */
+        frame.hand[VR_HAND_LEFT].grip.position[0] = -0.15f;
+        frame.hand[VR_HAND_LEFT].grip.position[1] = 0.0f;
+        frame.hand[VR_HAND_LEFT].grip.position[2] = 0.05f;
         frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
         vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
-        CHECK(pad.analog[VR_PAD_WHITE] == 255, "the off grip at the head is");
+        CHECK(pad.analog[VR_PAD_WHITE] == 0, "the off grip by the ear is no flashlight");
+        frame.hand[VR_HAND_LEFT].buttons = 0;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        frame.hand[VR_HAND_LEFT].grip.position[0] = -0.02f;
+        frame.hand[VR_HAND_LEFT].grip.position[1] = -0.02f;
+        frame.hand[VR_HAND_LEFT].grip.position[2] = -0.15f;
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(pad.analog[VR_PAD_WHITE] == 255, "the off grip at the visor is");
         for (index = 0; index < 30; index++)
             vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
         CHECK(pad.analog[VR_PAD_WHITE] == 0, "once, not as long as held (a toggle)");
@@ -471,6 +480,41 @@ int main(int argc, char **argv)
         frame.hand[VR_HAND_RIGHT].buttons = VR_BUTTON_GRIP;
         vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
         CHECK(input.shoulder_grabs == 3 && input.shoulder_side == VR_HAND_RIGHT, "the shoulders turn with the head");
+        /* where a player's hand let go over the shoulder, in the headset: by the ear, from before it to behind
+        it, a little above and below the eyes; not before the chest, where the weapon is held */
+        {
+            static float const ears[][3] = {{0.15f, 0.0f, 0.0f}, {0.21f, 0.06f, 0.13f}, {0.12f, -0.05f, -0.09f},
+                {-0.18f, 0.02f, 0.05f}};
+            static float const chest[][3] = {{0.14f, -0.32f, -0.21f}, {0.14f, -0.2f, -0.25f}};
+            unsigned long grabs;
+
+            frame.head.orientation[1] = 0;
+            frame.head.orientation[3] = 1;
+            for (index = 0; index < 4; index++)
+            {
+                frame.hand[VR_HAND_RIGHT].buttons = 0;
+                vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+                memcpy(frame.hand[VR_HAND_RIGHT].grip.position, ears[index], sizeof(ears[index]));
+                frame.hand[VR_HAND_RIGHT].buttons = VR_BUTTON_GRIP;
+                grabs = input.shoulder_grabs;
+                vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+                CHECK(input.shoulder_grabs == grabs + 1 && input.shoulder_side == (ears[index][0] > 0 ? VR_HAND_RIGHT :
+                    VR_HAND_LEFT), "by the ear is a shoulder (%d: %lu, %d)", index, input.shoulder_grabs,
+                    input.shoulder_side);
+            }
+            for (index = 0; index < 2; index++)
+            {
+                frame.hand[VR_HAND_RIGHT].buttons = 0;
+                vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+                memcpy(frame.hand[VR_HAND_RIGHT].grip.position, chest[index], sizeof(chest[index]));
+                frame.hand[VR_HAND_RIGHT].buttons = VR_BUTTON_GRIP;
+                grabs = input.shoulder_grabs;
+                vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+                CHECK(input.shoulder_grabs == grabs, "before the chest is none (%d: %lu)", index, input.shoulder_grabs);
+            }
+            frame.hand[VR_HAND_RIGHT].buttons = 0;
+            vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        }
 
         /* both hands on the weapon */
         frame_of(&frame);
@@ -503,7 +547,7 @@ int main(int argc, char **argv)
         frame.hand[VR_HAND_LEFT].grip.position[0] = 0.15f;
         frame.hand[VR_HAND_LEFT].grip.position[1] = -0.40f;
         frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
-        yawed(0.3f, frame.hand[VR_HAND_RIGHT].grip.orientation);
+        yawed(0.3f, frame.hand[VR_HAND_RIGHT].aim.orientation);
         CHECK(vr_two_handed(&frame, 0, 0, 0.0f, orientation) == VR_HELD_SUPPORT, "at the main hand it supports it");
         vr_rotate(orientation, ahead, forward);
         CHECK(close_to(forward[0], -sinf(0.3f), 1e-4f) && close_to(forward[2], -cosf(0.3f), 1e-4f),
@@ -517,13 +561,14 @@ int main(int argc, char **argv)
         CHECK(vr_two_handed(&frame, 0, 1, 0.0f, orientation) == VR_HELD_ONE, "a pistol: the off hand ahead holds nothing");
         CHECK(vr_two_handed(&frame, 0, 0, 0.0f, orientation) == VR_HELD_BOTH, "a rifle: it holds it");
 
-        /* the hand points along its grip pose (not its aim pose), its barrel turned up by the pitch */
+        /* the hand points along its aim pose (not its grip pose, along the handle), its barrel turned up by
+           the pitch */
         frame_of(&frame);
-        yawed(1.0f, frame.hand[VR_HAND_RIGHT].aim.orientation);
+        yawed(1.0f, frame.hand[VR_HAND_RIGHT].grip.orientation);
         vr_hand_pointing(&frame.hand[VR_HAND_RIGHT], 0.5f, orientation);
         vr_rotate(orientation, ahead, forward);
         CHECK(close_to(forward[0], 0, 1e-4f) && close_to(forward[1], sinf(0.5f), 1e-4f) &&
-            close_to(forward[2], -cosf(0.5f), 1e-4f), "the grip's -z turned 0.5 up (%f, %f, %f)", (double)forward[0],
+            close_to(forward[2], -cosf(0.5f), 1e-4f), "the aim's -z turned 0.5 up (%f, %f, %f)", (double)forward[0],
             (double)forward[1], (double)forward[2]);
 
         /* the rumble: the weapon's hand feels both motors, the other the left, and the right while it holds it too */
@@ -644,12 +689,12 @@ int main(int argc, char **argv)
         CHECK(!(pad.buttons & VR_PAD_RIGHT_THUMB), "the off grip away from the head does nothing");
         frame.hand[VR_HAND_LEFT].buttons = 0;
         vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
-        frame.hand[VR_HAND_LEFT].grip.position[0] = -0.1f;
-        frame.hand[VR_HAND_LEFT].grip.position[1] = 0.05f;
-        frame.hand[VR_HAND_LEFT].grip.position[2] = 0.0f;
+        frame.hand[VR_HAND_LEFT].grip.position[0] = -0.02f;
+        frame.hand[VR_HAND_LEFT].grip.position[1] = -0.02f;
+        frame.hand[VR_HAND_LEFT].grip.position[2] = -0.15f;
         frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
         vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
-        CHECK((pad.buttons & VR_PAD_RIGHT_THUMB) && pad.analog[VR_PAD_WHITE] == 0, "at the head it zooms");
+        CHECK((pad.buttons & VR_PAD_RIGHT_THUMB) && pad.analog[VR_PAD_WHITE] == 0, "at the visor it zooms");
         return 0;
     }
     CASE("throw") {
@@ -703,6 +748,20 @@ int main(int argc, char **argv)
         CHECK(thrown >= 8 && thrown <= 10, "one throw, held a tenth of a second (%d frames)", thrown);
         CHECK(input.throws == 1 && input.throw_hand == VR_HAND_LEFT, "one throw, the left hand's (%lu, %d)",
             input.throws, input.throw_hand);
+        /* the throw's velocity the swing's at its fastest (smoothed), not the slowing hand's as it let go; its
+        place the hand's as it let go */
+        {
+            float speed = sqrtf(input.throw_velocity[0] * input.throw_velocity[0] +
+                input.throw_velocity[1] * input.throw_velocity[1] + input.throw_velocity[2] * input.throw_velocity[2]);
+
+            CHECK(speed > 2.0f && speed < 3.3f && input.throw_velocity[1] > 0.0f && input.throw_velocity[2] < 0.0f &&
+                close_to(input.throw_velocity[1] / input.throw_velocity[2], -2.0f / 3.0f, 0.01f),
+                "the swing's way at its fastest (%f: %f %f %f)", (double)speed, (double)input.throw_velocity[0],
+                (double)input.throw_velocity[1], (double)input.throw_velocity[2]);
+            CHECK(close_to(input.throw_place[1], frame.hand[VR_HAND_LEFT].grip.position[1], 1e-6f) &&
+                close_to(input.throw_place[2], frame.hand[VR_HAND_LEFT].grip.position[2], 1e-6f),
+                "let go where the hand was");
+        }
         /* a slow swing, 0.9 m/s: kept */
         frame.hand[VR_HAND_LEFT].trigger = 1.0f;
         frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_TRIGGER;
@@ -748,6 +807,50 @@ int main(int argc, char **argv)
         vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
         CHECK(pad.analog[VR_PAD_LEFT_TRIGGER] == 0 && pad.analog[VR_PAD_B] == 0,
             "nor a throw (%d, %d)", pad.analog[VR_PAD_LEFT_TRIGGER], pad.analog[VR_PAD_B]);
+        /* (no grenade held: the main hand moved in the menus is no punch back in the game) */
+        for (index = 0; index < 60; index++)
+            vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        vr_input_update(&input, &frame, &settings, 1, SECONDS, &pad);
+        frame.hand[VR_HAND_RIGHT].grip.position[2] -= 0.5f;
+        vr_input_update(&input, &frame, &settings, 1, SECONDS, &pad);
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(pad.analog[VR_PAD_B] == 0, "no punch from where the main hand was before the menus");
+
+        /* the main hand's punch while a grenade is held, or just let go, is none (a throw's swing is no melee); a
+        punch once VR_GRENADE_CALM has passed is */
+        for (index = 0; index < 90; index++)
+            vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        frame_of(&frame);
+        frame.hand[VR_HAND_LEFT].trigger = 1.0f;
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_TRIGGER;
+        for (index = 0; index < 3; index++)
+            vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        for (index = 0; index < 4; index++)
+        {
+            frame.hand[VR_HAND_RIGHT].grip.position[2] -= 0.05f;
+            vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+            CHECK(pad.analog[VR_PAD_B] == 0, "no punch while a grenade is held");
+        }
+        frame.hand[VR_HAND_LEFT].trigger = 0.0f;
+        frame.hand[VR_HAND_LEFT].buttons = 0;
+        frame_of(&frame);
+        for (index = 0; index < 9; index++)
+            vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        for (index = 0; index < 4; index++)
+        {
+            frame.hand[VR_HAND_RIGHT].grip.position[2] -= 0.05f;
+            vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+            CHECK(pad.analog[VR_PAD_B] == 0, "nor just after it is let go");
+        }
+        frame_of(&frame);
+        for (index = 0; index < 45; index++)
+            vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        for (index = 0; index < 4; index++)
+        {
+            frame.hand[VR_HAND_RIGHT].grip.position[2] -= 0.05f;
+            vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        }
+        CHECK(pad.analog[VR_PAD_B] == 255, "a punch once the throw has passed");
 
         /* without the setting, the trigger throws as a pad's, as far as pulled */
         settings.throw_gesture = 0;
@@ -805,6 +908,35 @@ int main(int argc, char **argv)
         frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
         vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
         CHECK(pad.analog[VR_PAD_X] == 0 && pad.analog[VR_PAD_B] == 255, "the main grip strikes out of reach");
+        return 0;
+    }
+    CASE("layout") {
+        /* the weapon in the left hand (handed over or taken), the right-handed's layout: the triggers and the grips
+        go with the weapon, the sticks and the face buttons stay on their controllers */
+        memset(&input, 0, sizeof(input));
+        settings = settings_of(0, 0.5f, 0);
+        input.left_handed = input.left_handed_valid = 1;
+        frame_of(&frame);
+        frame.hand[VR_HAND_LEFT].trigger = 1.0f;
+        frame.hand[VR_HAND_RIGHT].trigger = 0.5f;
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_LOWER | VR_BUTTON_GRIP;
+        frame.hand[VR_HAND_RIGHT].buttons = VR_BUTTON_UPPER;
+        frame.hand[VR_HAND_LEFT].stick[1] = -1.0f;
+        frame.hand[VR_HAND_RIGHT].stick[0] = 0.9f;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(pad.analog[VR_PAD_RIGHT_TRIGGER] == 255 && pad.analog[VR_PAD_LEFT_TRIGGER] == 128,
+            "the left trigger fires, the right throws (%d, %d)", pad.analog[VR_PAD_RIGHT_TRIGGER],
+            pad.analog[VR_PAD_LEFT_TRIGGER]);
+        CHECK(pad.analog[VR_PAD_B] == 255 && pad.analog[VR_PAD_WHITE] == 0, "the left grip strikes");
+        CHECK(pad.analog[VR_PAD_BLACK] == 255 && pad.analog[VR_PAD_A] == 0,
+            "the left lower button still switches grenades, it does not jump");
+        CHECK(pad.analog[VR_PAD_X] == 255 && pad.analog[VR_PAD_Y] == 0, "the right upper button still acts");
+        CHECK(pad.thumb[1] == -32767, "the left stick still moves (%d)", pad.thumb[1]);
+        CHECK(close_to(input.turn, -0.5f, 1e-6f), "the right stick still turns (%f)", (double)input.turn);
+        frame.hand[VR_HAND_LEFT].buttons = 0;
+        frame.hand[VR_HAND_RIGHT].buttons = VR_BUTTON_GRIP;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(pad.analog[VR_PAD_WHITE] == 255 && pad.analog[VR_PAD_B] == 0, "the right grip is the flashlight");
         return 0;
     }
     CASE("bare") {
@@ -1038,6 +1170,7 @@ int main(int argc, char **argv)
     }
     CASE("dual") {
         unsigned long grabs;
+        int still;
 
         /* in a game with no network, by a VR server's rules: the right hand holds its weapon */
         memset(&input, 0, sizeof(input));
@@ -1087,12 +1220,87 @@ int main(int argc, char **argv)
         frame.hand[VR_HAND_RIGHT].buttons = VR_BUTTON_GRIP;
         vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
         CHECK(input.off_holding && input.off_side == VR_HAND_RIGHT, "the right hand holds the right shoulder's weapon");
+        /* (drawn, that shoulder keeps nothing now) */
+        settings.shoulder_full[VR_HAND_RIGHT] = 0;
         frame.hand[VR_HAND_RIGHT].buttons = 0;
         grabs = input.shoulder_grabs;
         vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
         CHECK(!input.off_holding && input.holding && input.left_handed && input.off_transfers == 1 &&
             input.shoulder_grabs == grabs, "the right let go: its weapon back, the left's kept (%d, %d, %d, %lu)",
             input.off_holding, input.holding, input.left_handed, input.off_transfers);
+        CHECK(input.off_releases == 1 && input.off_release_side == VR_HAND_RIGHT,
+            "let go at the free right shoulder: kept there (%lu, %d)", input.off_releases, input.off_release_side);
+        /* drawn again, and let go there once another weapon is kept there: kept there (the other one moving
+           to the free shoulder), and with both shoulders keeping one, it falls */
+        settings.shoulder_full[VR_HAND_RIGHT] = 1;
+        frame.hand[VR_HAND_RIGHT].buttons = VR_BUTTON_GRIP;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(input.off_holding, "the right hand holds the right shoulder's weapon again");
+        frame.hand[VR_HAND_RIGHT].buttons = 0;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(!input.off_holding && input.off_releases == 2 && input.off_release_side == VR_HAND_RIGHT,
+            "let go at a shoulder that keeps another, the other free: kept there (%lu, %d)", input.off_releases,
+            input.off_release_side);
+        settings.shoulder_full[VR_HAND_LEFT] = 1;
+        frame.hand[VR_HAND_RIGHT].buttons = VR_BUTTON_GRIP;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(input.off_holding, "the right hand holds the right shoulder's weapon once more");
+        frame.hand[VR_HAND_RIGHT].buttons = 0;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        settings.shoulder_full[VR_HAND_LEFT] = 0;
+        CHECK(!input.off_holding && input.off_releases == 3 && input.off_release_side == -1,
+            "let go at a shoulder with both keeping one: it falls (%lu, %d)", input.off_releases,
+            input.off_release_side);
+        /* drawn again and let go before the head as it swings ahead: it falls, thrown so */
+        frame.hand[VR_HAND_RIGHT].buttons = VR_BUTTON_GRIP;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        settings.shoulder_full[VR_HAND_RIGHT] = 0;
+        CHECK(input.off_holding, "the right hand holds the right shoulder's weapon a third time");
+        frame.hand[VR_HAND_RIGHT].grip.position[0] = 0.2f;
+        frame.hand[VR_HAND_RIGHT].grip.position[1] = -0.35f;
+        frame.hand[VR_HAND_RIGHT].grip.position[2] = -0.35f;
+        for (still = 0; still < 30; still++)
+            vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        frame.hand[VR_HAND_RIGHT].grip.position[2] -= 0.05f;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        frame.hand[VR_HAND_RIGHT].grip.position[2] -= 0.05f;
+        frame.hand[VR_HAND_RIGHT].buttons = 0;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(!input.off_holding && input.off_releases == 4 && input.off_release_side == -1 &&
+            input.off_drop_velocity[2] < -0.5f, "let go at no shoulder: it falls, thrown ahead (%lu, %d, %f)",
+            input.off_releases, input.off_release_side, input.off_drop_velocity[2]);
+        /* the main hand lets go at a shoulder that keeps another weapon: kept there, the other free; it falls
+           with both keeping one */
+        settings.shoulder_full[VR_HAND_LEFT] = 1;
+        frame_of(&frame);
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        at_shoulder(&frame, VR_HAND_LEFT, VR_HAND_LEFT);
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        frame.hand[VR_HAND_LEFT].buttons = 0;
+        grabs = input.shoulder_grabs;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(!input.holding && input.shoulder_grabs == grabs + 1 && input.shoulder_kind == VR_SHOULDER_PUT &&
+            input.shoulder_side == VR_HAND_LEFT, "let go at a full shoulder, the other free: put there (%d, %d)",
+            input.holding, input.shoulder_kind);
+        vr_input_weapon_taken(&input);
+        settings.shoulder_full[VR_HAND_RIGHT] = 1;
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        frame.hand[VR_HAND_LEFT].buttons = 0;
+        grabs = input.shoulder_grabs;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(!input.holding && input.shoulder_grabs == grabs + 1 && input.shoulder_kind == VR_SHOULDER_DROP,
+            "let go at a shoulder with both keeping one: it falls (%d, %d)", input.holding, input.shoulder_kind);
+        settings.shoulder_full[VR_HAND_LEFT] = settings.shoulder_full[VR_HAND_RIGHT] = 0;
+        vr_input_weapon_taken(&input);
+        frame_of(&frame);
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        frame.hand[VR_HAND_RIGHT].buttons = 0;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        settings.shoulder_full[VR_HAND_RIGHT] = 1;
+        at_shoulder(&frame, VR_HAND_RIGHT, VR_HAND_RIGHT);
         /* held again as those rules end (a network game begins): let go of */
         frame.hand[VR_HAND_RIGHT].buttons = VR_BUTTON_GRIP;
         vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);

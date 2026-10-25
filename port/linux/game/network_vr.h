@@ -45,6 +45,16 @@ units: 1.5 m and 1.2 m) */
 m/s), and the ticks before a player's next */
 #define NETWORK_VR_DROP_SPEED 0.3f
 #define NETWORK_VR_DROP_TICKS 15
+/* a grenade thrown with the arm: the ticks the game's throw that follows
+may take it in, and its speed: the game's own throw's for a hand's firm
+throw, NETWORK_VR_THROW_FULL (world units a tick: 7.5 m/s; the game's
+throw, 30 m/s by the world's metres, is no hand's), a softer or a harder
+one's in proportion, between NETWORK_VR_THROW_LEAST and
+NETWORK_VR_THROW_MOST of the game's */
+#define NETWORK_VR_THROW_TICKS 30
+#define NETWORK_VR_THROW_FULL 0.082f
+#define NETWORK_VR_THROW_LEAST 0.4f
+#define NETWORK_VR_THROW_MOST 1.25f
 
 void network_vr_reset(void);
 /* any player's pose was taken this game (none: no body to pose) */
@@ -64,13 +74,36 @@ struct network_vr_pose const *network_vr_pose_get(long player);
 /* whether a pose is fit to take: its head near the unit, its hands near
 the head, its axes whole */
 boolean network_vr_pose_valid(struct network_vr_pose const *pose);
-/* (a headset's player's machine) the weapon in the player's hand let
-fall, thrown with a velocity (the world's axes, world units a tick): by a
-game with no network itself, by a VR server's host when it asks, which
-checks it; nothing on another server */
-void network_vr_drop(long player, real_vector3d const *velocity);
+/* (a headset's player's machine) the weapon in the player's hand (slot
+NONE), or the other hand's (its slot), let fall, thrown with a velocity
+(the world's axes, world units a tick): by a game with no network itself,
+by a VR server's host when it asks, which checks it; nothing on another
+server */
+void network_vr_drop(long player, real_vector3d const *velocity, short slot);
 /* the request's entry size and its handler (the host: over the
 machine's stream alone) */
 word network_vr_drop_entry_size(void);
 void network_vr_handle_drop(long machine_index, void const *entries, short count, boolean stream);
+/* (players.c) the unit carries four weapons, not two, those past the
+second taken by the hand (a swap that drops none): this machine's
+headset's player's by a VR server's rules (or in a game with no
+network), or a VR server's player whose pose comes */
+boolean network_vr_carries_four(long unit_index);
+/* (a headset's player's machine) the player's grenade thrown with the
+arm (vr.throw_gesture): the hand's velocity and its place from the eyes as
+it let go (the world's axes: world units a tick, world units), for the
+game's throw that follows: kept by a game with no network itself, by a
+VR server's host when it is told, which checks it; nothing on another
+server */
+void network_vr_throw(long player, real_vector3d const *velocity, real_vector3d const *offset);
+/* the word's entry size and its handler (the host: over the machine's
+stream alone) */
+word network_vr_throw_entry_size(void);
+void network_vr_handle_throw(long machine_index, void const *entries, short count, boolean stream);
+/* (units.c, the game's throw of a player's grenade) a throw with the arm
+kept for the unit's player (taken once): `velocity`, the game's, becomes
+the hand's way, as fast as the hand (between the least and the most of
+the game's), and `origin` the hand's place unless a wall stands between
+it and the eyes; FALSE (both untouched) if none is kept */
+boolean network_vr_grenade_throw(long unit_index, real_point3d *origin, real_vector3d *velocity);
 #endif

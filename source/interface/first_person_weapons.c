@@ -395,6 +395,15 @@ real pal_tags_first_person_fraction(short local_player_index, long graph_index, 
 /* ---------- globals */
 
 static struct first_person_weapon *first_person_weapons;
+/* port: the first-person animations each local player's hands were last
+drawn with: a headset's player with no weapon left holds up empty hands
+posed in them (first_person_weapon_draw_empty_hands, vr_view.c) */
+static boolean first_person_weapon_hands_drawn[MAXIMUM_NUMBER_OF_LOCAL_PLAYERS];
+static long first_person_weapon_hands_animations[MAXIMUM_NUMBER_OF_LOCAL_PLAYERS];
+
+static void first_person_weapon_draw_empty_hands(
+	short local_player_index,
+	long unit_index);
 
 /* ---------- public code */
 
@@ -445,6 +454,7 @@ void first_person_weapons_initialize_for_new_map(
 		first_person_weapons[local_player_index].unit_index= NONE;
 		first_person_weapons[local_player_index].current_sound_index= NONE;
 		first_person_weapons[local_player_index].current_sound_state= NONE;
+		first_person_weapon_hands_drawn[local_player_index]= FALSE; /* port */
 	}
 
 	return;
@@ -587,6 +597,9 @@ void first_person_weapon_draw(
 							weapon_definition->weapon.interface_definition.first_person_animations.index,
 							first_person_weapon->node_matrices,
 							first_person_weapon->hands_node_remapping_table);
+						/* port: the arms mirrored in the headset's left hand, the weapon
+						not (vr_view.c) */
+						vr_render_hands_drawing(TRUE);
 						render_model(
 							first_person_interface->hands.index,
 							0.0f,
@@ -601,11 +614,78 @@ void first_person_weapon_draw(
 							first_person_weapon->weapon_index,
 							0,
 							FLAG(_render_model_first_person_bit));
+						vr_render_hands_drawing(FALSE);
+						/* port: the animations the hands were drawn with */
+						first_person_weapon_hands_drawn[render.local_player_index]= TRUE;
+						first_person_weapon_hands_animations[render.local_player_index]=
+							weapon_definition->weapon.interface_definition.first_person_animations.index;
 					}
 				}
 			}
+			/* port: a headset's player with no weapon left: empty hands */
+			else if (unit_index!=NONE)
+			{
+				first_person_weapon_draw_empty_hands(render.local_player_index, unit_index);
+			}
 		}
 	}
+
+	return;
+}
+
+/* port: the hands alone, in the animations they were last drawn with, as
+the headset poses them (vr_render_empty_hands, vr_view.c) */
+static void first_person_weapon_draw_empty_hands(
+	short local_player_index,
+	long unit_index)
+{
+	struct first_person_weapon *first_person_weapon= first_person_weapon_get(local_player_index);
+	struct game_globals_first_person_interface *first_person_interface= TAG_BLOCK_GET_ELEMENT(
+		&scenario_get_game_globals()->first_person_interface,
+		0,
+		struct game_globals_first_person_interface);
+	struct real_matrix4x3 node_matrices[MAXIMUM_NODES_PER_ANIMATION];
+	struct real_matrix4x3 model_node_matrices[MAXIMUM_NODES_PER_ANIMATION];
+	struct render_model_effect model_effect;
+	struct unit_datum *unit;
+	long animations_index;
+
+	if (!first_person_weapon_hands_drawn[local_player_index] ||
+		!first_person_weapon->hands_node_remapping_table_valid ||
+		first_person_interface->hands.index==NONE)
+	{
+		return;
+	}
+	animations_index= first_person_weapon_hands_animations[local_player_index];
+	if (!vr_render_empty_hands(animation_graph_definition_get(animations_index), node_matrices))
+	{
+		return;
+	}
+	unit= unit_get(unit_index);
+	model_effect.modifier_shader= NULL;
+	model_effect.type= _render_model_effect_type_none;
+	model_remap_node_matrices_to_match_animation_graph(
+		first_person_interface->hands.index,
+		model_node_matrices,
+		animations_index,
+		node_matrices,
+		first_person_weapon->hands_node_remapping_table);
+	vr_render_hands_drawing(TRUE);
+	render_model(
+		first_person_interface->hands.index,
+		0.0f,
+		model_node_matrices,
+		NULL,
+		unit->object.outgoing_change_colors,
+		unit->object.outgoing_function_values,
+		object_get_cached_render_lighting(unit_index, FLT_MAX),
+		&render.camera.position,
+		0.0f,
+		&model_effect,
+		unit_index,
+		0,
+		FLAG(_render_model_first_person_bit));
+	vr_render_hands_drawing(FALSE);
 
 	return;
 }
@@ -788,6 +868,65 @@ boolean first_person_weapon_off_hand_busy(
 	default:
 		return FALSE;
 	}
+}
+
+/* port: the graph's nodes the hands' model is drawn with and the weapon's is
+not: in the left hand the headset mirrors the arms alone, the weapon held
+as it is (port/linux/game/vr_view.c) */
+short first_person_weapon_arm_nodes(
+	short local_player_index,
+	boolean *arm_nodes,
+	short node_count)
+{
+	struct first_person_weapon *first_person_weapon= first_person_weapon_get(local_player_index);
+	struct game_globals_first_person_interface *first_person_interface= TAG_BLOCK_GET_ELEMENT(
+		&scenario_get_game_globals()->first_person_interface,
+		0,
+		struct game_globals_first_person_interface);
+	struct weapon_datum *weapon= first_person_weapon->visible && first_person_weapon->weapon_index!=NONE ?
+		weapon_try_and_get(first_person_weapon->weapon_index) : NULL;
+	short index, marked= 0;
+
+	csmemset(arm_nodes, 0, sizeof(*arm_nodes)*node_count);
+	if (!first_person_weapon->hands_node_remapping_table_valid || first_person_interface->hands.index==NONE)
+	{
+		return 0;
+	}
+	{
+		struct model *hands= model_definition_get(first_person_interface->hands.index);
+
+		for (index= 0; index<MIN(hands->nodes.count, MAXIMUM_NODES_PER_ANIMATION); index++)
+		{
+			short node= first_person_weapon->hands_node_remapping_table[index];
+
+			if (node>=0 && node<node_count && !arm_nodes[node])
+			{
+				arm_nodes[node]= TRUE;
+				marked++;
+			}
+		}
+	}
+	if (weapon && first_person_weapon->weapon_node_remapping_table_valid)
+	{
+		struct weapon_definition *weapon_definition= weapon_definition_get(weapon->definition_index);
+
+		if (weapon_definition->weapon.interface_definition.first_person_model.index!=NONE)
+		{
+			struct model *model= model_definition_get(weapon_definition->weapon.interface_definition.first_person_model.index);
+
+			for (index= 0; index<MIN(model->nodes.count, MAXIMUM_NODES_PER_ANIMATION); index++)
+			{
+				short node= first_person_weapon->weapon_node_remapping_table[index];
+
+				if (node>=0 && node<node_count && arm_nodes[node])
+				{
+					arm_nodes[node]= FALSE;
+					marked--;
+				}
+			}
+		}
+	}
+	return marked;
 }
 
 void first_person_weapon_center_flashlight(

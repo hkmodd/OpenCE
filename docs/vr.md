@@ -80,7 +80,15 @@ What sets the size the world is seen at, each measured or derived:
 - The legs (`display.first_person_legs`) are drawn under the head, facing
   as the body the arms hang from does (`first_person_legs.c`,
   `vr_render_legs`): not set back from the eye, which looks about on its
-  own.
+  own. In the headset the body keeps its spine and collarbones (the
+  torso, seen looking down) and folds its head, neck and arms into the
+  joint each hangs from. The base of its neck goes 25 cm behind the eyes
+  (the armour's chest stands out past a chest: looking down, the eyes
+  look past it at the feet) and 22 cm below them, the body grown or shrunk
+  from the feet (0.7 to 1.3 times) to put it there: at any eye height
+  (`vr.eye_height`, or the head lowered) the eyes are never inside the
+  chest and the feet stay on the ground. No lid over the waist hides the
+  floor.
 
 ## A frame
 
@@ -138,9 +146,17 @@ What sets the size the world is seen at, each measured or derived:
   layout of the VR conversions' (the table in the README), each button of
   the aiming (main) hand and the other (off) bound to an action
   (`vr.bindings` binds them otherwise), the action pressing the standard
-  preset's button for it; mirrored for the left-handed; with the gestures
-  (a punch, the off grip at the head, the head lowered) as presses of the
-  same buttons. The main grip pressed at a shoulder is the shoulder's
+  preset's button for it. The sticks and the face buttons are each
+  controller's, by `vr.left_handed`'s layout; the trigger and the grip are
+  the weapon's hand's or the other's, so a weapon passed to the other
+  hand fires from it and nothing else moves. With the gestures (a punch,
+  none while a grenade is held or for half a second after; the off grip
+  at the visor's front; the head lowered) as presses of the same
+  buttons. The main grip pressed at a shoulder (along the head's yaw, 8
+  to 50 cm to its side, 30 cm under to 30 cm over the eyes, 12 cm before
+  to 50 cm behind them: by the ear and back over the shoulder, where a
+  player's hand let go putting a weapon over the shoulder in a headset;
+  not before the chest, nor before the face) is the shoulder's
   (`vr_view.c`'s `vr_shoulders`): each keeps a slot of the inventory (at
   first the main hand's side the first, the other the second); the weapon
   held is put away if it is the one kept there (the hands bare: the
@@ -158,8 +174,9 @@ What sets the size the world is seen at, each measured or derived:
   weapon as the game takes it; one that comes to the player within a
   second goes to that hand (the hands swap if it was the off hand's). The off grip pressed at the
   main hand takes the weapon there; if within 1.5 s the hands are 25 cm
-  apart, the main hand having moved more, the hands swap until
-  `vr.left_handed` is changed (a hand-over, after astromaddie's gesture);
+  apart, the main hand having moved more, the weapon changes hands until
+  `vr.left_handed` is changed (a hand-over, after astromaddie's gesture;
+  the buttons stay);
   hands that stay together hold it with both (a pistol's grip), and the
   off hand pulling away lets go. With `vr.hands` `"physical"` (and the
   gestures) the hands hold as hands do (`vr_physical_hands`): the main hand
@@ -170,7 +187,7 @@ What sets the size the world is seen at, each measured or derived:
   let go at the shoulder there (kept there, the one kept there going to the
   other shoulder) or at none (back at its own), and the hands are bare. An
   empty hand's grip pressed at a shoulder keeping a weapon not in the hand
-  draws it, into that hand; at the head it is the flashlight; at a weapon
+  draws it, into that hand; at the visor it is the flashlight; at a weapon
   on the ground it takes it. The triggers are bound by what the hand holds:
   the main hand's fires while it holds the weapon, an empty hand's is the
   grenade's button, a hand holding the weapon too presses nothing; the main
@@ -181,7 +198,17 @@ What sets the size the world is seen at, each measured or derived:
   fastest of the last moments, falling by 8 m/s a second, as a hand slows
   to let go; still counted where the tracking lost it in the swing) it
   presses the button a tenth of a second, the game's throw, and let go
-  slower it presses nothing. The hands' speeds start again after the menus,
+  slower it presses nothing. The throw keeps the hand's smoothed velocity
+  at its fastest and where the hand let go; `vr_view.c` gives them, in
+  the world's axes, to `network_vr_throw` (a VR server's client sends
+  them to the host, distributed message 95, reliably; the host, or a
+  game with no network, keeps them a second), and when the game lets
+  the grenade go (`unit_throw_grenade_release`) it leaves from the hand,
+  unless a wall is between the hand and the eyes, the way the hand threw
+  it: a firm throw (the hand at 7.5 m/s) as fast as the game's own throw
+  (30 m/s by the world's metres, which no hand throws), a softer or a
+  harder one in proportion, between 0.4 and 1.25 times the game's
+  (`network_vr_grenade_throw`). The hands' speeds start again after the menus,
   so a hand moved there neither strikes nor throws. The game's motors are felt in the hands:
   the weapon's hand feels both, the other the left (the heavy one: hits,
   blasts) and, while it holds the weapon too, the right (the shots). The menu button is Start, or Back held a
@@ -192,9 +219,9 @@ What sets the size the world is seen at, each measured or derived:
 - The main hand's stick turns the heading by snaps or smoothly; it never
   reaches the game's right stick.
 - The hand aims on foot (`vr.aim`): the facing is where the hand points,
-  its grip pose's -z (the OpenXR specification's: along the index finger
-  held straight, the same for every controller, where the aim pose is
-  each runtime's own), turned up by `vr.aim_pitch`; with the off hand's
+  its aim pose's -z (the pointing ray each runtime gives its controllers;
+  the grip pose's -z runs along the handle, 60 degrees higher on a Touch
+  controller), turned up by `vr.aim_pitch`; with the off hand's
   grip ahead of the main hand on a weapon not held as a pistol (by its
   label: "pistol", "plasma pistol", "needler"), from the main hand to the
   off; with it at the main hand (supporting it), as the main hand. The
@@ -208,13 +235,15 @@ What sets the size the world is seen at, each measured or derived:
   and eased over frames: the camera is turned so that the barrel lies along
   the aim (the stock models' already do), and the muzzle is where the shot
   starts. Until then a fixed offset from the grip stands in.
-- In the left hand the posed model, arms and all, is mirrored across the
-  weapon camera's upright plane (astromaddie's way), so that the right
-  hand's model is the left's; the camera, the muzzle and the scope take the
-  right hand's offsets mirrored, and while the first-person weapon is drawn
-  (`viewmodel_projection_begin` to its end) its triangles' winding is
-  turned over (`halo_vr_mirror_winding`). The barrel is learnt from the
-  model before it is mirrored.
+- In the left hand the weapon is not mirrored: the left controller holds
+  it as the right holds it, so it is the same weapon in either hand, and
+  the camera, the muzzle and the scope keep their offsets. The arms are
+  mirrored (the hands' model's nodes that the weapon's is not,
+  `first_person_weapon_arm_nodes`) across the weapon's middle plane
+  (upright along the weapon camera, through the muzzle's line), so that
+  the right arm that holds it is a left arm; while the hands' model is
+  drawn its triangles' winding is turned over (`halo_vr_mirror_winding`).
+  The empty hands are mirrored the same way.
 - With no other machine in the game (whose players would see the shot from
   the facing alone), `unit_adjust_projectile_ray` starts the shot at that
   muzzle, unless a wall is between it and the eye, and `aim_assist.c` aims
@@ -355,10 +384,10 @@ reload button) as the unit tells the weapon in hand, so that its rate of
 fire, heat, ammunition and effects are its own; its shots leave its
 muzzle along where the hand points, and it is drawn at the hand. That
 hand's trigger throws no grenade meanwhile, and the hands holding
-weapons apart do not hold one with both. Let go, the weapon goes back to
-its shoulder; the main hand letting go of its own (to a shoulder, or
-falling) passes the other hand's weapon to the main hand, the hands
-swapping. Before the game readies a weapon in hand, drops the unit's
+weapons apart do not hold one with both. Let go at a shoulder that keeps
+none, the weapon is kept there; elsewhere it falls, thrown as the hand
+moved; the main hand letting go of its own (to a shoulder, or falling)
+passes the other hand's weapon to the main hand, the hands swapping. Before the game readies a weapon in hand, drops the unit's
 inventory or deletes it, the other hand's weapon goes back first. The
 HUD shows the weapon in hand's ammunition only. In a network game the
 player's machine says with the pose which slot the other hand holds and
@@ -370,6 +399,23 @@ player's machine's to report, as any shot of theirs; the host takes them
 at twice a player's rate for three seconds after the player last held
 one. A simulated headset that is to join a network game keeps time with
 `debug.vr_simulate_paced` (a host drops a client whose clock runs fast).
+
+By those rules, with the hands as they hold, a headset's player carries
+four weapons, not two: one in each hand and one at each shoulder. Each
+shoulder keeps one weapon or none (`vr_places` in `vr_view.c`): a weapon
+drawn leaves its shoulder keeping none, one let go at a shoulder that
+keeps none is kept there, and one let go at a shoulder that keeps another,
+or at none, falls. A weapon that is nowhere (picked up, readied by the
+game) goes to a shoulder that keeps none, the other hand's first. The
+weapons past the second are taken by the hand (the swap its grab asks
+for adds the weapon, none dropped, in `players.c`; the host's for a VR
+server's player whose pose comes, `network_vr_carries_four`): the one
+taken goes to the hand that took it, and the hand that held a weapon
+then, still gripping it, goes on holding it in the other hand. The other
+hand's weapon let fall is asked of the host with its slot (network
+version 43), which drops it as a swap drops a weapon
+(`unit_drop_inventory_slot`). On any other server a player carries two,
+the shoulders as before.
 
 ## To come
 

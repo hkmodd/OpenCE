@@ -56,12 +56,14 @@ static boolean distributed_machine_sees_player(long machine_index, short player_
 /* what was sent: to the host, and to each machine */
 static int sent_up;
 static int asked_drops;
+static int sent_throws;
 static int sent_down[HALO_PORT_MAXIMUM_NETWORK_MACHINES];
 static byte last_message[128];
 static void distributed_send(void *message, byte type, short count, word size, short destination)
 {
  if (type == _distributed_message_vr_pose_up && count == 1 && destination == _distributed_to_host) sent_up++;
  if (type == _distributed_message_vr_drop && count == 1 && destination == _distributed_to_host_reliably) asked_drops++;
+ if (type == _distributed_message_vr_throw && count == 1 && destination == _distributed_to_host_reliably) sent_throws++;
  memcpy(last_message, message, size);
 }
 static void distributed_send_to_machine(long machine_index, void *message, byte type, short count, word size)
@@ -73,11 +75,22 @@ static void distributed_send_to_machine(long machine_index, void *message, byte 
 none), riding or dead; the drops done and the last weapon's acceleration */
 enum { _object_dead_bit };
 struct player_datum { long unit_index; };
-struct unit_datum { struct { long parent_object_index; word damage_flags; } object; struct { short current_weapon_index; } unit; };
+struct unit_datum { struct { long parent_object_index; word damage_flags; } object;
+ struct { short current_weapon_index; long player_index; } unit; };
 static struct player_datum player_data[MAXIMUM_TRACKED_PLAYERS];
 static struct unit_datum unit_data[MAXIMUM_TRACKED_PLAYERS];
+/* (each unit's weapon in slot 0, in hand, and in slot 1; the other
+slots none) */
 static long held_weapon[MAXIMUM_TRACKED_PLAYERS];
-static int drops;
+static long other_weapon[MAXIMUM_TRACKED_PLAYERS];
+static int drops, slot_drops;
+static short dropped_slot = NONE;
+/* this machine's headset's player carries four */
+static boolean headset_four;
+static int vr_render_carries_four(long unit_index){(void)unit_index;return headset_four;}
+/* a local game's server, which takes no one else (vr_rules_active) */
+static boolean server_alone;
+static int vr_rules_active(void){return server_alone;}
 static real_vector3d accelerated;
 static struct player_datum *distributed_player(short player_index)
 {
@@ -87,7 +100,17 @@ static struct unit_datum *unit_try_and_get(long unit_index)
 {
  return unit_index >= 0 && unit_index < MAXIMUM_TRACKED_PLAYERS ? &unit_data[unit_index] : NULL;
 }
-static long unit_inventory_get_weapon(long unit_index, short slot){(void)slot;return held_weapon[unit_index];}
+static long unit_inventory_get_weapon(long unit_index, short slot)
+{
+ return slot == unit_data[unit_index].unit.current_weapon_index ? held_weapon[unit_index] :
+  slot == 1 ? other_weapon[unit_index] : NONE;
+}
+static boolean unit_drop_inventory_slot(long unit_index, short slot)
+{
+ if (unit_inventory_get_weapon(unit_index, slot) == NONE) return FALSE;
+ slot_drops++;dropped_slot=slot;
+ return TRUE;
+}
 static boolean infection_allow_weapon_drop(long unit_index, long weapon_index){(void)unit_index;(void)weapon_index;return TRUE;}
 static boolean unit_drop_current_weapon(long unit_index, boolean immediate)
 {
@@ -106,6 +129,26 @@ static void item_accelerate(long item_index, real_vector3d const *acceleration, 
 {
  (void)item_index;(void)detonates;
  accelerated = *acceleration;
+}
+/* a grenade's throw: the unit's eyes, and whether a wall stands between
+them and the hand */
+struct collision_result { short type; };
+static real_point3d eyes_at;
+static boolean wall_before_hand;
+static void unit_get_camera_position(long unit_index, real_point3d *position){(void)unit_index;*position=eyes_at;}
+static boolean collision_test_vector(unsigned long flags, real_point3d const *point, real_vector3d const *vector,
+ long ignore_object_index, struct collision_result *collision)
+{
+ (void)flags;(void)point;(void)vector;(void)ignore_object_index;(void)collision;
+ return wall_before_hand;
+}
+static real_point3d *point_from_line3d(real_point3d const *p, real_vector3d const *v, real t, real_point3d *result)
+{
+ result->x=v->i*t+p->x;result->y=v->j*t+p->y;result->z=v->k*t+p->z;return result;
+}
+static real_vector3d *scale_vector3d(real_vector3d const *a, real c, real_vector3d *result)
+{
+ result->i=c*a->i;result->j=c*a->j;result->k=c*a->k;return result;
 }
 #include "under_test.inc"
 
@@ -309,10 +352,10 @@ int main(int argc,char **argv)
   network_vr_handle_drop(2,&entry,1,TRUE);
   CHECK(drops==0,"an ordinary server's refused");
   game.cooperative_flags=FLAG(_network_game_port_vr_rules_bit);
-  entry.pad=1;
+  entry.slot=MAXIMUM_WEAPONS_PER_UNIT+1;
   network_vr_handle_drop(2,&entry,1,TRUE);
-  CHECK(drops==0,"its pad set refused");
-  entry.pad=0;
+  CHECK(drops==0 && slot_drops==0,"a slot past the inventory refused");
+  entry.slot=0;
   unit_data[1].object.parent_object_index=7;
   network_vr_handle_drop(2,&entry,1,TRUE);
   CHECK(drops==0,"a player riding refused");
@@ -333,18 +376,179 @@ int main(int argc,char **argv)
   held_weapon[1]=NONE;
   network_vr_handle_drop(2,&entry,1,TRUE);
   CHECK(drops==2,"no weapon in hand, none dropped");
+  /* the other hand's weapon: a slot not in hand, of the inventory */
+  now+=NETWORK_VR_DROP_TICKS;
+  entry.slot=1;
+  held_weapon[1]=101;
+  network_vr_handle_drop(2,&entry,1,TRUE);
+  CHECK(drops==2 && slot_drops==0,"the slot in hand refused as the other hand's");
+  entry.slot=1+1;other_weapon[1]=NONE;
+  network_vr_handle_drop(2,&entry,1,TRUE);
+  CHECK(slot_drops==0,"an empty slot refused");
+  other_weapon[1]=201;
+  network_vr_handle_drop(2,&entry,1,TRUE);
+  CHECK(drops==2 && slot_drops==1 && dropped_slot==1,"the other hand's weapon dropped: %d %d",slot_drops,dropped_slot);
+  CHECK(fabsf(accelerated.i-NETWORK_VR_DROP_SPEED)<0.001f,"thrown, no faster than NETWORK_VR_DROP_SPEED");
+  now+=1;
+  network_vr_handle_drop(2,&entry,1,TRUE);
+  CHECK(slot_drops==1,"not again within NETWORK_VR_DROP_TICKS");
+  entry.slot=0;
   /* a game with no network drops it itself; a VR server's client asks */
   connection=_game_connection_local;game.cooperative_flags=0;held_weapon[0]=50;now+=NETWORK_VR_DROP_TICKS;
   vector_set(&velocity,0.0f,0.0f,0.1f);
-  network_vr_drop(distributed_player_from_byte(0),&velocity);
+  network_vr_drop(distributed_player_from_byte(0),&velocity,NONE);
   CHECK(drops==3,"a game with no network: dropped at once");
+  connection=_game_connection_network_server;now+=NETWORK_VR_DROP_TICKS;
+  network_vr_drop(distributed_player_from_byte(0),&velocity,NONE);
+  CHECK(drops==3 && asked_drops==0,"an ordinary server's host: nothing dropped");
+  server_alone=TRUE;
+  network_vr_drop(distributed_player_from_byte(0),&velocity,NONE);
+  CHECK(drops==4 && asked_drops==0,"a local game's server: dropped at once");
+  server_alone=FALSE;
   connection=_game_connection_network_client;now+=NETWORK_VR_DROP_TICKS;
-  network_vr_drop(distributed_player_from_byte(0),&velocity);
-  CHECK(drops==3 && asked_drops==0,"an ordinary server's client: nothing asked");
+  network_vr_drop(distributed_player_from_byte(0),&velocity,NONE);
+  CHECK(drops==4 && asked_drops==0,"an ordinary server's client: nothing asked");
   game.cooperative_flags=FLAG(_network_game_port_vr_rules_bit);
-  network_vr_drop(distributed_player_from_byte(0),&velocity);
-  CHECK(drops==3 && asked_drops==1,"a VR server's client: asked, reliably, not dropped itself");
-  CHECK(((struct network_vr_drop_message *)last_message)->entry.player_index==0,"for its player");
+  network_vr_drop(distributed_player_from_byte(0),&velocity,NONE);
+  CHECK(drops==4 && asked_drops==1,"a VR server's client: asked, reliably, not dropped itself");
+  CHECK(((struct network_vr_drop_message *)last_message)->entry.player_index==0 &&
+   ((struct network_vr_drop_message *)last_message)->entry.slot==0,"for its player, the weapon in hand");
+  network_vr_drop(distributed_player_from_byte(0),&velocity,1);
+  CHECK(asked_drops==2 && ((struct network_vr_drop_message *)last_message)->entry.slot==2,
+   "the other hand's: 1 and its slot");
+  network_vr_drop(distributed_player_from_byte(0),&velocity,MAXIMUM_WEAPONS_PER_UNIT);
+  CHECK(asked_drops==2,"a slot past the inventory not asked");
+ } else CASE("four") {
+  struct network_vr_pose pose=pose_of();
+  connection=_game_connection_network_server;
+  players();
+  unit_data[0].unit.player_index=distributed_player_from_byte(0);local[0]=TRUE;
+  unit_data[1].unit.player_index=distributed_player_from_byte(1);
+  unit_data[2].unit.player_index=NONE;
+  game.cooperative_flags=FLAG(_network_game_port_vr_rules_bit);
+  CHECK(!network_vr_carries_four(1),"a VR server's player with no pose: two");
+  {
+   struct network_vr_pose_entry entry=entry_of(1,&pose);
+   network_vr_handle_up(2,now,&entry,1);
+  }
+  CHECK(network_vr_carries_four(1),"a VR server's player whose pose comes: four");
+  game.cooperative_flags=0;
+  CHECK(!network_vr_carries_four(1),"an ordinary server's: two");
+  game.cooperative_flags=FLAG(_network_game_port_vr_rules_bit);
+  now+=NETWORK_VR_POSE_TICKS+1;
+  CHECK(!network_vr_carries_four(1),"a pose no longer coming: two");
+  CHECK(!network_vr_carries_four(2),"a unit no player's: two");
+  headset_four=FALSE;
+  CHECK(!network_vr_carries_four(0),"this machine's player not by the rules: two");
+  headset_four=TRUE;
+  CHECK(network_vr_carries_four(0),"this machine's headset's player: four");
+ } else CASE("throw") {
+  struct network_vr_throw_entry entry;
+  real_vector3d hand,offset,velocity,game_velocity;
+  real_point3d origin;
+  real speed;
+  connection=_game_connection_local;
+  players();
+  unit_data[0].unit.player_index=distributed_player_from_byte(0);
+  unit_data[1].unit.player_index=distributed_player_from_byte(1);
+  unit_data[2].unit.player_index=NONE;
+  eyes_at.x=10.0f;eyes_at.y=20.0f;eyes_at.z=1.0f;
+  vector_set(&game_velocity,0.5f,0.0f,0.0f);
+  /* a game with no network keeps its player's throw for the grenade that
+  follows: from the hand, the hand's way, the game's own speed by the
+  hand's against a firm throw's */
+  vector_set(&hand,0.0f,0.04f,0.02f);vector_set(&offset,0.1f,0.05f,-0.1f);
+  network_vr_throw(distributed_player_from_byte(0),&hand,&offset);
+  origin.x=origin.y=origin.z=0.0f;velocity=game_velocity;
+  CHECK(network_vr_grenade_throw(0,&origin,&velocity),"the throw taken by the player's grenade");
+  speed=sqrtf(hand.j*hand.j+hand.k*hand.k)/NETWORK_VR_THROW_FULL*0.5f;
+  CHECK(fabsf(velocity.i)<1e-5f && fabsf(velocity.j-0.04f/sqrtf(0.002f)*speed)<1e-4f &&
+   fabsf(velocity.k-0.02f/sqrtf(0.002f)*speed)<1e-4f,"the hand's way and speed: %f %f %f",velocity.i,velocity.j,velocity.k);
+  vector_set(&hand,NETWORK_VR_THROW_FULL,0.0f,0.0f);
+  network_vr_throw(distributed_player_from_byte(0),&hand,&offset);
+  velocity=game_velocity;network_vr_grenade_throw(0,&origin,&velocity);
+  CHECK(fabsf(velocity.i-0.5f)<1e-5f,"a firm throw's: the game's own speed: %f",velocity.i);
+  CHECK(fabsf(origin.x-10.1f)<1e-4f && fabsf(origin.y-20.05f)<1e-4f && fabsf(origin.z-0.9f)<1e-4f,
+   "from the hand: %f %f %f",origin.x,origin.y,origin.z);
+  velocity=game_velocity;
+  CHECK(!network_vr_grenade_throw(0,&origin,&velocity) && velocity.i==0.5f,"one throw, one grenade");
+  /* too old, of no player, or another player's: the game's own throw */
+  network_vr_throw(distributed_player_from_byte(0),&hand,&offset);
+  now+=NETWORK_VR_THROW_TICKS+1;
+  CHECK(!network_vr_grenade_throw(0,&origin,&velocity) && velocity.i==0.5f,"a throw too old not taken");
+  network_vr_throw(distributed_player_from_byte(0),&hand,&offset);
+  CHECK(!network_vr_grenade_throw(2,&origin,&velocity),"a unit no player's: the game's throw");
+  CHECK(!network_vr_grenade_throw(1,&origin,&velocity),"another player's throw not taken");
+  now+=NETWORK_VR_THROW_TICKS;
+  CHECK(network_vr_grenade_throw(0,&origin,&velocity),"the throw at NETWORK_VR_THROW_TICKS old taken");
+  /* the speed between the game's least and most */
+  vector_set(&hand,0.01f,0.0f,0.0f);
+  network_vr_throw(distributed_player_from_byte(0),&hand,&offset);
+  velocity=game_velocity;network_vr_grenade_throw(0,&origin,&velocity);
+  CHECK(fabsf(velocity.i-0.5f*NETWORK_VR_THROW_LEAST)<1e-5f,"a slow hand's: the least: %f",velocity.i);
+  vector_set(&hand,0.0f,0.0f,9.0f);
+  network_vr_throw(distributed_player_from_byte(0),&hand,&offset);
+  vector_set(&velocity,0.2f,0.0f,0.0f);network_vr_grenade_throw(0,&origin,&velocity);
+  CHECK(fabsf(velocity.k-0.2f*NETWORK_VR_THROW_MOST)<1e-5f && velocity.i==0.0f,"a fast hand's: the most: %f",velocity.k);
+  /* a wall between the eyes and the hand: from where the game throws */
+  vector_set(&hand,0.0f,0.2f,0.0f);
+  wall_before_hand=TRUE;
+  network_vr_throw(distributed_player_from_byte(0),&hand,&offset);
+  origin.x=origin.y=origin.z=0.0f;velocity=game_velocity;
+  CHECK(network_vr_grenade_throw(0,&origin,&velocity) && origin.x==0.0f && velocity.j>0.0f,
+   "a wall: the hand's way, the game's place");
+  wall_before_hand=FALSE;
+  /* a hand out of reach brought to it; not a number refused */
+  vector_set(&offset,3.0f,0.0f,0.0f);
+  network_vr_throw(distributed_player_from_byte(0),&hand,&offset);
+  network_vr_grenade_throw(0,&origin,&velocity);
+  CHECK(fabsf(origin.x-10.0f-NETWORK_VR_HAND_REACH)<1e-4f,"no further than a hand's reach: %f",origin.x);
+  vector_set(&hand,sqrtf(-1.0f),0.0f,0.0f);vector_set(&offset,0.1f,0.0f,0.0f);
+  network_vr_throw(distributed_player_from_byte(0),&hand,&offset);
+  velocity=game_velocity;
+  CHECK(!network_vr_grenade_throw(0,&origin,&velocity) && velocity.i==0.5f,"a velocity not a number refused");
+  vector_set(&hand,0.0f,0.2f,0.0f);vector_set(&offset,0.0f,sqrtf(-1.0f),0.0f);
+  network_vr_throw(distributed_player_from_byte(0),&hand,&offset);
+  origin.x=origin.y=origin.z=0.0f;
+  CHECK(!network_vr_grenade_throw(0,&origin,&velocity) && origin.y==0.0f,"a place not a number refused");
+  /* an ordinary server's host keeps none; a VR server's client tells the
+  host, reliably, and keeps none itself */
+  vector_set(&hand,0.0f,0.04f,0.0f);vector_set(&offset,0.1f,0.0f,0.0f);
+  connection=_game_connection_network_server;game.cooperative_flags=0;
+  network_vr_throw(distributed_player_from_byte(0),&hand,&offset);
+  CHECK(!network_vr_grenade_throw(0,&origin,&velocity),"an ordinary server's host: none kept");
+  server_alone=TRUE;
+  network_vr_throw(distributed_player_from_byte(0),&hand,&offset);
+  CHECK(network_vr_grenade_throw(0,&origin,&velocity),"a local game's server: kept");
+  server_alone=FALSE;
+  connection=_game_connection_network_client;
+  network_vr_throw(distributed_player_from_byte(0),&hand,&offset);
+  CHECK(sent_throws==0 && !network_vr_grenade_throw(0,&origin,&velocity),"an ordinary server's client: nothing sent, none kept");
+  game.cooperative_flags=FLAG(_network_game_port_vr_rules_bit);
+  network_vr_throw(distributed_player_from_byte(0),&hand,&offset);
+  CHECK(sent_throws==1 && ((struct network_vr_throw_message *)last_message)->entry.player_index==0,
+   "a VR server's client: sent reliably, of its player");
+  CHECK(network_vr_grenade_throw(0,&origin,&velocity),"kept by the client too, for the throw it predicts");
+  /* the host takes a throw only reliably, only of the sender's own player,
+  only in a VR server's game */
+  connection=_game_connection_network_server;
+  CHECK(network_vr_throw_entry_size()==14,"the entry is 14 bytes");
+  entry=((struct network_vr_throw_message *)last_message)->entry;
+  entry.player_index=1;
+  network_vr_handle_throw(2,&entry,1,FALSE);
+  CHECK(!network_vr_grenade_throw(1,&origin,&velocity),"a throw in a datagram refused");
+  network_vr_handle_throw(3,&entry,1,TRUE);
+  CHECK(!network_vr_grenade_throw(1,&origin,&velocity),"another machine's player's refused");
+  game.cooperative_flags=0;
+  network_vr_handle_throw(2,&entry,1,TRUE);
+  CHECK(!network_vr_grenade_throw(1,&origin,&velocity),"an ordinary server's refused");
+  game.cooperative_flags=FLAG(_network_game_port_vr_rules_bit);
+  network_vr_handle_throw(2,&entry,2,TRUE);
+  CHECK(!network_vr_grenade_throw(1,&origin,&velocity),"two entries refused");
+  network_vr_handle_throw(2,&entry,1,TRUE);
+  velocity=game_velocity;
+  CHECK(network_vr_grenade_throw(1,&origin,&velocity) && fabsf(velocity.j-0.5f*0.04f/NETWORK_VR_THROW_FULL)<1e-3f,
+   "its own player's taken, its velocity through the wire: %f",velocity.j);
  } else return 2;
  return 0;
 }

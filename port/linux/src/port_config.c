@@ -288,9 +288,11 @@ static const struct config_setting config_settings[] =
 	{ "vr.screen_width", _config_real, "2.4", "HALO_VR_SCREEN_WIDTH", _environment_value, _platform_desktop,
 		"That panel's width in metres (0.2 to 100)." },
 	{ "vr.left_handed", _config_boolean, "false", "HALO_VR_LEFT_HANDED", _environment_set_is_true, _platform_desktop,
-		"With display.vr, the left controller aims and fires and the right\n"
-		"moves: the controllers' buttons swap hands, and the weapon, mirrored,\n"
-		"is held in the left." },
+		"With display.vr, the controllers' layouts swap: the left stick turns\n"
+		"and the right moves, the left's face buttons are the right's, and the\n"
+		"weapon starts in the left hand. In play the weapon passes from hand to\n"
+		"hand; the sticks and the face buttons stay, the trigger and the grip\n"
+		"go with the weapon. The weapon is never mirrored." },
 	{ "vr.aim", _config_string, "\"hand\"", "HALO_VR_AIM", _environment_value, _platform_desktop,
 		"With display.vr, what aims on foot: \"hand\", the aiming controller\n"
 		"(the weapon held in it, the crosshair where its shot lands), or\n"
@@ -329,13 +331,14 @@ static const struct config_setting config_settings[] =
 		_platform_desktop,
 		"With snap_turn 0, the stick's turn at full push, in degrees a second." },
 	{ "vr.gestures", _config_boolean, "true", "HALO_VR_GESTURES", _environment_value, _platform_desktop,
-		"The hands' and head's motions: a punch is a melee attack, the other\n"
-		"hand's grip at the head its action, the flashlight (else the grip\n"
-		"alone), and taking the weapon at the aiming hand, which then pulls\n"
-		"away, hands it over; the aiming hand's grip at a shoulder puts the\n"
-		"weapon away there (the hands bare, which strike) or draws the one kept\n"
-		"there; either hand's grip at a weapon on the ground takes it, into\n"
-		"that hand; the head lowered crouches." },
+		"The hands' and head's motions: a punch is a melee attack (not while\n"
+		"a grenade is held or just thrown), the other hand's grip at the visor's\n"
+		"front its action, the flashlight (else the grip alone), and taking the\n"
+		"weapon at the aiming hand, which then pulls away, hands it over; the\n"
+		"aiming hand's grip at a shoulder (beside the head, by the ear or over\n"
+		"the shoulder) puts the weapon away there (the hands bare, which strike)\n"
+		"or draws the one kept there; either hand's grip at a weapon on the\n"
+		"ground takes it, into that hand; the head lowered crouches." },
 	{ "vr.hands", _config_string, "\"physical\"", "HALO_VR_HANDS", _environment_value, _platform_desktop,
 		"With display.vr and vr.gestures, how the hands hold the weapon:\n"
 		"\"physical\", by its grip (let go at a shoulder, it is kept there; let\n"
@@ -350,13 +353,14 @@ static const struct config_setting config_settings[] =
 	{ "vr.throw_gesture", _config_boolean, "true", "HALO_VR_THROW_GESTURE", _environment_value, _platform_desktop,
 		"With display.vr, a grenade is thrown with the arm: its button (the\n"
 		"off trigger) held takes one, let go with the hand moving fast (1.5\n"
-		"m/s) throws it where the aim points, let go slowly keeps it; false,\n"
-		"the button throws as a pad's does." },
+		"m/s) throws it from the hand the way the hand threw it (a firm throw,\n"
+		"7.5 m/s, as far as the game's own), let go slowly keeps it; false, the\n"
+		"button throws as a pad's does, where the aim points." },
 	{ "vr.aim_pitch", _config_real, "0.0", "HALO_VR_AIM_PITCH", _environment_value, _platform_desktop,
-		"With display.vr, the weapon's barrel from where the hand points (along\n"
-		"the index finger held straight, as OpenXR defines it for every\n"
-		"controller), in degrees up (-45 to 45): raise it if shots go lower\n"
-		"than the hand seems to point, lower it if they go higher." },
+		"With display.vr, the weapon's barrel from where the hand points (the\n"
+		"controller's aim pose, its pointing ray), in degrees up (-45 to 45):\n"
+		"raise it if shots go lower than the hand seems to point, lower it if\n"
+		"they go higher." },
 	{ "vr.bindings", _config_string, "\"\"", "HALO_VR_BINDINGS", _environment_value, _platform_desktop,
 		"With display.vr, controller buttons bound to other actions than their\n"
 		"own, as \"main.lower=action off.click=none\": the hand (main, the one\n"

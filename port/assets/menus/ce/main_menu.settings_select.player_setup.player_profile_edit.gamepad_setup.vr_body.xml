@@ -136,7 +136,7 @@
 		<string text="CHIEF: the Master Chief's eyes, 1.89 m, as high\nas the head stands. PLAYER: the player's own."/>
 		<string text="FREE: each arm its own, the other hand free\nuntil it holds the weapon. ON WEAPON: the game's."/>
 		<string text="The barrel from where the hand points, degrees\nup: raise it if shots go lower than it points."/>
-		<string text="A punch strikes, a grip at the head is the\nflashlight, at a shoulder it switches weapons."/>
+		<string text="A punch strikes, a grip at the visor is the\nflashlight, over the shoulder it holsters."/>
 		<string text="PHYSICAL: hold the weapon by the grip, let go\nto put it back. GAME: always in the hand."/>
 		<string text="HOLD: the grip held holds the weapon. TOGGLE:\na press holds it, another lets go."/>
 		<string text="THROWN: hold the trigger, throw with the arm.\nBUTTON: the trigger throws at once."/>

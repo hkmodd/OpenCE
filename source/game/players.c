@@ -238,6 +238,7 @@ symbols in this file:
 #include "data.h"
 #include "devices/devices.h"
 #include "network_coop.h" /* port: port/linux/game/network_coop.c */
+#include "network_vr.h" /* port: port/linux/game/network_vr.c */
 #include "bots.h" /* port: port/linux/game/bots.c */
 #include "cutscene/cinematics.h" /* port: network co-op's first spawns */
 #include "editor/editor_stubs.h"
@@ -3736,11 +3737,14 @@ boolean unit_should_autopick_weapon(
 
 	if ((unit_approve_weapon_pickup(unit_index, weapon_index) &&
 		TEST_FLAG(weapon_definition->weapon.flags, _weapon_doesnt_count_toward_maximum_bit)) ||
-		weapon_count == 0 ||
-		/* port: and in multiplayer (campaign's only), a second weapon into
-		the empty slot, readied (unit_add_weapon_to_inventory) */
-		(unit_approve_weapon_pickup(unit_index, weapon_index) &&
-			weapon_count < 2) ||
+		/* port: none walked over by a headset's player by a VR server's
+		rules, whose hand takes a weapon (the swap its grab asks for) */
+		(!network_vr_carries_four(unit_index) &&
+			(weapon_count == 0 ||
+			/* port: and in multiplayer (campaign's only), a second weapon into
+			the empty slot, readied (unit_add_weapon_to_inventory) */
+			(unit_approve_weapon_pickup(unit_index, weapon_index) &&
+				weapon_count < 2))) ||
 		game_engine_force_autopickup(unit_index, weapon_index))
 	{
 		result = TRUE;
@@ -3799,7 +3803,11 @@ static boolean player_handle_weapon_swap(
 	switch (player->action_result)
 	{
 	case _player_action_result_swap_for_weapon:
-		if (unit_drop_selected_weapon(player->unit_index) &&
+		/* port: a headset's player by a VR server's rules carries four (two
+		hands, two shoulders): those past the second taken, none dropped */
+		if (((unit_get_weapon_count(player->unit_index) < MAXIMUM_WEAPONS_PER_UNIT &&
+			network_vr_carries_four(player->unit_index)) ||
+			unit_drop_selected_weapon(player->unit_index)) &&
 			unit_add_weapon_to_inventory(
 				player->unit_index,
 				player->action_object_index,
@@ -3827,6 +3835,9 @@ static boolean player_handle_weapon_swap(
 				weapon->definition_index);
 			player_network_picked_up(player, player_index, _network_pickup_weapon, weapon->definition_index, 0);
 		}
+		/* port: one taken by a headset's hand by a VR server's rules, its
+		grab holding the action on (player->swapped_weapons) */
+		result = network_vr_carries_four(player->unit_index);
 		break;
 	}
 
@@ -4353,6 +4364,19 @@ static void player_examine_nearby_item(
 					weapon_get(weapon_item_index)->definition_index, 0);
 				player_control_unzoom(player->unit_index);
 			}
+		}
+		/* port: a headset's player by a VR server's rules picks up nothing
+		walked over (unit_should_autopick_weapon): with no weapon, the hand
+		takes one as the action adds it, there being none to swap */
+		else if (weapon_count == 0 &&
+			network_vr_carries_four(player->unit_index) &&
+			unit_approve_weapon_pickup(player->unit_index, weapon_item_index))
+		{
+			player_set_action_result(
+				player_index,
+				_player_action_result_add_weapon_to_inventory,
+				weapon_item_index,
+				NONE);
 		}
 		else if (!current_weapon_does_not_count &&
 			unit_approve_weapon_swap(player->unit_index, weapon_item_index))

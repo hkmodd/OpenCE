@@ -13,9 +13,15 @@ the eye so the camera never looks out through the hips. The body itself, its hit
 as ever. The legs are drawn in the world with the world's camera, so they
 keep their place and size at any field of view.
 
-In a headset (display.vr) the legs are not set back from the eye, which
-looks about on its own: their hips go under the head and they face as the
-body does, the shoulders' body that follows the head (vr_view.c).
+In a headset (display.vr) the body is not set back from the eye, which
+looks about on its own, and it keeps its chest: looking down, the player
+sees the chest and the belly over the legs, as one's own, not the waist's
+lid. The head, the neck and the arms (the headset draws its own arms) fold
+each into the joint it hangs from, the neck and the shoulders; the base of
+the neck goes under the head, behind and below the eyes, the body grown or
+shrunk from the feet to put it there (the eyes never inside the chest at
+any height of the head, the feet on the ground), and the body faces as the
+shoulders' body that follows the head does (vr_view.c).
 */
 
 #include "cseries.h"
@@ -48,6 +54,10 @@ enum
 12 cm), and at most (about 1 m) */
 #define FIRST_PERSON_LEGS_SET_BACK 0.04f
 #define FIRST_PERSON_LEGS_SET_BACK_MAXIMUM 0.33f
+/* in a headset, the least and the most the body is grown or shrunk to
+put its neck under the head */
+#define FIRST_PERSON_LEGS_SIZE_LEAST 0.7f
+#define FIRST_PERSON_LEGS_SIZE_MOST 1.3f
 /* how far out of the view the waist's rim is kept (world units: 3 cm) */
 #define FIRST_PERSON_LEGS_OUT_OF_VIEW 0.01f
 /* the point the upper body folds into: the middle of the waist's rim, a
@@ -113,6 +123,15 @@ static boolean first_person_legs_node(
 			return TRUE;
 	}
 	return FALSE;
+}
+
+/* a node a headset's body keeps: the legs', the spine's and the
+collarbones' (the chest and the shoulders) */
+static boolean first_person_legs_headset_node(
+	char const *name)
+{
+	return first_person_legs_node(name) || first_person_legs_name_has(name, "spine") ||
+		first_person_legs_name_has(name, "clavicle");
 }
 
 /* the middle of the waist's rim in the model's space: the hips' vertices
@@ -204,28 +223,36 @@ static boolean first_person_legs_waist(
 	return first_person_legs_waist_found;
 }
 
-/* in a headset: the pose turned about the hips, level, from the way the
-body faces (`facing`) to `body`, and moved level so that the hips are over
-`under` */
+/* in a headset: the pose turned about `anchor` (the base of the neck),
+level, from the way the body faces (`facing`) to `body`, moved level so
+that the anchor is over `under`, and grown or shrunk from the feet
+(`ground`, their height) so that the anchor is at its height: the eyes
+never inside the chest, the feet on the ground, at any height of the
+head (FIRST_PERSON_LEGS_SIZE_LEAST to _MOST of the body's own) */
 static void first_person_legs_face(
 	long count,
-	real_point3d const *hips,
+	real_point3d const *anchor,
+	real ground,
 	real_vector3d const *facing,
 	float const under[3],
 	float const body[3])
 {
 	real turn = (real)atan2(body[1], body[0]) - (real)atan2(facing->j, facing->i);
 	real c = (real)cos(turn), s = (real)sin(turn);
+	real size = anchor->z - ground > 0.01f ? (under[2] - ground) / (anchor->z - ground) : 1.0f;
 	long index;
 
+	size = PIN(size, FIRST_PERSON_LEGS_SIZE_LEAST, FIRST_PERSON_LEGS_SIZE_MOST);
 	for (index = 0; index < count; index++)
 	{
 		real_matrix4x3 *matrix = &first_person_legs_matrices[index];
-		real x = matrix->position.x - hips->x, y = matrix->position.y - hips->y;
+		real x = (matrix->position.x - anchor->x) * size, y = (matrix->position.y - anchor->y) * size;
 		short axis;
 
 		matrix->position.x = under[0] + x * c - y * s;
 		matrix->position.y = under[1] + x * s + y * c;
+		matrix->position.z = ground + (matrix->position.z - ground) * size;
+		matrix->scale *= size;
 		for (axis = 0; axis < 3; axis++)
 		{
 			real i = matrix->n[axis][0], j = matrix->n[axis][1];
@@ -238,7 +265,8 @@ static void first_person_legs_face(
 
 /* the pose to draw the legs with: the body's own (as it is drawn now), all
 but the legs folded into the hips, the whole set back behind the eye (in a
-headset, under the head, facing as its body does); NULL: none (a body
+headset, the chest kept, the head, neck and arms folded into their joints,
+the neck under the head, facing as its body does); NULL: none (a body
 without named legs) */
 real_matrix4x3 const *first_person_legs_node_matrices(
 	long object_index,
@@ -248,9 +276,10 @@ real_matrix4x3 const *first_person_legs_node_matrices(
 	struct object_definition *definition;
 	struct model const *model;
 	long count;
-	short pelvis = NONE;
+	short pelvis = NONE, neck = NONE, foot = NONE;
 	short thighs = 0;
 	short index;
+	boolean folded[FIRST_PERSON_LEGS_MAXIMUM_NODES];
 	real_point3d fold;
 	real_vector3d back;
 	real_matrix4x3 skin;
@@ -291,7 +320,7 @@ real_matrix4x3 const *first_person_legs_node_matrices(
 	}
 
 	/* (set back away from the way the eye looks, level; in a headset not:
-	the hips go under the head) */
+	the neck goes under the head) */
 	headset = vr_render_legs(under, body) != 0;
 	back.i = -global_window_parameters.camera.forward.i;
 	back.j = -global_window_parameters.camera.forward.j;
@@ -331,14 +360,41 @@ real_matrix4x3 const *first_person_legs_node_matrices(
 			set_back = FIRST_PERSON_LEGS_SET_BACK_MAXIMUM;
 	}
 
+	/* (the root kept: it is the body's frame, not a part of it) */
 	for (index = 0; index < count; index++)
 	{
 		struct model_node const *node = TAG_BLOCK_GET_ELEMENT(&model->nodes, index, struct model_node);
+
+		folded[index] = node->parent_node_index != NONE &&
+			!(headset ? first_person_legs_headset_node(node->name) : first_person_legs_node(node->name));
+		if (neck == NONE && first_person_legs_name_has(node->name, "neck"))
+			neck = index;
+		if (first_person_legs_name_has(node->name, "foot") &&
+			(foot == NONE || nodes[index].position.z < nodes[foot].position.z))
+		{
+			foot = index;
+		}
+	}
+	for (index = 0; index < count; index++)
+	{
 		real_matrix4x3 *matrix = &first_person_legs_matrices[index];
 
 		*matrix = nodes[index];
-		/* (the root kept: it is the body's frame, not a part of it) */
-		if (node->parent_node_index != NONE && !first_person_legs_node(node->name))
+		/* (in a headset, into the joint the folded part hangs from: its
+		topmost folded node's) */
+		if (folded[index] && headset)
+		{
+			short joint = index, parent;
+
+			while ((parent = TAG_BLOCK_GET_ELEMENT(&model->nodes, joint, struct model_node)->parent_node_index) >= 0 &&
+				parent < count && folded[parent])
+			{
+				joint = parent;
+			}
+			matrix->position = nodes[joint].position;
+			matrix->scale = 0.001f;
+		}
+		else if (folded[index])
 		{
 			matrix->position = fold;
 			matrix->scale = 0.001f;
@@ -347,7 +403,13 @@ real_matrix4x3 const *first_person_legs_node_matrices(
 		matrix->position.y += back.j * set_back;
 		matrix->position.z += back.k * set_back;
 	}
+	/* (grown or shrunk from the lower foot; none without one) */
 	if (headset)
-		first_person_legs_face(count, &nodes[pelvis].position, &object->object.forward, under, body);
+	{
+		short anchor = neck != NONE ? neck : pelvis;
+
+		first_person_legs_face(count, &nodes[anchor].position,
+			nodes[foot != NONE ? foot : anchor].position.z, &object->object.forward, under, body);
+	}
 	return first_person_legs_matrices;
 }

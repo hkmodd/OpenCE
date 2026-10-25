@@ -145,7 +145,7 @@
 		<string text=""/>
 		<string text="Play in an OpenXR headset (Oculus, SteamVR,\nMonado). From the next start."/>
 		<string text="On foot: the controller, the weapon held in it,\nor the head."/>
-		<string text="The hand that holds the weapon. In play, take it\nwith the other hand and pull away to swap."/>
+		<string text="The hand the weapon starts in, the other stick\nmoves. Pass it hand to hand: the buttons stay."/>
 		<string text="The aiming stick turns by snaps of so many\ndegrees, or smoothly."/>
 		<string text="Step in the room and the player follows; off,\nthe head leans 35 cm at most."/>
 		<string text="Ride in the seat, the view level with the\nvehicle, or behind it as the game does."/>

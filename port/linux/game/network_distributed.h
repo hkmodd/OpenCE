@@ -149,6 +149,10 @@ enum
 	as the hand moved (network_vr.c): the player's machine's request to the
 	host, reliably, which checks it and drops the weapon as the game does */
 	_distributed_message_vr_drop = 94,
+	/* a headset's player's grenade thrown with the arm in a VR server's
+	game (network_vr.c): the hand's velocity and place, from the player's
+	machine to the host, reliably, for the game's throw that follows */
+	_distributed_message_vr_throw = 95,
 
 	NUMBER_OF_DISTRIBUTED_MESSAGES
 };

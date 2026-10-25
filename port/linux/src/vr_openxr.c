@@ -1330,8 +1330,8 @@ static int vr_pressed(float value, int was)
 
 /* the controllers' input and poses for the frame (the session focused:
 else nothing is held) */
-/* (the runtime's aim pose, which the weapon does not follow, against the
-grip's pointing (vr_hand_pointing), which it does: for the log) */
+/* (the runtime's aim pose, which the weapon follows (vr_hand_pointing),
+against the grip pose's -z, which runs along the handle: for the log) */
 static void vr_log_aim(int hand, struct vr_hand const *state)
 {
 	static float const axes[3][3] = { { 1.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f, -1.0f } };
@@ -1465,6 +1465,9 @@ wider toward the nose's far side, 64 mm apart */
 #define VR_SIMULATED_WIDTH 1328
 #define VR_SIMULATED_HEIGHT 1584
 #define VR_SIMULATED_IPD 0.064f
+/* the simulated controllers' grip pose's -z, along the handle, above where
+they point (their aim pose), as a Touch controller's (radians) */
+#define VR_SIMULATED_GRIP_TILT (60.0f * (float)VR_DEGREES)
 /* the simulated head's LOCAL origin over the floor: a standing player's
 eyes (an adult's average, 1.75 m tall) */
 #define VR_SIMULATED_FLOOR 1.63f
@@ -1541,7 +1544,8 @@ static void vr_simulate_turn(float yaw, float pitch, float out[4])
 	vr_quaternion_multiply(turn, tilt, out);
 }
 
-/* the simulated hands, held before the body, pointing ahead, and what
+/* the simulated hands, held before the body, pointing ahead (their grips
+turned up as a Touch controller's: VR_SIMULATED_GRIP_TILT), and what
 debug.vr_simulate_input has them do: a list of FIRST[-LAST]:HAND.CONTROL
 or FIRST[-LAST]:HAND.CONTROL=VALUES (the frames, counted from 1; HAND left
 or right; CONTROL trigger, grip, stick=X,Y, click, lower, upper, menu,
@@ -1677,7 +1681,12 @@ static void vr_simulate_hands(void)
 	for (hand = 0; hand < VR_HAND_COUNT; hand++)
 	{
 		struct vr_hand *state = &vr.frame.hand[hand];
+		float tilt[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 
+		/* (a turn about x by a positive angle takes -z toward +y) */
+		tilt[0] = sinf(VR_SIMULATED_GRIP_TILT * 0.5f);
+		tilt[3] = cosf(VR_SIMULATED_GRIP_TILT * 0.5f);
+		vr_quaternion_multiply(state->aim.orientation, tilt, state->grip.orientation);
 		if (vr_pressed(state->trigger, (vr.held[hand] & VR_BUTTON_TRIGGER) != 0))
 			state->buttons |= VR_BUTTON_TRIGGER;
 		if (vr_pressed(state->squeeze, (vr.held[hand] & VR_BUTTON_GRIP) != 0))

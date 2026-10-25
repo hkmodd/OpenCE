@@ -294,7 +294,18 @@ slot of the weapon the player's other hand holds (or none) and that hand's
 trigger: every other machine's copy of the unit, the host's too, holds
 that weapon of its inventory in its other hand and fires it with that
 trigger (`dual_wield.c`), and the host takes the hits of a player who held
-one in the last three seconds at twice the rate.
+one in the last three seconds at twice the rate. Then version 43 lets the
+request to let a weapon fall name the other hand's weapon (the byte after
+the player, 0 before: 1 and its slot; the host drops it if it is of the
+player's inventory and not in hand), and lets a VR server's headset's
+player whose pose comes carry four weapons, those past the second taken
+by the hand (its grab's swap adds the weapon, dropping none), and lets a
+VR server's client tell the host how its player's arm threw a grenade
+(distributed message 95, `network_vr.c`, over its stream: the hand's
+velocity and its place from the eyes, no further than 0.4 world units,
+taken only for the machine's own player); the host's next throw of that
+player's grenade within a second leaves from the hand the way the hand
+threw it, between 0.4 and 1.25 times the game's own speed.
 
 `port/linux/network_format.txt` records the wire format of the current
 version (`tools/network_format.py`): `test_linux_port.py` fails when the

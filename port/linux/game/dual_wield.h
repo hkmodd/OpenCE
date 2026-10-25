@@ -23,6 +23,9 @@ back first) */
 void dual_wield_unit_update(long unit_index);
 void dual_wield_unit_readying(long unit_index);
 void dual_wield_unit_dropping(long unit_index);
+/* ... as a weapon of its inventory is dropped (put back first, if it is
+that one) */
+void dual_wield_unit_releasing(long unit_index, short slot);
 /* weapons.c's: a shot of a weapon in an other hand, from that hand's
 weapon along where it points (FALSE: not such a weapon's) */
 boolean dual_wield_projectile_ray(long weapon_index, real_point3d *origin, real_vector3d *forward);

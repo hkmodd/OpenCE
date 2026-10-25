@@ -698,6 +698,7 @@ symbols in this file:
 #include "coop_scripts.h" /* port: port/linux/game/coop_scripts.c */
 #include "coop_enemies.h" /* port: port/linux/game/coop_enemies.c */
 #include "halo_vr.h" /* port: port/linux/game/vr_view.c */
+#include "network_vr.h" /* port: port/linux/game/network_vr.c */
 
 /* port: the control and animation impulses the host's actors give their
 units go to the clients' copies (port/linux/game/network_actors.c) */
@@ -7798,6 +7799,37 @@ boolean unit_drop_selected_weapon(
 	return TRUE;
 }
 
+/* port: a weapon of the inventory not in hand let fall, as a swap's (a
+headset's player's other hand's, port/linux/game/network_vr.c): taken out
+of the other hand first, if it is that one (port/linux/game/dual_wield.c) */
+boolean unit_drop_inventory_slot(
+	long unit_index,
+	short slot)
+{
+	struct unit_datum *unit = unit_get(unit_index);
+	long weapon_index;
+
+	if (slot < 0 || slot >= MAXIMUM_WEAPONS_PER_UNIT || slot == unit->unit.current_weapon_index)
+		return FALSE;
+	dual_wield_unit_releasing(unit_index, slot);
+	weapon_index = unit->unit.weapon_object_indices[slot];
+	if (weapon_index == NONE || TEST_FLAG(object_get(weapon_index)->object.flags, _object_connected_to_map_bit))
+		return FALSE;
+	unit_drop_item(unit_index, weapon_index);
+	unit->unit.weapon_object_indices[slot] = NONE;
+	if (unit->unit.desired_weapon_index == slot)
+	{
+		unit->unit.desired_weapon_index = unit->unit.current_weapon_index!=NONE ?
+			unit->unit.current_weapon_index : unit_weapon_next_index(unit_index, NONE, 0);
+	}
+	if (!weapon_can_be_fired(weapon_index))
+	{
+		object_delete(weapon_index);
+	}
+
+	return TRUE;
+}
+
 /* ---------- private code */
 
 char const *base_seat_labels[NUMBER_OF_UNIT_BASE_SEATS] = {"asleep", "alert", "stand", "crouch", "flee", "flaming"};
@@ -11878,6 +11910,8 @@ static void unit_throw_grenade_release(
 	boolean premature)
 {
 	real_vector3d initial_velocity;
+	/* port: thrown with a headset's arm (network_vr.c) */
+	boolean thrown_by_hand = FALSE;
 
 	struct unit_datum *unit = unit_get(unit_index);
 	struct unit_definition *unit_definition = unit_definition_get(unit->definition_index);
@@ -11937,9 +11971,24 @@ static void unit_throw_grenade_release(
 					real scale = unit_definition->unit.grenade_velocity/TICKS_PER_SECOND;
 					scale_vector3d(&unit->unit.aiming_vector, scale, &initial_velocity);
 				}
+
+				/* port: a headset's player's grenade thrown with the arm: from the
+				hand, the way and as hard as the hand threw it, in place of the
+				aim's (port/linux/game/network_vr.c) */
+				{
+					real_point3d hand_origin;
+
+					object_get_origin(grenade_index, &hand_origin);
+					if (network_vr_grenade_throw(unit_index, &hand_origin, &initial_velocity))
+					{
+						object_translate(grenade_index, &hand_origin, NULL);
+						thrown_by_hand = TRUE;
+					}
+				}
 			}
 
-			if (premature)
+			/* port: not a hand's throw, whose speed is the hand's */
+			if (premature && !thrown_by_hand)
 			{
 				real power = (real)unit->unit.grenade_throw_ticks/(real)unit->unit.grenade_throw_full_power_ticks;
 

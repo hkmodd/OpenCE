@@ -268,6 +268,16 @@ void dual_wield_unit_dropping(
 		dual_wield_put_back(index);
 }
 
+void dual_wield_unit_releasing(
+	long unit_index,
+	short slot)
+{
+	short index = dual_wield_count ? dual_wield_find(unit_index) : NONE;
+
+	if (index != NONE && dual_wield_units[index].slot == slot)
+		dual_wield_put_back(index);
+}
+
 /* the unit whose other hand holds the weapon (NONE: none's) */
 static long dual_wield_holder(
 	long weapon_index)

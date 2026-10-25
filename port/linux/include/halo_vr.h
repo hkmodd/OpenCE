@@ -22,6 +22,7 @@ struct render_camera;
 union real_rectangle2d;
 struct icon_hud_element_definition;
 struct real_matrix4x3;
+struct animation_graph;
 
 /* a pass of the headset's frame (vr_view.c) */
 enum
@@ -172,11 +173,14 @@ void vr_render_frustum_bounds(union real_rectangle2d *bounds);
 behind the aiming hand (or the head between the eyes) */
 void vr_render_weapon_camera(struct render_camera *camera);
 /* render_window: the weapon posed, where its model's barrel is; held in
-the left hand, its model mirrored */
+the left hand, the arms mirrored (the weapon never is) */
 void vr_render_weapon_posed(void);
-/* the first-person weapon's drawing begins (TRUE) or ends: a mirrored one's
-triangles' winding is turned over (viewmodel_projection_begin, view_fov.c) */
+/* the first-person weapon's drawing begins (TRUE) or ends: the arms'
+backs drawn too (viewmodel_projection_begin, view_fov.c) */
 void vr_render_weapon_drawing(int drawing);
+/* first_person_weapons.c: the first-person arms' drawing begins (TRUE) or
+ends: mirrored in the left hand, their triangles' winding turned over */
+void vr_render_hands_drawing(int drawing);
 /* render_window: the HUD's pass starts on a clear ground */
 void vr_render_hud_begin(void);
 /* a new map: the heading is taken again from the game's facing
@@ -210,7 +214,7 @@ int vr_render_room(float offset[2]);
 /* first_person_weapons.c: the unit's weapon is in the aiming hand: it
 neither bobs, sways nor is posed */
 int vr_render_hand_holds(long unit_index);
-/* vr_input.c: the weapon's barrel from the grip's pointing (vr.aim_pitch,
+/* vr_input.c: the weapon's barrel from the hand's pointing (vr.aim_pitch,
 radians up), and whether the weapon in the hand is held as a pistol (by
 its tag's name or label: the other hand supports it at the main hand) */
 float vr_render_aim_pitch(void);
@@ -218,6 +222,10 @@ int vr_render_pistol_grip(void);
 /* first_person_weapons.c, vr_input.c: the weapon is put away at a shoulder,
 the hands bare (it is not drawn, fires nor zooms) */
 int vr_render_bare_hands(void);
+/* first_person_weapons.c: the headset's player, on foot with no weapon at
+all, holds up empty hands: `graph`'s nodes (the animations the hands were
+last drawn with) as posed this frame, into `matrices`; FALSE: none drawn */
+int vr_render_empty_hands(struct animation_graph *graph, struct real_matrix4x3 *matrices);
 /* vr_input.c: a weapon lies on the ground within the hand's (VR_HAND_*)
 reach, for its grip to take */
 int vr_render_grab_reach(int hand);
@@ -229,9 +237,10 @@ int vr_render_on_foot(void);
 network (the campaign, a local game), or in the host's that is one
 (network.vr_rules, sent with the game's settings) */
 int vr_rules_active(void);
-/* first_person_legs.c: in an eye's pass on foot, where the legs' hips go
-(the world's, under the head) and the way they face (the body's, level, as
-the arms' shoulders: vr_arms_body); 0 elsewhere */
+/* first_person_legs.c: in an eye's pass on foot, where the body's neck
+goes (the world's, under the head, behind and below the eyes) and the way
+it faces (the body's, level, as the arms' shoulders: vr_arms_body); 0
+elsewhere */
 int vr_render_legs(float under[3], float forward[3]);
 /* unit_adjust_projectile_ray: with no other machine in the game, the shot
 of the unit the hand aims for starts at the weapon in the hand (its
@@ -248,6 +257,10 @@ int vr_render_off_hand_grip(long unit_index, struct real_matrix4x3 *grip);
 /* vr_input.c: the other hand may hold a weapon of its own (by a VR
 server's rules: dual_wield.c) */
 int vr_render_dual_wield(void);
+/* network_vr.c: the unit is the headset's player's, who carries four
+weapons (two hands, two shoulders: by a VR server's rules, the hands as
+they hold) */
+int vr_render_carries_four(long unit_index);
 /* hud_messaging.c: a prompt's button (one of the HUD's button icons) as the
 headset's controllers name it (vr_input.c's buttons): the right B acts, the
 left X switches grenades */
@@ -270,6 +283,7 @@ int vr_render_zoom_hidden(void);
 #define vr_render_weapon_camera(camera) ((void)0)
 #define vr_render_weapon_posed() ((void)0)
 #define vr_render_weapon_drawing(drawing) ((void)0)
+#define vr_render_hands_drawing(drawing) ((void)0)
 #define vr_render_hud_begin() ((void)0)
 #define vr_view_reset() ((void)0)
 #define vr_player_control_facing(local_player_index) ((void)0)
@@ -284,6 +298,7 @@ int vr_render_zoom_hidden(void);
 #define vr_render_aim_pitch() 0.0f
 #define vr_render_pistol_grip() 0
 #define vr_render_bare_hands() 0
+#define vr_render_empty_hands(graph, matrices) ((void)(graph), (void)(matrices), 0)
 #define vr_render_grab_reach(hand) 0
 #define vr_render_shoulder_full(side) 0
 #define vr_render_on_foot() 0
@@ -293,6 +308,7 @@ int vr_render_zoom_hidden(void);
 #define vr_render_shot_from_hand(unit_index) 0
 #define vr_render_off_hand_grip(unit_index, grip) 0
 #define vr_render_dual_wield() 0
+#define vr_render_carries_four(unit_index) 0
 #define vr_render_prompt_icon(icon) (icon)
 #define vr_render_zoom_hidden() 0
 #define vr_frame_begin() 0
