@@ -419,6 +419,7 @@
 	<line text="No voice chat during the game." language="it" translation="Nessuna chat vocale durante la partita."/>
 	<line text="No voice chat in the lobby." language="it" translation="Nessuna chat vocale nella lobby."/>
 	<line text="No weapons appear on the map: with a loadout of\nNONE and NONE, melee and grenades only." language="it" translation="Nessuna arma nella mappa: con dotazione NESSUNO\ne NESSUNO, solo corpo a corpo e granate."/>
+	<line text="Not synced: each player sees the shield effects\nof their own Video Setup settings." language="it" translation="Non sincronizzati: ognuno vede gli effetti scudo\ndelle proprie impostazioni video."/>
 	<line text="OPEN MIC" language="it" translation="MICROFONO APERTO"/>
 	<line text="OPENCE OPTIONS" language="it" translation="OPZIONI OPENCE"/>
 	<line text="ORIGINAL" language="it" translation="ORIGINALE"/>
@@ -441,6 +442,7 @@
 	<line text="PLAYER NAME SIZE:" language="it" translation="DIMENSIONE NOMI:"/>
 	<line text="PLAYER NAMES:" language="it" translation="NOMI GIOCATORI:"/>
 	<line text="PLAYER OPTIONS:" language="it" translation="OPZIONI GIOCATORI:"/>
+	<line text="PLAYERS' OWN" language="it" translation="DI OGNUNO"/>
 	<line text="PRESS A KEY" language="it" translation="PREMI UN TASTO"/>
 	<line text="PRESS SPACE OR A TO VOTE TO SKIP   %d OF %d" language="it" translation="PREMI SPAZIO O A PER VOTARE IL SALTO   %d SU %d"/>
 	<line text="PRIMARY WEAPON:" language="it" translation="ARMA PRINCIPALE:"/>

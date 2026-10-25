@@ -322,6 +322,8 @@ LINES = {
     "No voice chat in the lobby.": "Nessuna chat vocale nella lobby.",
     "No weapons appear on the map: with a loadout of\\nNONE and NONE, melee and grenades only.":
         "Nessuna arma nella mappa: con dotazione NESSUNO\\ne NESSUNO, solo corpo a corpo e granate.",
+    "Not synced: each player sees the shield effects\\nof their own Video Setup settings.":
+        "Non sincronizzati: ognuno vede gli effetti scudo\\ndelle proprie impostazioni video.",
     "OPEN MIC": "MICROFONO APERTO",
     "OPENCE OPTIONS": "OPZIONI OPENCE",
     "ORIGINAL": "ORIGINALE",
@@ -344,6 +346,7 @@ LINES = {
     "PLAYER NAME SIZE:": "DIMENSIONE NOMI:",
     "PLAYER NAMES:": "NOMI GIOCATORI:",
     "PLAYER OPTIONS:": "OPZIONI GIOCATORI:",
+    "PLAYERS' OWN": "DI OGNUNO",
     "PRESS A KEY": "PREMI UN TASTO",
     "PRESS SPACE OR A TO VOTE TO SKIP   %d OF %d": "PREMI SPAZIO O A PER VOTARE IL SALTO   %d SU %d",
     "PRIMARY WEAPON:": "ARMA PRINCIPALE:",
