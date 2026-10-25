@@ -1087,6 +1087,16 @@ void first_person_weapon_message_from_unit(
 {
 	short local_player_index= first_person_weapon_index_from_unit_index(unit_index);
 
+	/* port: a headset's other hand's punch is not the weapon in hand's
+	strike: that hand's weapon strikes (dual_wield.c), or the hand itself
+	(vr_view.c), the weapon in hand still */
+	if (message_type==_first_person_weapon_message_melee && local_player_index!=NONE &&
+		vr_render_off_hand_strike(unit_index))
+	{
+		long other_index= dual_wield_any() ? first_person_weapon_get_local_index(dual_wield_weapon(unit_index)) : NONE;
+
+		local_player_index= other_index>=FIRST_PERSON_WEAPON_OTHER_HAND ? (short)other_index : NONE;
+	}
 	first_person_weapon_message(local_player_index, message_type);
 	if (local_player_index==NONE)
 	{

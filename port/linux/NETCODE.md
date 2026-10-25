@@ -940,7 +940,9 @@ two machines' views of one game can be compared. `debug.network_test_kill`,
 `debug.network_test_shoot`, `debug.network_test_vehicle` and
 `debug.network_test_pickup` script kills, hits, a vehicle ride and a weapon
 swap the bots' wandering does not reach (`debug.network_test_pickup_weapon`
-picks the weapon: the first whose tag name has it in it, as "sniper"),
+picks the weapon: the first whose tag name has it in it, as "sniper";
+`debug.network_test_vehicle_name` the vehicle so, the nearest, and
+`debug.network_test_vehicle_seat` its seat, `driver` or `gunner`),
 `debug.network_test_chat` has each machine's player say a chat line to
 everyone, one to the team and one to the vehicle (the host seats the last
 two players in one first), then the host mutes the last player for a

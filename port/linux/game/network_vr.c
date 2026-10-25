@@ -315,6 +315,35 @@ struct network_vr_pose const *network_vr_pose_get(long player)
 	return age >= 0 && age <= NETWORK_VR_POSE_TICKS ? &network_vr_poses[player_index].pose : NULL;
 }
 
+boolean network_vr_melee_point(long unit_index, real_point3d *point)
+{
+	struct unit_datum *unit = unit_try_and_get(unit_index);
+	struct network_vr_pose const *pose = unit ? network_vr_pose_get(unit->unit.player_index) : NULL;
+	real ahead, farthest = 0.0f;
+	short hand, struck = NONE;
+
+	if (!pose)
+		return FALSE;
+	for (hand = 0; hand < 2; hand++)
+	{
+		real_vector3d reach;
+
+		if (!TEST_FLAG(pose->flags, hand ? _network_vr_pose_right_hand_bit : _network_vr_pose_left_hand_bit))
+			continue;
+		subtract_vectors3d(&pose->hands[hand], &pose->head, &reach);
+		ahead = dot_product3d(&reach, &pose->head_forward);
+		if (struck == NONE || ahead > farthest)
+		{
+			struck = hand;
+			farthest = ahead;
+		}
+	}
+	if (struck == NONE)
+		return FALSE;
+	point_from_line3d(&unit->object.position, &pose->hands[struck], 1.0f, point);
+	return TRUE;
+}
+
 /* ---------- the weapon let fall */
 
 /* a dropped weapon's velocity on the wire: parts of 1/16384 of a world

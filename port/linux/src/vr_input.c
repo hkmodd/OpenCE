@@ -893,13 +893,16 @@ void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struc
 			/* (with the hands as they hold, the other hand's punch too, but
 			while it holds the weapon with the main; none while a grenade is
 			held or just thrown) */
-			if ((vr_punched(input, frame, main_hand, input->main_position, &input->main_position_valid, seconds) |
-				(input->physical && !input->supporting &&
-					vr_punched(input, frame, off_hand, input->off_position, &input->off_position_valid, seconds))) &&
-				input->grenade_calm <= 0.0f)
+			int main_punched = vr_punched(input, frame, main_hand, input->main_position, &input->main_position_valid,
+				seconds);
+			int off_punched = input->physical && !input->supporting &&
+				vr_punched(input, frame, off_hand, input->off_position, &input->off_position_valid, seconds);
+
+			if ((main_punched || off_punched) && input->grenade_calm <= 0.0f)
 			{
 				input->melee_seconds = VR_PRESS_SECONDS;
 				input->melee_wait = VR_PUNCH_WAIT;
+				input->melee_hand = main_punched ? main_index : off_index;
 			}
 			if (!input->physical || input->supporting)
 				input->off_position_valid = 0;
@@ -1229,6 +1232,11 @@ unsigned long vr_input_shoulder_grabs(int *side, int *kind)
 	*side = vr_input_state.shoulder_side;
 	*kind = vr_input_state.shoulder_kind;
 	return vr_input_state.shoulder_grabs;
+}
+
+int vr_input_melee_hand(void)
+{
+	return vr_input_state.melee_wait > 0.0f ? vr_input_state.melee_hand : -1;
 }
 
 int vr_input_off_holding(int *side, float *trigger, unsigned long *transfers)

@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from harness import CHECK_FAILED, build, enum_with, function, mutated, read, run, structure  # noqa: E402
+from harness import CHECK_FAILED, build, enum_with, function, inline, mutated, read, run, structure  # noqa: E402
 
 
 def generated(fault=None):
@@ -31,13 +31,15 @@ def generated(fault=None):
                       function(distributed, 'distributed_vector_pack'),
                       function(distributed, 'distributed_vector_unpack'),
                       function(distributed, 'distributed_unit_vector_unpack'),
+                      inline(read('source/math/real_math.h'), 'subtract_vectors3d'),
+                      inline(read('source/math/real_math.h'), 'dot_product3d'),
                       source[source.index('#define NETWORK_VR_PLACE_SCALE'):]])
     if fault:
         code = mutated(code, *fault)
     return (('enums.inc', enums), ('under_test.inc', code))
 
 
-@pytest.mark.parametrize('case', ['wire', 'valid', 'host', 'send', 'client', 'drop', 'four', 'throw'])
+@pytest.mark.parametrize('case', ['wire', 'valid', 'host', 'send', 'client', 'drop', 'four', 'throw', 'melee'])
 def test_case(case):
     status, output = run(build('network_vr', generated()), case)
     assert status == 0, output
@@ -93,6 +95,11 @@ def test_case(case):
       '_distributed_message_vr_drop, 1, sizeof(message), _distributed_to_host);'), 'drop'),
     (('network_vr_throws[player_index].time = NONE;\n\tgame_speed', 'game_speed'), 'throw'),
     (('age > NETWORK_VR_THROW_TICKS ||', 'age > 4 * NETWORK_VR_THROW_TICKS ||'), 'throw'),
+    (('if (struck == NONE || ahead > farthest)', 'if (struck == NONE || ahead < farthest)'), 'melee'),
+    (('point_from_line3d(&unit->object.position, &pose->hands[struck], 1.0f, point);',
+      'point_from_line3d(&unit->object.position, &pose->hands[1], 1.0f, point);'), 'melee'),
+    (('if (!TEST_FLAG(pose->flags, hand ? _network_vr_pose_right_hand_bit : _network_vr_pose_left_hand_bit))\n'
+      '\t\t\tcontinue;', ''), 'melee'),
     (('NETWORK_VR_THROW_LEAST, NETWORK_VR_THROW_MOST)', '0.0f, NETWORK_VR_THROW_MOST)'), 'throw'),
     (('NETWORK_VR_THROW_LEAST, NETWORK_VR_THROW_MOST)', 'NETWORK_VR_THROW_LEAST, 1e3f)'), 'throw'),
     (('PIN(speed / NETWORK_VR_THROW_FULL,', 'PIN(speed * 1.4f,'), 'throw'),

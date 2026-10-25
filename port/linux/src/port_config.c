@@ -807,6 +807,13 @@ static const struct config_setting config_settings[] =
 	{ "debug.network_test_vehicle", _config_real, "0.0", "HALO_NETWORK_TEST_VEHICLE", _environment_value, _platform_all,
 		"This many seconds into an automated test game the host seats its last\n"
 		"player as a vehicle's driver (and out 15 seconds on); 0 never." },
+	{ "debug.network_test_vehicle_name", _config_string, "\"\"", "HALO_NETWORK_TEST_VEHICLE_NAME", _environment_value,
+		_platform_all,
+		"The vehicle network_test_vehicle seats the player in: the nearest whose\n"
+		"tag name has this in it (\"ghost\", say); empty the nearest." },
+	{ "debug.network_test_vehicle_seat", _config_string, "\"driver\"", "HALO_NETWORK_TEST_VEHICLE_SEAT",
+		_environment_value, _platform_all,
+		"The seat network_test_vehicle takes: \"driver\" or \"gunner\"." },
 	{ "debug.network_test_pickup", _config_real, "0.0", "HALO_NETWORK_TEST_PICKUP", _environment_value, _platform_all,
 		"This many seconds into an automated test game the host stands its last\n"
 		"player on a weapon, which a joining player then picks up; 0 never." },

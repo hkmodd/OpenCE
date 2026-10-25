@@ -142,6 +142,10 @@ static struct
 	real vehicle_time;
 	real pickup_time;
 	char pickup_weapon[64];
+	/* debug.network_test_vehicle_name's and _seat's (a gunner's, or a
+	driver's) */
+	char vehicle_name[64];
+	boolean vehicle_gunner;
 	/* debug.network_test_chat's, and the lines said this game */
 	real chat_time;
 	short chat_lines_said;
@@ -231,6 +235,9 @@ static void network_test_read_settings(
 	network_test.chat_time = (real)config_real("debug.network_test_chat");
 	snprintf(network_test.pickup_weapon, sizeof(network_test.pickup_weapon), "%s",
 		config_string("debug.network_test_pickup_weapon"));
+	snprintf(network_test.vehicle_name, sizeof(network_test.vehicle_name), "%s",
+		config_string("debug.network_test_vehicle_name"));
+	network_test.vehicle_gunner = !strcmp(config_string("debug.network_test_vehicle_seat"), "gunner");
 	network_test.score_to_win = (long)config_integer("debug.network_test_score");
 	network_test.cue_players = MAX(1, config_integer("debug.network_test_cue_players"));
 	network_test.cues_start = NONE;
@@ -660,6 +667,11 @@ static void network_test_vehicle(
 			real_point3d const *vehicle_position = &object_get(vehicles.index)->object.position;
 			real distance = distance_squared3d(position, vehicle_position);
 
+			if (network_test.vehicle_name[0] &&
+				!strstr(tag_get_name(object_get(vehicles.index)->definition_index), network_test.vehicle_name))
+			{
+				continue;
+			}
 			if (nearest_index == NONE || distance < nearest_distance)
 			{
 				nearest_index = vehicles.index;
@@ -673,14 +685,22 @@ static void network_test_vehicle(
 		}
 		for (seat_index = 0; seat_index < unit_definition_get(object_get(nearest_index)->definition_index)->unit.seats.count; seat_index++)
 		{
-			if (unit_seat_is_driver(nearest_index, seat_index) &&
-				unit_enter_seat(last->unit_index, nearest_index, seat_index))
+			struct unit_seat const *seat = TAG_BLOCK_GET_ELEMENT(
+				&unit_definition_get(object_get(nearest_index)->definition_index)->unit.seats, seat_index,
+				struct unit_seat);
+			boolean wanted = network_test.vehicle_gunner ? TEST_FLAG(seat->flags, _unit_seat_gunner_bit) :
+				unit_seat_is_driver(nearest_index, seat_index);
+
+			if (wanted && unit_enter_seat(last->unit_index, nearest_index, seat_index))
 			{
-				platform_log("network test: the last player drives vehicle %lx", nearest_index);
+				platform_log("network test: the last player %s vehicle %lx (%s)",
+					network_test.vehicle_gunner ? "mans the gun of" : "drives", nearest_index,
+					tag_get_name(object_get(nearest_index)->definition_index));
 				return;
 			}
 		}
-		platform_log("network test: the last player cannot drive vehicle %lx", nearest_index);
+		platform_log("network test: the last player cannot take vehicle %lx's %s seat (%s)", nearest_index,
+			network_test.vehicle_gunner ? "gunner's" : "driver's", tag_get_name(object_get(nearest_index)->definition_index));
 	}
 }
 

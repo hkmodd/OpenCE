@@ -9070,6 +9070,9 @@ void unit_cause_player_melee_damage(
 	long breakable_surface_seed_surface_index;
 	long melee_response_effect_index;
 	real_point3d ray_origin;
+	/* port: a headset's player's strike, through the fist that struck */
+	real_point3d strike;
+	real_vector3d strike_facing;
 	short best_object_type;
 	real best_object_fraction;
 	long outer_index;
@@ -9095,6 +9098,16 @@ void unit_cause_player_melee_damage(
 		global_current_collision_user_depth < MAXIMUM_COLLISION_USER_STACK_DEPTH);
 	global_current_collision_users[global_current_collision_user_depth++] = 8;
 	facing = &unit->unit.aiming_vector;
+	/* port: a headset's player strikes through the fist that struck, not
+	where the weapon aims (vr_view.c; another machine's by its pose,
+	network_vr.c) */
+	if (vr_render_melee_point(unit_index, &strike) || network_vr_melee_point(unit_index, &strike))
+	{
+		vector_from_points3d(&ray_origin, &strike, &strike_facing);
+		/* (a fist within 15 cm of the head: as the weapon aims) */
+		if (normalize3d(&strike_facing) > 0.05f)
+			facing = &strike_facing;
+	}
 
 	{
 		real_vector3d perpendicular;
@@ -9119,9 +9132,10 @@ void unit_cause_player_melee_damage(
 				ray.i = facing->i * 0.8f +
 					((real)inner_component_i + (real)outer_index * perpendicular.i) * 0.1f;
 				inner_component_i = cross.j * (real)inner_index;
-				ray.j = unit->unit.aiming_vector.j * 0.8f +
+				/* port: (facing's: the strike's for a headset) */
+				ray.j = facing->j * 0.8f +
 					((real)inner_component_i + (real)outer_index * perpendicular.j) * 0.1f;
-				ray.k = unit->unit.aiming_vector.k * 0.8f +
+				ray.k = facing->k * 0.8f +
 					((real)outer_index * perpendicular.k + (real)inner_index * cross.k) * 0.1f;
 
 				if (collision_test_vector(

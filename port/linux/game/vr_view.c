@@ -205,11 +205,16 @@ enum
 /* getting into a seat seen from it or out of it, the eyes blink (seconds):
 the view is turned to the seat's forward */
 #define VR_SEAT_BLINK 0.2f
+/* the off stick's full turn of a Ghost's facing from its forward (degrees):
+a Ghost turns toward its facing however far it is (it has no wheels whose
+turn limits it: vehicles.c's update_alien_scout_physics), short of the
+hard turn (45 degrees) that slows it on the ground */
+#define VR_DRIVE_SCOUT_TURN 40.0f
 
 /* a vehicle's definition as far as its type and its wheels' turn
 (vehicles.c's layout; its header keeps it opaque, as input_abstraction.c's
-does): the types the off stick steers, and the turn's limits in degrees,
-left positive and right negative */
+does): the types the off stick steers, and the wheels' turn's limits in
+degrees, left positive and right negative (a Warthog's) */
 enum
 {
 	_vr_vehicle_human_jeep = 1,
@@ -639,8 +644,11 @@ static boolean vr_drive_facing(
 	definition = (struct vr_vehicle_definition const *)tag_get(VEHICLE_DEFINITION_TAG, vehicle->definition_index);
 	if (definition->type != _vr_vehicle_human_jeep && definition->type != _vr_vehicle_alien_scout)
 		return FALSE;
-	yaw = vr_yaw_of(vehicle->object.forward.n, 0.0f) +
-		vr_drive_steer(stick[0], definition->turn[0], definition->turn[1], vehicle->vehicle.speed < 0.0f);
+	/* (a Warthog's wheels turn as far as the facing, reversed backing up, as
+	vehicles.c turns them; a Ghost turns toward it, either way) */
+	yaw = vr_yaw_of(vehicle->object.forward.n, 0.0f) + (definition->type == _vr_vehicle_alien_scout ?
+		vr_drive_steer(stick[0], VR_DRIVE_SCOUT_TURN, VR_DRIVE_SCOUT_TURN, FALSE) :
+		vr_drive_steer(stick[0], definition->turn[0], definition->turn[1], vehicle->vehicle.speed < 0.0f));
 	level = (real)sqrt(head_forward[0] * head_forward[0] + head_forward[1] * head_forward[1]);
 	pitch = (real)atan2(head_forward[2], level);
 	facing->i = (real)(cos(yaw) * cos(pitch));
@@ -2604,6 +2612,32 @@ int vr_render_zoom_hidden(
 	void)
 {
 	return vr_view.scope;
+}
+
+int vr_render_melee_point(
+	long unit_index,
+	real_point3d *point)
+{
+	int hand = vr_input_melee_hand();
+
+	if (!vr_view.stereo || !vr_view.hand_aiming || unit_index == NONE || unit_index != vr_view.unit_index ||
+		hand < 0 || hand >= VR_HAND_COUNT || !vr_view.grip_valid[hand])
+	{
+		return FALSE;
+	}
+	*point = vr_view.grips[hand].position;
+	platform_log("vr: a melee strike through the %s hand's fist%s", hand == VR_HAND_LEFT ? "left" : "right",
+		hand == vr_view.main_hand ? "" : " (the other hand)");
+	return TRUE;
+}
+
+int vr_render_off_hand_strike(
+	long unit_index)
+{
+	int hand = vr_input_melee_hand();
+
+	return vr_view.stereo && vr_view.hand_aiming && unit_index != NONE && unit_index == vr_view.unit_index &&
+		hand >= 0 && hand != vr_view.main_hand;
 }
 
 int vr_render_rumble(

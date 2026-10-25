@@ -75,7 +75,7 @@ static void distributed_send_to_machine(long machine_index, void *message, byte 
 none), riding or dead; the drops done and the last weapon's acceleration */
 enum { _object_dead_bit };
 struct player_datum { long unit_index; };
-struct unit_datum { struct { long parent_object_index; word damage_flags; } object;
+struct unit_datum { struct { long parent_object_index; word damage_flags; real_point3d position; } object;
  struct { short current_weapon_index; long player_index; } unit; };
 static struct player_datum player_data[MAXIMUM_TRACKED_PLAYERS];
 static struct unit_datum unit_data[MAXIMUM_TRACKED_PLAYERS];
@@ -442,6 +442,38 @@ int main(int argc,char **argv)
   CHECK(!network_vr_carries_four(0),"this machine's player not by the rules: two");
   headset_four=TRUE;
   CHECK(network_vr_carries_four(0),"this machine's headset's player: four");
+ } else CASE("melee") {
+  /* another machine's headset's player strikes through the hand of its
+  pose farther ahead of the head; none without a pose, nor for this
+  machine's own player (its headset's, vr_view.c) */
+  struct network_vr_pose pose=pose_of();
+  struct network_vr_pose_entry entry;
+  real_point3d point;
+  connection=_game_connection_network_server;
+  players();
+  game.cooperative_flags=FLAG(_network_game_port_vr_rules_bit);
+  unit_data[1].unit.player_index=distributed_player_from_byte(1);
+  unit_data[1].object.position.x=10.0f;unit_data[1].object.position.y=20.0f;unit_data[1].object.position.z=1.0f;
+  CHECK(!network_vr_melee_point(1,&point),"no pose: the unit's aim");
+  vector_set(&pose.hands[1],0.3f,-0.1f,0.5f);
+  entry=entry_of(1,&pose);
+  network_vr_handle_up(2,now,&entry,1);
+  CHECK(network_vr_melee_point(1,&point),"a pose: a strike");
+  CHECK(fabsf(point.x-10.3f)<1e-3f && fabsf(point.y-19.9f)<1e-3f && fabsf(point.z-1.5f)<1e-3f,
+   "through the right hand, ahead of the left: %f %f %f",point.x,point.y,point.z);
+  vector_set(&pose.hands[0],0.35f,0.1f,0.5f);
+  entry=entry_of(1,&pose);
+  network_vr_handle_up(2,now+1,&entry,1);
+  CHECK(network_vr_melee_point(1,&point) && fabsf(point.x-10.35f)<1e-3f && fabsf(point.y-20.1f)<1e-3f,
+   "the left hand ahead: through it: %f %f",point.x,point.y);
+  pose.flags=FLAG(_network_vr_pose_right_hand_bit);
+  vector_set(&pose.hands[1],-0.1f,-0.1f,0.5f);
+  entry=entry_of(1,&pose);
+  network_vr_handle_up(2,now+2,&entry,1);
+  CHECK(network_vr_melee_point(1,&point) && fabsf(point.x-9.9f)<1e-3f,
+   "the left hand untracked: the right, even behind the head: %f",point.x);
+  local[1]=TRUE;
+  CHECK(!network_vr_melee_point(1,&point),"this machine's own player: its headset's, not a pose");
  } else CASE("throw") {
   struct network_vr_throw_entry entry;
   real_vector3d hand,offset,velocity,game_velocity;

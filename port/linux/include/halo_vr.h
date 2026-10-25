@@ -285,6 +285,14 @@ struct icon_hud_element_definition const *vr_render_prompt_icon(struct icon_hud_
 /* hud_weapon.c: the zoomed view is the scope's: the HUD's zoom-only
 elements are not drawn */
 int vr_render_zoom_hidden(void);
+/* units.c: where a melee strike of the headset's unit goes: through the
+fist that struck, a punch's (the world's, this frame); 0 for none (the
+melee's button, not the headset's unit): the unit's aim */
+int vr_render_melee_point(long unit_index, union real_point3d *point);
+/* first_person_weapons.c: the headset's unit's melee strike is the other
+hand's punch: not the weapon in hand's strike (the hand's own, or that
+hand's weapon's: dual_wield.c) */
+int vr_render_off_hand_strike(long unit_index);
 /* player_rumble.c: the gamepad's motors are the headset's controllers'
 (the first gamepad's: xinput_sdl.c) */
 int vr_render_rumble(short gamepad_index);
@@ -339,6 +347,8 @@ void vr_render_rumble_hands(float const body[2], float const weapon[2], float co
 #define vr_render_prompt_icon(icon) (icon)
 #define vr_render_zoom_hidden() 0
 #define vr_render_rumble(gamepad_index) 0
+#define vr_render_melee_point(unit_index, point) 0
+#define vr_render_off_hand_strike(unit_index) 0
 #define vr_render_rumble_hands(body, weapon, other, hands) ((void)0)
 #define vr_frame_begin() 0
 #define vr_frame_finish() ((void)0)

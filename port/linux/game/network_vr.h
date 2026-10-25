@@ -74,6 +74,10 @@ struct network_vr_pose const *network_vr_pose_get(long player);
 /* whether a pose is fit to take: its head near the unit, its hands near
 the head, its axes whole */
 boolean network_vr_pose_valid(struct network_vr_pose const *pose);
+/* units.c: where another machine's headset's player's melee strike goes:
+through the hand of its pose farther ahead of the head (the one that
+struck; the world's); FALSE for none (no pose: the unit's aim) */
+boolean network_vr_melee_point(long unit_index, real_point3d *point);
 /* (a headset's player's machine) the weapon in the player's hand (slot
 NONE), or the other hand's (its slot), let fall, thrown with a velocity
 (the world's axes, world units a tick): by a game with no network itself,

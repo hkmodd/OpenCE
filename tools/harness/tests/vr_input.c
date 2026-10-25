@@ -351,6 +351,7 @@ int main(int argc, char **argv)
                 CHECK(pad.analog[VR_PAD_B] == 255, "a punch ahead strikes at once");
         }
         CHECK(strikes >= 8 && strikes <= 10, "one strike, held a tenth of a second (%d frames)", strikes);
+        CHECK(input.melee_hand == VR_HAND_RIGHT, "the main hand's (%d)", input.melee_hand);
         /* slow, or across, or the off hand: none */
         for (index = 0; index < 20; index++)
         {
@@ -1116,6 +1117,7 @@ int main(int argc, char **argv)
             hits += pad.analog[VR_PAD_B] == 255;
         }
         CHECK(hits > 0 && input.holding, "the empty hand's punch strikes (%d)", hits);
+        CHECK(input.melee_hand == VR_HAND_LEFT, "the left hand's strike (%d)", input.melee_hand);
         /* the empty left hand takes a weapon from the ground: to that hand, by its grip */
         frame_of(&frame);
         frame.hand[VR_HAND_RIGHT].buttons = VR_BUTTON_GRIP;

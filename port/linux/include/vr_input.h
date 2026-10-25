@@ -182,6 +182,9 @@ struct vr_input
 	float main_position[3];
 	int main_position_valid;
 	float melee_seconds, melee_wait, tap_seconds;
+	/* the hand that punched last (VR_HAND_LEFT or VR_HAND_RIGHT, the main's
+	when both did; -1: none): its strike, vr_input_melee_hand */
+	int melee_hand;
 	/* the main grip was pressed at a shoulder: weapons, not a melee; how
 	many times, and the last's shoulder (VR_HAND_LEFT or VR_HAND_RIGHT, the
 	head's sides) */
@@ -372,6 +375,10 @@ unsigned long vr_input_throw(float velocity[3], float place[3], int *hand);
 /* vr_view.c: the hand whose stick moves (the setting's: its buttons stay on
 their controllers whichever hand holds the weapon) */
 int vr_input_move_hand(void);
+/* vr_view.c: the hand whose punch strikes now (until another may: the
+melee's key frame comes after the punch), -1 for none (no punch, the
+melee's button) */
+int vr_input_melee_hand(void);
 /* vr_view.c: the other hand holds a weapon of its own (dual_wield.c): the
 shoulder it drew it from, its trigger, and the times it went to the main
 hand */
