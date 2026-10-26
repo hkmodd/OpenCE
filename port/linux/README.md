@@ -814,7 +814,13 @@ screen, with the cause in the log.
   keeps a weapon draws it into that hand. A trigger fires in the hand that
   holds the weapon and takes a grenade in an empty hand (thrown with the
   arm); the grips strike nothing, a punch of either empty or weapon hand
-  does.
+  does. On a VR server (and in a game with no network) the player carries
+  four weapons, two in the hands and two at the shoulders, each where it
+  was put, and the game moves none: an empty hand's grip takes a weapon
+  from the ground (with both hands full, throw one away first), a weapon
+  let go at a shoulder that keeps another is exchanged for it, and the
+  switch button exchanges the weapon in hand with a shoulder's
+  (`docs/vr.md`).
   A grenade is thrown with the arm (`vr.throw_gesture`): the trigger held
   takes it, let go in a swing throws it from the hand, the way the hand
   threw it: a firm throw (the hand at 7.5 m/s) as fast as the game's own,

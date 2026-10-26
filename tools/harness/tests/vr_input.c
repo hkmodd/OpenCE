@@ -39,6 +39,7 @@ static struct vr_input_settings settings_of(int left_handed, float snap_angle, i
     settings.shoulder_full[VR_HAND_LEFT] = settings.shoulder_full[VR_HAND_RIGHT] = 0;
     settings.drop = 0;
     settings.dual = 0;
+    settings.places = 0;
     vr_input_bindings_parse("", settings.bindings);
     return settings;
 }
@@ -1339,6 +1340,120 @@ int main(int argc, char **argv)
         vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
         CHECK(!input.off_holding && input.shoulder_kind == VR_SHOULDER_DRAW && !input.left_handed,
             "no dual wield: drawn into the hand (%d, %d, %d)", input.off_holding, input.shoulder_kind, input.left_handed);
+        return 0;
+    }
+    CASE("places") {
+        unsigned long grabs;
+
+        /* the weapons in their places (by a VR server's rules, the hands as they hold): the right hand holds a
+           new life's weapon, not by its grip */
+        memset(&input, 0, sizeof(input));
+        settings = settings_of(0, 0.5f, 1);
+        settings.physical = 1;
+        settings.drop = settings.dual = settings.places = 1;
+        frame_of(&frame);
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        vr_input_weapon_taken(&input);
+        CHECK(input.places && input.holding && !input.gripped, "held, not by its grip");
+        /* the switch button presses nothing: the main hand's exchange, once a press */
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_UPPER;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(input.weapon_switches == 1 && pad.analog[VR_PAD_Y] == 0, "the switch: told once, not pressed (%lu, %d)",
+            input.weapon_switches, pad.analog[VR_PAD_Y]);
+        frame.hand[VR_HAND_LEFT].buttons = 0;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        /* the left grip at a weapon on the ground, the right not gripping its own: asked for, for the left hand,
+           the action not held, the right keeping its weapon */
+        frame.hand[VR_HAND_LEFT].grip.position[1] = -0.9f;
+        settings.grab_reach[VR_HAND_LEFT] = 1;
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(input.grab_requests == 1 && input.grab_request_hand == VR_HAND_LEFT && pad.analog[VR_PAD_X] == 0 &&
+            !input.grabbing[VR_HAND_LEFT], "the left hand's grab asked for (%lu, %d, %d)", input.grab_requests,
+            input.grab_request_hand, pad.analog[VR_PAD_X]);
+        CHECK(input.holding && !input.left_handed && !input.off_holding, "the right keeps its weapon");
+        settings.grab_reach[VR_HAND_LEFT] = 0;
+        frame_of(&frame);
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        /* the right hand bare (its weapon thrown away): its grip at a weapon asks for it; given it, held by
+           that grip */
+        vr_input_bare(&input);
+        CHECK(!input.holding, "bare");
+        settings.grab_reach[VR_HAND_RIGHT] = 1;
+        frame.hand[VR_HAND_RIGHT].buttons = VR_BUTTON_GRIP;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(input.grab_requests == 2 && input.grab_request_hand == VR_HAND_RIGHT, "the right hand's grab asked for");
+        settings.grab_reach[VR_HAND_RIGHT] = 0;
+        vr_input_hand_taken(&input, VR_HAND_RIGHT);
+        CHECK(input.holding && input.gripped && !input.left_handed, "taken into the right hand, by its grip");
+        /* let go at a shoulder that keeps one: exchanged for it, the hand holding that one, not by its grip */
+        settings.shoulder_full[VR_HAND_RIGHT] = 1;
+        at_shoulder(&frame, VR_HAND_RIGHT, VR_HAND_RIGHT);
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        grabs = input.shoulder_grabs;
+        frame.hand[VR_HAND_RIGHT].buttons = 0;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(input.shoulder_grabs == grabs + 1 && input.shoulder_kind == VR_SHOULDER_EXCHANGE &&
+            input.shoulder_side == VR_HAND_RIGHT && input.shoulder_hand == VR_HAND_RIGHT,
+            "exchanged at the right shoulder (%lu, %d, %d)", input.shoulder_grabs - grabs, input.shoulder_kind,
+            input.shoulder_side);
+        CHECK(input.holding && !input.gripped, "the shoulder's weapon held, not by its grip");
+        /* gripped there again: held by it, nothing drawn */
+        frame.hand[VR_HAND_RIGHT].buttons = VR_BUTTON_GRIP;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(input.gripped && input.shoulder_grabs == grabs + 1, "gripped, nothing drawn");
+        settings.shoulder_full[VR_HAND_RIGHT] = 0;
+        /* the other hand takes the weapon the game gave, by its grip held */
+        frame_of(&frame);
+        frame.hand[VR_HAND_RIGHT].buttons = VR_BUTTON_GRIP;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(vr_input_off_taken(&input), "the other hand takes it");
+        CHECK(input.off_holding && input.off_gripped && input.off_side == -1, "held by the left grip");
+        /* let go at a shoulder that keeps one: exchanged, the left then holding that one, not by its grip */
+        settings.shoulder_full[VR_HAND_LEFT] = 1;
+        at_shoulder(&frame, VR_HAND_LEFT, VR_HAND_LEFT);
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        frame.hand[VR_HAND_LEFT].buttons = 0;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(input.off_exchanges == 1 && input.off_exchange_side == VR_HAND_LEFT && input.off_holding &&
+            !input.off_gripped && input.off_releases == 0, "the left exchanged at its shoulder (%lu, %d, %d, %d)",
+            input.off_exchanges, input.off_exchange_side, input.off_holding, input.off_gripped);
+        /* gripped there again: held by it, nothing drawn; then let go at that shoulder, keeping nothing now:
+           kept there */
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(input.off_gripped && input.off_holding && input.off_exchanges == 1, "the left gripped, nothing drawn");
+        settings.shoulder_full[VR_HAND_LEFT] = 0;
+        frame.hand[VR_HAND_LEFT].buttons = 0;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(!input.off_holding && input.off_releases == 1 && input.off_release_side == VR_HAND_LEFT,
+            "let go at the left shoulder: kept there (%lu, %d)", input.off_releases, input.off_release_side);
+        /* taken by the other hand not gripping: held until gripped; the right lets its own fall: the left's
+           weapon in hand, not by its grip */
+        frame_of(&frame);
+        frame.hand[VR_HAND_RIGHT].buttons = VR_BUTTON_GRIP;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        vr_input_off_taken(&input);
+        CHECK(input.off_holding && !input.off_gripped, "the left holds it, not by its grip");
+        frame.hand[VR_HAND_RIGHT].buttons = 0;
+        grabs = input.shoulder_grabs;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(input.shoulder_grabs == grabs + 1 && input.shoulder_kind == VR_SHOULDER_DROP, "the right's falls");
+        CHECK(input.left_handed && input.holding && !input.gripped && !input.off_holding && input.off_transfers == 1,
+            "the left's in hand, not by its grip (%d, %d, %d, %lu)", input.left_handed, input.holding, input.gripped,
+            input.off_transfers);
+        /* with the grip as a toggle, the other hand's weapon held not by its grip: a press grips it, not lets go */
+        settings.grip_toggle = 1;
+        frame_of(&frame);
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(vr_input_off_taken(&input) && !input.off_gripped, "the right holds one, not by its grip");
+        frame.hand[VR_HAND_RIGHT].buttons = VR_BUTTON_GRIP;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(input.off_holding && input.off_gripped && input.off_releases == 1, "pressed: gripped, kept (%d, %d, %lu)",
+            input.off_holding, input.off_gripped, input.off_releases);
         return 0;
     }
     CASE("swap") {

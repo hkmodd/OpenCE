@@ -65,6 +65,7 @@ same datum index (identifier and all), so that any message can name one:
 #include "cutscene/cinematics.h"
 #include "network_coop.h"
 #include "network_distributed.h"
+#include "network_vr.h"
 #include "profile_sections.h"
 
 #include <math.h>
@@ -3102,7 +3103,9 @@ void network_objects_client_picked_up_weapon(
 /* the weapons its own players picked up readied once they have them, as
 unit_add_weapon_to_inventory readies a pickup where it decides it (a second
 weapon too, while firing): the client chooses its players' weapons in hand
-(distributed_client_apply_inventory), and the host follows */
+(distributed_client_apply_inventory), and the host follows. A headset's
+player whose weapons are in their places took the weapon with a hand,
+which holds it (vr_places.c): nothing readied */
 static void distributed_client_ready_picked_up_weapons(
 	void)
 {
@@ -3120,7 +3123,7 @@ static void distributed_client_ready_picked_up_weapons(
 		if (picked_up->definition_index == NONE)
 			continue;
 		if (unit_index == NONE || unit_index != picked_up->unit_index ||
-			game_time_get() - picked_up->time > PICKED_UP_WEAPON_TICKS)
+			game_time_get() - picked_up->time > PICKED_UP_WEAPON_TICKS || network_vr_carries_four(unit_index))
 		{
 			picked_up->definition_index = NONE;
 			continue;

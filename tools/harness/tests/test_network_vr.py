@@ -20,6 +20,7 @@ def generated(fault=None):
                        enum_with(read('source/networking/network_game_manager.h'),
                                  '_network_game_port_vr_rules_bit'),
                        enum_with(read('source/units/units.h'), 'MAXIMUM_WEAPONS_PER_UNIT = 4'),
+                       enum_with(read('source/units/units.h'), '_unit_add_weapon_normal = 0'),
                        enum_with(read('source/physics/collisions.h'),
                                  '_collision_test_front_facing_surfaces_bit = 0')]) + '\n'
     source = read('port/linux/game/network_vr.c')
@@ -33,19 +34,52 @@ def generated(fault=None):
                       function(distributed, 'distributed_unit_vector_unpack'),
                       inline(read('source/math/real_math.h'), 'subtract_vectors3d'),
                       inline(read('source/math/real_math.h'), 'dot_product3d'),
+                      inline(read('source/math/real_math.h'), 'vector_from_points3d'),
+                      inline(read('source/math/real_math.h'), 'magnitude_squared3d'),
+                      inline(read('source/math/real_math.h'), 'distance_squared3d'),
                       source[source.index('#define NETWORK_VR_PLACE_SCALE'):]])
     if fault:
         code = mutated(code, *fault)
     return (('enums.inc', enums), ('under_test.inc', code))
 
 
-@pytest.mark.parametrize('case', ['wire', 'valid', 'host', 'send', 'client', 'drop', 'four', 'throw', 'melee'])
+@pytest.mark.parametrize('case', ['wire', 'valid', 'host', 'send', 'client', 'drop', 'four', 'throw', 'melee',
+                                  'grab'])
 def test_case(case):
     status, output = run(build('network_vr', generated()), case)
     assert status == 0, output
 
 
 @pytest.mark.parametrize('fault,case', [
+    (('if (count != 1 || !stream || !network_vr_server())\n\t\treturn;\n\tcsmemcpy(&entry, entries, sizeof(entry));\n'
+      '\tif (entry.player_index >= MAXIMUM_TRACKED_PLAYERS || entry.flags',
+      'if (count != 1 || !network_vr_server())\n\t\treturn;\n\tcsmemcpy(&entry, entries, sizeof(entry));\n'
+      '\tif (entry.player_index >= MAXIMUM_TRACKED_PLAYERS || entry.flags'), 'grab'),
+    (('!distributed_machine_has_player(machine_index, entry.player_index))\n\t{\n\t\treturn;\n\t}\n\thand =',
+      'FALSE)\n\t{\n\t\treturn;\n\t}\n\thand ='), 'grab'),
+    (('entry.flags >= FLAG(NUMBER_OF_NETWORK_VR_GRAB_BITS) ||', ''), 'grab'),
+    (('if (network_vr_segment_distance_squared(&grip, &item->object.position, &far_end) >',
+      'if (distance_squared3d(&grip, &item->object.position) >'), 'grab'),
+    (('NETWORK_VR_GRAB_REACH * NETWORK_VR_GRAB_REACH)', '4.0f * NETWORK_VR_GRAB_REACH * NETWORK_VR_GRAB_REACH)'), 'grab'),
+    (('if (hand == main_hand ? !TEST_FLAG(pose->flags, _network_vr_pose_bare_bit) : pose->off_slot != NONE)',
+      'if (main_hand < 0)'),
+     'grab'),
+    (('now - network_vr_grab_times[player_index] < NETWORK_VR_GRAB_TICKS))', 'FALSE))'), 'grab'),
+    (('unit_get_weapon_count(player->unit_index) >= MAXIMUM_WEAPONS_PER_UNIT ||', ''), 'grab'),
+    (('if (!item || item->object.parent_object_index != NONE ||', 'if (!item ||'), 'grab'),
+    (('!TEST_FLAG(item->object.flags, _object_connected_to_map_bit) ||', ''), 'grab'),
+    (('unit_add_weapon_to_inventory(player->unit_index, weapon_index, _unit_add_weapon_normal)',
+      'unit_add_weapon_to_inventory(player->unit_index, weapon_index, 1)'), 'grab'),
+    (('if (player->local_player_index == NONE)\n\t\tnetwork_distributed_player_picked_up', 'network_distributed_player_picked_up'),
+     'grab'),
+    (('_game_connection_network_client && network_vr_server())\n\t{\n\t\tcsmemset(&message, 0, sizeof(message));\n'
+      '\t\tmessage.entry.player_index = (byte)player_index;\n\t\tmessage.entry.flags',
+      '_game_connection_network_client)\n\t{\n\t\tcsmemset(&message, 0, sizeof(message));\n'
+      '\t\tmessage.entry.player_index = (byte)player_index;\n\t\tmessage.entry.flags'), 'grab'),
+    (('_distributed_message_vr_grab, 1, sizeof(message), _distributed_to_host_reliably);',
+      '_distributed_message_vr_grab, 1, sizeof(message), _distributed_to_host);'), 'grab'),
+    (('message.entry.flags = (byte)(hand == 0 ? FLAG(_network_vr_grab_left_hand_bit) : 0);',
+      'message.entry.flags = 0;'), 'grab'),
     (('!distributed_machine_has_player(machine_index, player_index)', 'FALSE'), 'host'),
     (('if (count != 1 || !network_vr_server())', 'if (count != 1)'), 'host'),
     (('machines[index] != from_machine_index && ', ''), 'host'),
@@ -65,13 +99,19 @@ def test_case(case):
     (('distributed_player_is_local(distributed_player_from_byte(entry.player_index))', 'FALSE'), 'client'),
     (('age <= NETWORK_VR_POSE_TICKS ?', 'TRUE ?'), 'client'),
     (('.taken_time = game_time_get();', '.taken_time = time;'), 'client'),
-    (('if (count != 1 || !stream || !network_vr_server())', 'if (count != 1 || !network_vr_server())'), 'drop'),
+    (('if (count != 1 || !stream || !network_vr_server())\n\t\treturn;\n\tcsmemcpy(&entry, entries, sizeof(entry));\n'
+      '\tif (entry.player_index >= MAXIMUM_TRACKED_PLAYERS || entry.slot',
+      'if (count != 1 || !network_vr_server())\n\t\treturn;\n\tcsmemcpy(&entry, entries, sizeof(entry));\n'
+      '\tif (entry.player_index >= MAXIMUM_TRACKED_PLAYERS || entry.slot'), 'drop'),
     (('!distributed_machine_has_player(machine_index, entry.player_index))\n\t{\n\t\treturn;\n\t}\n'
       '\tdistributed_vector_unpack(&entry.velocity, NETWORK_VR_VELOCITY_SCALE, &velocity);\n\tif (network_vr_drop_weapon',
       'FALSE)\n\t{\n\t\treturn;\n\t}\n'
       '\tdistributed_vector_unpack(&entry.velocity, NETWORK_VR_VELOCITY_SCALE, &velocity);\n\tif (network_vr_drop_weapon'),
      'drop'),
-    (('if (count != 1 || !stream || !network_vr_server())', 'if (count != 1 || !stream)'), 'drop'),
+    (('if (count != 1 || !stream || !network_vr_server())\n\t\treturn;\n\tcsmemcpy(&entry, entries, sizeof(entry));\n'
+      '\tif (entry.player_index >= MAXIMUM_TRACKED_PLAYERS || entry.slot',
+      'if (count != 1 || !stream)\n\t\treturn;\n\tcsmemcpy(&entry, entries, sizeof(entry));\n'
+      '\tif (entry.player_index >= MAXIMUM_TRACKED_PLAYERS || entry.slot'), 'drop'),
     (('|| slot == unit->unit.current_weapon_index)\n\t\t\treturn FALSE;', ')\n\t\t\treturn FALSE;'), 'drop'),
     (('message.entry.slot = (byte)(slot + 1);', 'message.entry.slot = (byte)slot;'), 'drop'),
     (('(network_vr_server() || vr_rules_active())))\n\t{\n\t\tnetwork_vr_drop_weapon',
@@ -80,8 +120,11 @@ def test_case(case):
       'TRUE))\n\t{\n\t\tnetwork_vr_drop_weapon'), 'drop'),
     (('(network_vr_server() || vr_rules_active())))\n\t{\n\t\tnetwork_vr_throw_take',
       'network_vr_server()))\n\t{\n\t\tnetwork_vr_throw_take'), 'throw'),
-    (('return network_vr_server() && network_vr_pose_get(unit->unit.player_index) != NULL;',
+    (('return network_vr_server() && network_vr_pose_get(unit->unit.player_index) != NULL &&\n'
+      '\t\tTEST_FLAG(network_vr_pose_get(unit->unit.player_index)->flags, _network_vr_pose_places_bit);',
       'return network_vr_server();'), 'four'),
+    (('TEST_FLAG(network_vr_pose_get(unit->unit.player_index)->flags, _network_vr_pose_places_bit);',
+      'TRUE;'), 'four'),
     (('\tif (distributed_player_is_local(unit->unit.player_index))\n\t\treturn vr_render_carries_four(unit_index);\n', ''),
      'four'),
     (('if (!unit || unit->object.parent_object_index != NONE ||', 'if (!unit ||'), 'drop'),

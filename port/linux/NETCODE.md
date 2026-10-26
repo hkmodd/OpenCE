@@ -282,7 +282,7 @@ reserved byte, the listing stamp's second); a VR build joins it only at its
 own VR revision, and shows it as "VR" before the gametype. Its game's
 settings say so too (a bit of the game's port switches,
 `_network_game_port_vr_rules_bit`, which other builds leave alone): every
-machine plays its headsets' players by its rules. VR revision 1, in a VR
+machine plays its headsets' players by its rules. VR revision 2, in a VR
 server's game: each headset's player's machine sends its head and hands,
 from its unit, to the host once a tick (distributed message 92,
 `network_vr.c`, unreliably), which takes a pose only of the sending
@@ -295,8 +295,15 @@ that hand's trigger: every other machine's copy of the unit, the host's
 too, holds that weapon of its inventory in its other hand and fires it with
 that trigger (`dual_wield.c`), and the host takes the hits of a player who
 held one in the last three seconds at twice the rate. A player whose pose
-comes carries four weapons, those past the second taken by the hand (its
-grab's swap adds the weapon, dropping none). The player may let a weapon
+says its weapons are in their places (a bit of the pose) carries four, each
+where the player put it (the hands, the shoulders): neither the game's
+action nor walking over one takes a weapon, the player's hand does. Its
+machine asks the host (distributed message 96, over its stream: the player,
+the hand and the weapon), which takes it only for the machine's own player,
+on foot and alive, with a slot free, not within 6 ticks of their last, the
+hand empty by the pose and within 0.197 world units of the weapon along its
+length, and adds the weapon to the inventory readying none; the player's
+machine puts it in that hand. The player may let a weapon
 fall, thrown as the hand moved: its machine asks the host (distributed
 message 94, over its stream: the player, 0 for the weapon in hand or 1 and
 the slot of the other hand's, and the velocity), which takes it only for

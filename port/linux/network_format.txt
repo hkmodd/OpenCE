@@ -96,6 +96,7 @@ enum _distributed_message_voice_up 80
 enum _distributed_message_votekick 78
 enum _distributed_message_votekick_status 79
 enum _distributed_message_vr_drop 94
+enum _distributed_message_vr_grab 96
 enum _distributed_message_vr_pose_down 93
 enum _distributed_message_vr_pose_up 92
 enum _distributed_message_vr_throw 95
@@ -201,7 +202,7 @@ fields server_switch_to_pregame 678699dea271
 layout HALO_PORT_NETWORK_GAME_LOCAL_DATA_OFFSET (HALO_PORT_NETWORK_GAME_PLAYERS_END + 0x36)
 layout HALO_PORT_NETWORK_GAME_SIZE (HALO_PORT_NETWORK_GAME_PLAYERS_END + 0x3A)
 layout HALO_PORT_NETWORK_GAME_VARIANT_OPTIONS_OFFSET (HALO_PORT_NETWORK_GAME_PLAYERS_END + 0xA)
-revision HALO_PORT_NETWORK_VR_REVISION 1
+revision HALO_PORT_NETWORK_VR_REVISION 2
 size message_client_add_player_request_ingame 0x20
 size message_client_add_player_request_pregame 0x20
 size message_client_broadcast_game_search 0x0C
@@ -298,6 +299,8 @@ struct distributed_votekick_request d5f913f22d81
 struct distributed_votekick_status 966041386843
 struct distributed_vr_drop 60e270c5ce50
 struct distributed_vr_drop_message 4b2dc1ec43fa
+struct distributed_vr_grab b215bc294d68
+struct distributed_vr_grab_message 132805abadbf
 struct distributed_vr_pose 053cac28cbf3
 struct distributed_vr_pose_message e3dd8f702d7e
 struct distributed_vr_throw de33de4f72bc

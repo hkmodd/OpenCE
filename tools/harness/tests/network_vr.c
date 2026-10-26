@@ -57,6 +57,7 @@ static boolean distributed_machine_sees_player(long machine_index, short player_
 static int sent_up;
 static int asked_drops;
 static int sent_throws;
+static int sent_grabs;
 static int sent_down[HALO_PORT_MAXIMUM_NETWORK_MACHINES];
 static byte last_message[128];
 static void distributed_send(void *message, byte type, short count, word size, short destination)
@@ -64,6 +65,7 @@ static void distributed_send(void *message, byte type, short count, word size, s
  if (type == _distributed_message_vr_pose_up && count == 1 && destination == _distributed_to_host) sent_up++;
  if (type == _distributed_message_vr_drop && count == 1 && destination == _distributed_to_host_reliably) asked_drops++;
  if (type == _distributed_message_vr_throw && count == 1 && destination == _distributed_to_host_reliably) sent_throws++;
+ if (type == _distributed_message_vr_grab && count == 1 && destination == _distributed_to_host_reliably) sent_grabs++;
  memcpy(last_message, message, size);
 }
 static void distributed_send_to_machine(long machine_index, void *message, byte type, short count, word size)
@@ -74,7 +76,7 @@ static void distributed_send_to_machine(long machine_index, void *message, byte 
 /* the players' units (player i's unit i), their weapons in hand (NONE:
 none), riding or dead; the drops done and the last weapon's acceleration */
 enum { _object_dead_bit };
-struct player_datum { long unit_index; };
+struct player_datum { long unit_index; short local_player_index; };
 struct unit_datum { struct { long parent_object_index; word damage_flags; real_point3d position; } object;
  struct { short current_weapon_index; long player_index; } unit; };
 static struct player_datum player_data[MAXIMUM_TRACKED_PLAYERS];
@@ -149,6 +151,39 @@ static real_point3d *point_from_line3d(real_point3d const *p, real_vector3d cons
 static real_vector3d *scale_vector3d(real_vector3d const *a, real c, real_vector3d *result)
 {
  result->i=c*a->i;result->j=c*a->j;result->k=c*a->k;return result;
+}
+/* the weapons on the ground a hand takes (object index 500 + i: weapon
+i), their state, the units' weapon counts, the weapons added and how, the
+pickups shown */
+enum { _object_connected_to_map_bit = 0 };
+enum { _item_attached_to_unit_bit = 0 };
+#define _object_mask_weapon 0x4
+#define GROUND_WEAPONS 4
+struct item_datum { long definition_index; struct { long parent_object_index; unsigned long flags;
+ real_point3d position; real_point3d bounding_sphere_center; } object; struct { unsigned long flags; } item; };
+static struct item_datum ground[GROUND_WEAPONS];
+static short weapon_count[MAXIMUM_TRACKED_PLAYERS];
+static int added;
+static long added_unit, added_weapon, added_how;
+static int shown_pickups;
+static int told_pickups;
+static boolean distributed_object_index_valid(long object_index){return object_index != NONE && (object_index >> 16) != 0;}
+static void *object_try_and_get_and_verify_type(long object_index, unsigned long types)
+{
+ long index = object_index & 0xFFFF;
+ return (types & _object_mask_weapon) && index >= 500 && index < 500 + GROUND_WEAPONS ? (void *)&ground[index - 500] : NULL;
+}
+static short unit_get_weapon_count(long unit_index){return weapon_count[unit_index];}
+static boolean unit_can_use_weapon(long unit_index, long weapon_index){(void)unit_index;(void)weapon_index;return TRUE;}
+static boolean unit_add_weapon_to_inventory(long unit_index, long weapon_index, long how)
+{
+ added++;added_unit=unit_index;added_weapon=weapon_index;added_how=how;weapon_count[unit_index]++;
+ return TRUE;
+}
+static void hud_picked_up_weapon(short local_player_index, long definition_index){(void)local_player_index;(void)definition_index;shown_pickups++;}
+static void network_distributed_player_picked_up(long player_index, short kind, long definition_index, short count)
+{
+ (void)player_index;(void)kind;(void)definition_index;(void)count;told_pickups++;
 }
 #include "under_test.inc"
 
@@ -430,12 +465,16 @@ int main(int argc,char **argv)
   {
    struct distributed_vr_pose entry=entry_of(1,&pose);
    network_vr_handle_up(2,now,&entry,1);
+   CHECK(!network_vr_carries_four(1),"a VR server's player whose pose comes, its weapons not in their places: two");
+   pose.flags|=FLAG(_network_vr_pose_places_bit);
+   entry=entry_of(1,&pose);
+   network_vr_handle_up(2,now+1,&entry,1);
   }
-  CHECK(network_vr_carries_four(1),"a VR server's player whose pose comes: four");
+  CHECK(network_vr_carries_four(1),"a VR server's player whose pose comes, its weapons in their places: four");
   game.cooperative_flags=0;
   CHECK(!network_vr_carries_four(1),"an ordinary server's: two");
   game.cooperative_flags=FLAG(_network_game_port_vr_rules_bit);
-  now+=NETWORK_VR_POSE_TICKS+1;
+  now+=NETWORK_VR_POSE_TICKS+2;
   CHECK(!network_vr_carries_four(1),"a pose no longer coming: two");
   CHECK(!network_vr_carries_four(2),"a unit no player's: two");
   headset_four=FALSE;
@@ -474,6 +513,126 @@ int main(int argc,char **argv)
    "the left hand untracked: the right, even behind the head: %f",point.x);
   local[1]=TRUE;
   CHECK(!network_vr_melee_point(1,&point),"this machine's own player: its headset's, not a pose");
+ } else CASE("grab") {
+  /* the host gives a headset's hand the weapon on the ground it reaches:
+  another machine's player by its pose, the hand empty and near the
+  weapon, its own machine asking reliably; a player of the host's by its
+  own hand; each added readied by nothing, shown and told */
+  struct network_vr_pose pose=pose_of();
+  struct distributed_vr_pose pose_entry;
+  struct distributed_vr_grab entry;
+  short index;
+  connection=_game_connection_network_server;
+  players();
+  for (index=0;index<MAXIMUM_TRACKED_PLAYERS;index++)
+  {
+   player_data[index].unit_index=index;player_data[index].local_player_index=NONE;weapon_count[index]=1;
+   unit_data[index].object.parent_object_index=NONE;unit_data[index].object.damage_flags=0;
+  }
+  for (index=0;index<GROUND_WEAPONS;index++)
+  {
+   ground[index].definition_index=700+index;ground[index].object.parent_object_index=NONE;
+   ground[index].object.flags=FLAG(_object_connected_to_map_bit);ground[index].item.flags=0;
+   /* along x, by the right hand (10.15 19.9 1.4) */
+   ground[index].object.position.x=10.0f;ground[index].object.position.y=19.9f;ground[index].object.position.z=1.4f;
+   ground[index].object.bounding_sphere_center=ground[index].object.position;
+   ground[index].object.bounding_sphere_center.x+=0.1f;
+  }
+  game.cooperative_flags=FLAG(_network_game_port_vr_rules_bit);
+  unit_data[1].unit.player_index=distributed_player_from_byte(1);
+  unit_data[1].object.position.x=10.0f;unit_data[1].object.position.y=20.0f;unit_data[1].object.position.z=1.0f;
+  pose.flags|=FLAG(_network_vr_pose_places_bit);
+  pose_entry=entry_of(1,&pose);
+  network_vr_handle_up(2,now,&pose_entry,1);
+  memset(&entry,0,sizeof(entry));
+  entry.player_index=1;entry.weapon_index=(0x55L<<16)|500;
+  network_vr_handle_grab(2,&entry,1,TRUE);
+  CHECK(added==0,"the main hand holding: refused");
+  pose.flags|=FLAG(_network_vr_pose_bare_bit);
+  pose_entry=entry_of(1,&pose);
+  network_vr_handle_up(2,now+1,&pose_entry,1);
+  network_vr_handle_grab(2,&entry,1,FALSE);
+  CHECK(added==0,"a request in a datagram refused");
+  network_vr_handle_grab(3,&entry,1,TRUE);
+  CHECK(added==0,"another machine's player's refused");
+  network_vr_handle_grab(2,&entry,2,TRUE);
+  CHECK(added==0,"two at once refused");
+  game.cooperative_flags=0;
+  network_vr_handle_grab(2,&entry,1,TRUE);
+  CHECK(added==0,"an ordinary server's refused");
+  game.cooperative_flags=FLAG(_network_game_port_vr_rules_bit);
+  entry.flags=0x80;
+  network_vr_handle_grab(2,&entry,1,TRUE);
+  CHECK(added==0,"unknown flags refused");
+  entry.flags=0;
+  ground[0].object.position.z=1.7f;ground[0].object.bounding_sphere_center.z=1.7f;
+  network_vr_handle_grab(2,&entry,1,TRUE);
+  CHECK(added==0,"a weapon 0.3 from the hand refused");
+  ground[0].object.position.z=1.55f;ground[0].object.bounding_sphere_center.z=1.55f;
+  ground[0].object.position.x=9.9f;
+  network_vr_handle_grab(2,&entry,1,TRUE);
+  CHECK(added==1,"one 0.15 from the hand, reached along its length (its far end past the hand): taken");
+  CHECK(added_unit==1 && added_weapon==entry.weapon_index && added_how==_unit_add_weapon_normal,
+   "to the player's unit, readied by nothing: %ld %ld",added_unit,added_how);
+  CHECK(shown_pickups==1 && told_pickups==1,"shown and told: %d %d",shown_pickups,told_pickups);
+  entry.weapon_index=(0x55L<<16)|501;
+  now+=NETWORK_VR_GRAB_TICKS-1;
+  network_vr_handle_grab(2,&entry,1,TRUE);
+  CHECK(added==1,"another within NETWORK_VR_GRAB_TICKS refused");
+  now+=1;
+  unit_data[1].object.parent_object_index=7;
+  network_vr_handle_grab(2,&entry,1,TRUE);
+  CHECK(added==1,"a player riding refused");
+  unit_data[1].object.parent_object_index=NONE;
+  ground[1].object.parent_object_index=33;
+  network_vr_handle_grab(2,&entry,1,TRUE);
+  CHECK(added==1,"a weapon someone holds refused");
+  ground[1].object.parent_object_index=NONE;
+  ground[1].object.flags=0;
+  network_vr_handle_grab(2,&entry,1,TRUE);
+  CHECK(added==1,"a weapon off the map refused");
+  ground[1].object.flags=FLAG(_object_connected_to_map_bit);
+  weapon_count[1]=MAXIMUM_WEAPONS_PER_UNIT;
+  network_vr_handle_grab(2,&entry,1,TRUE);
+  CHECK(added==1,"four carried: refused");
+  weapon_count[1]=2;
+  entry.weapon_index=(0x55L<<16)|1;
+  network_vr_handle_grab(2,&entry,1,TRUE);
+  CHECK(added==1,"no weapon's index refused");
+  entry.weapon_index=(0x55L<<16)|501;
+  network_vr_handle_grab(2,&entry,1,TRUE);
+  CHECK(added==2,"the next after NETWORK_VR_GRAB_TICKS taken");
+  /* the other hand, by its own place: holding, refused; empty, taken */
+  now+=NETWORK_VR_GRAB_TICKS;
+  entry.weapon_index=(0x55L<<16)|502;entry.flags=FLAG(_network_vr_grab_left_hand_bit);
+  ground[2].object.position.y=20.1f;ground[2].object.bounding_sphere_center.y=20.1f;
+  pose.off_slot=1;pose_entry=entry_of(1,&pose);
+  network_vr_handle_up(2,now,&pose_entry,1);
+  network_vr_handle_grab(2,&entry,1,TRUE);
+  CHECK(added==2,"the other hand holding: refused");
+  pose.off_slot=NONE;pose_entry=entry_of(1,&pose);
+  network_vr_handle_up(2,now+1,&pose_entry,1);
+  network_vr_handle_grab(2,&entry,1,TRUE);
+  CHECK(added==3,"the other hand empty: taken");
+  /* a player of the host's takes by its own hand, no pose */
+  now+=NETWORK_VR_GRAB_TICKS;
+  local[0]=TRUE;headset_four=TRUE;player_data[0].local_player_index=0;
+  unit_data[0].unit.player_index=distributed_player_from_byte(0);
+  ground[3].object.position.x=50.0f;ground[3].object.bounding_sphere_center.x=50.1f;
+  network_vr_grab(distributed_player_from_byte(0),(0x55L<<16)|503,1);
+  CHECK(added==4 && added_unit==0 && told_pickups==3 && shown_pickups==4,
+   "the host's own player: taken, shown, not told: %d %d %d",added,told_pickups,shown_pickups);
+  /* a VR server's client asks, reliably; an ordinary server's asks nothing */
+  connection=_game_connection_network_client;
+  network_vr_grab(distributed_player_from_byte(0),(0x55L<<16)|503,0);
+  CHECK(sent_grabs==1 && added==4,"a VR server's client asks the host");
+  CHECK(((struct distributed_vr_grab_message *)last_message)->entry.player_index==0 &&
+   ((struct distributed_vr_grab_message *)last_message)->entry.flags==FLAG(_network_vr_grab_left_hand_bit) &&
+   ((struct distributed_vr_grab_message *)last_message)->entry.weapon_index==((0x55L<<16)|503),
+   "for its player, the left hand, the weapon");
+  game.cooperative_flags=0;
+  network_vr_grab(distributed_player_from_byte(0),(0x55L<<16)|503,0);
+  CHECK(sent_grabs==1,"an ordinary server's client asks nothing");
  } else CASE("throw") {
   struct distributed_vr_throw entry;
   real_vector3d hand,offset,velocity,game_velocity;

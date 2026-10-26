@@ -289,8 +289,8 @@ int vr_render_other_hand_muzzle(long unit_index, union real_point3d *origin, uni
 server's rules: dual_wield.c) */
 int vr_render_dual_wield(void);
 /* network_vr.c: the unit is the headset's player's, who carries four
-weapons (two hands, two shoulders: by a VR server's rules, the hands as
-they hold) */
+weapons, each in its place (two hands, two shoulders: by a VR server's
+rules, the hands as they hold; vr_places.c) */
 int vr_render_carries_four(long unit_index);
 /* hud_messaging.c: a prompt's button (one of the HUD's button icons) as the
 headset's controllers name it (vr_input.c's buttons): the right B acts, the

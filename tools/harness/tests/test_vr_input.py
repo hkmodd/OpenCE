@@ -12,8 +12,24 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from harness import CHECK_FAILED, build, mutated, read, run
 
 CASES = ["gameplay", "move", "menus", "menu-button", "turn", "seat", "drive", "room", "gestures", "hands", "ray",
-         "bindings", "swap", "throw", "grab", "bare", "physical", "dual", "layout", "seat-secondary", "handles", "seat-switch"]
+         "bindings", "swap", "throw", "grab", "bare", "physical", "dual", "places", "layout", "seat-secondary", "handles", "seat-switch"]
 CONTROLS = {
+    "places-grab-held": (("if (input->places)\n\t{\n\t\tinput->grab_requests++;",
+                          "if (0)\n\t{\n\t\tinput->grab_requests++;"), "places"),
+    "places-off-exchange-never": (("if (settings->places && side >= 0 && settings->shoulder_full[side])\n\t\t{\n"
+                                   "\t\t\tinput->off_gripped = 0;",
+                                   "if (0)\n\t\t{\n\t\t\tinput->off_gripped = 0;"), "places"),
+    "places-main-exchange-never": (("if (settings->places && side >= 0 && settings->shoulder_full[side])\n\t\t{\n"
+                                    "\t\t\t/* (exchanged",
+                                    "if (0)\n\t\t{\n\t\t\t/* (exchanged"), "places"),
+    "places-off-ungripped-lets-go": (("if (input->off_holding && (input->off_gripped || !settings->places) &&",
+                                      "if (input->off_holding &&"), "places"),
+    "places-transfer-gripped": (("input->gripped = settings->places ? input->off_gripped : 1;", "input->gripped = 1;"),
+                                "places"),
+    "places-switch-presses": (("\t\t\t\t\thand_bindings[hand][control] = VR_BIND_NONE;\n", ""), "places"),
+    "places-off-take-gripped": (("input->off_gripped = vr_gripping(input, input->left_handed ? VR_HAND_RIGHT : VR_HAND_LEFT);",
+                                 "input->off_gripped = 1;"), "places"),
+    "places-taken-not-gripped": (("\t\tinput->gripped = vr_gripping(input, hand);\n", ""), "places"),
     "left-handed-ignored": (("main_index = input->left_handed ? VR_HAND_LEFT : VR_HAND_RIGHT;",
                              "main_index = VR_HAND_RIGHT;"), "gameplay"),
     "grenade-on-fire": (("vr_bind_hand(pad, off_hand, hand_bindings[off_index],",
@@ -80,7 +96,8 @@ CONTROLS = {
                                    "\t\tinput->gripped = 1;\n"), "physical"),
     "physical-in-seats": (("settings->physical && settings->gestures && settings->on_foot;",
                            "settings->physical && settings->gestures;"), "physical"),
-    "physical-drop-never": (("if ((side < 0 || (settings->dual && settings->shoulder_full[side] && settings->shoulder_full[!side])) &&\n\t\t\tsettings->drop)",
+    "physical-drop-never": (("if ((side < 0 || (!settings->places && settings->dual && settings->shoulder_full[side] &&\n"
+                             "\t\t\tsettings->shoulder_full[!side])) && settings->drop)",
                              "if (0)"), "physical"),
     "physical-drop-still": (("\t\t\tmemcpy(input->drop_velocity, input->hand_velocity[main_index], sizeof(input->drop_velocity));\n",
                              ""), "physical"),
@@ -91,20 +108,24 @@ CONTROLS = {
                        "input->supporting = input->holding &&"), "dual"),
     "dual-off-trigger-throws": (("action = input->supporting || input->off_holding ? VR_BIND_NONE : VR_BIND_THROW_GRENADE;",
                                  "action = input->supporting ? VR_BIND_NONE : VR_BIND_THROW_GRENADE;"), "dual"),
-    "dual-no-transfer": (("\t\t\tinput->off_transfers++;\n\t\t\tvr_swap_hands(input);\n\t\t\tinput->holding = input->gripped = 1;\n",
+    "dual-no-transfer": (("\t\t\tinput->off_transfers++;\n\t\t\tvr_swap_hands(input);\n\t\t\tinput->holding = 1;\n"
+                          "\t\t\tinput->gripped = settings->places ? input->off_gripped : 1;\n\t\t\tinput->off_gripped = 0;\n",
                           ""), "dual"),
-    "dual-kept-let-go": (("\t\tpressed[off_index] = 0;\n\t\tinput->off_holding = 0;\n", "\t\tpressed[off_index] = 0;\n"),
-                         "dual"),
-    "dual-off-kept-anywhere": (("input->off_release_side = side >= 0 && !(settings->shoulder_full[side] && settings->shoulder_full[!side]) ?\n\t\t\tside : -1;",
+    "dual-kept-let-go": (("\t\t\tinput->off_holding = input->off_gripped = 0;\n\t\t\tinput->off_release_side",
+                          "\t\t\tinput->off_gripped = 0;\n\t\t\tinput->off_release_side"), "dual"),
+    "dual-off-kept-anywhere": (("input->off_release_side = side >= 0 &&\n"
+                                "\t\t\t\t(settings->places || !(settings->shoulder_full[side] && settings->shoulder_full[!side])) ? side : -1;",
                                 "input->off_release_side = side;"), "dual"),
-    "dual-off-full-shoulder-falls": (("!(settings->shoulder_full[side] && settings->shoulder_full[!side]) ?\n\t\t\tside",
-                                      "!settings->shoulder_full[side] ?\n\t\t\tside"), "dual"),
+    "dual-off-full-shoulder-falls": (("(settings->places || !(settings->shoulder_full[side] && settings->shoulder_full[!side])) ? side",
+                                      "(settings->places || !settings->shoulder_full[side]) ? side"), "dual"),
     "dual-off-falls-still": (("\t\t\tmemcpy(input->off_drop_velocity, input->hand_velocity[off_index], sizeof(input->off_drop_velocity));\n",
                               ""), "dual"),
-    "dual-full-shoulders-keep": (("(side < 0 || (settings->dual && settings->shoulder_full[side] && settings->shoulder_full[!side])) &&\n\t\t\tsettings->drop",
-                                  "side < 0 &&\n\t\t\tsettings->drop"), "dual"),
-    "dual-full-shoulder-falls": (("settings->dual && settings->shoulder_full[side] && settings->shoulder_full[!side])",
-                                  "settings->dual && settings->shoulder_full[side])"), "dual"),
+    "dual-full-shoulders-keep": (("(side < 0 || (!settings->places && settings->dual && settings->shoulder_full[side] &&\n"
+                                  "\t\t\tsettings->shoulder_full[!side])) && settings->drop",
+                                  "side < 0 && settings->drop"), "dual"),
+    "dual-full-shoulder-falls": (("!settings->places && settings->dual && settings->shoulder_full[side] &&\n"
+                                  "\t\t\tsettings->shoulder_full[!side])",
+                                  "!settings->places && settings->dual && settings->shoulder_full[side])"), "dual"),
     "dual-past-rules": (("\tif (!settings->dual)\n\t\tinput->off_holding = 0;\n", ""), "dual"),
     "physical-seat-lets-go":(("\t\tinput->holding = settings->physical && settings->gestures;\n",
                                "\t\tinput->holding = 0;\n"), "physical"),

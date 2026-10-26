@@ -445,19 +445,26 @@ one. A simulated headset that is to join a network game keeps time with
 `debug.vr_simulate_paced` (a host drops a client whose clock runs fast).
 
 By those rules, with the hands as they hold, a headset's player carries
-four weapons, not two: one in each hand and one at each shoulder. Each
-shoulder keeps one weapon or none (`vr_places` in `vr_view.c`): a weapon
-drawn leaves its shoulder keeping none, one let go at a shoulder that
-keeps none is kept there, and one let go at a shoulder that keeps another,
-or at none, falls. A weapon that is nowhere (picked up, readied by the
-game) goes to a shoulder that keeps none, the other hand's first. The
-weapons past the second are taken by the hand (the swap its grab asks
-for adds the weapon, none dropped, in `players.c`; the host's for a VR
-server's player whose pose comes, `network_vr_carries_four`): the one
-taken goes to the hand that took it, and the hand that held a weapon
-then, still gripping it, goes on holding it in the other hand. The other
-hand's weapon let fall is asked of the host with its slot
-VR revision 1), which drops it as a swap drops a weapon
+four weapons, not two, each in its place: one in each hand and one at
+each shoulder (`port/linux/game/vr_places.c`, kept by `vr_places_update`
+in `vr_view.c`). What the player sees is what the player has: the game
+moves no weapon by itself. A weapon comes by a hand alone: an empty hand's
+grip pressed at a weapon on the ground within its reach takes it into that
+hand, whether or not the other grips its own; neither the game's action
+nor walking over one takes a weapon (`players.c`), and with both hands full
+one is thrown away first. A game with no network adds the weapon itself;
+in a network game the player's machine asks the host (VR revision 2),
+which checks the hand by the pose and adds it readying none
+(`network_vr_grab`, for a player whose pose says its weapons are in their
+places, `network_vr_carries_four`). A weapon let go at a shoulder that
+keeps none is kept there; let go at a shoulder that keeps one, it is
+exchanged for that one, which the hand then holds (by its grip once that
+is pressed again); let go elsewhere, it falls. The switch button exchanges
+the main hand's weapon with its own shoulder's, or the other's if its own
+keeps none. A weapon the game gives (a new life's, one a script forces)
+goes to the main hand, the one held there to a shoulder that keeps none.
+The other hand's weapon let fall is asked of the host with its slot (VR
+revision 1), which drops it as a swap drops a weapon
 (`unit_drop_inventory_slot`). On any other server a player carries two,
 the shoulders as before.
 

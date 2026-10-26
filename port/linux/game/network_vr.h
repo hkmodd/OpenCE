@@ -19,6 +19,9 @@ enum
 	_network_vr_pose_left_handed_bit,
 	/* no hand holds the weapon (the hands bare) */
 	_network_vr_pose_bare_bit,
+	/* the weapons in their places (vr.hands "physical"): the player carries
+	four and takes them with the hand alone (network_vr_grab) */
+	_network_vr_pose_places_bit,
 	NUMBER_OF_NETWORK_VR_POSE_BITS
 };
 
@@ -55,6 +58,11 @@ NETWORK_VR_THROW_MOST of the game's */
 #define NETWORK_VR_THROW_FULL 0.082f
 #define NETWORK_VR_THROW_LEAST 0.4f
 #define NETWORK_VR_THROW_MOST 1.25f
+/* a weapon taken from the ground by a hand: no further than this from the
+posed hand along its length (world units: 0.6 m, the headset's 0.25 m with
+room for a pose's age), and the ticks before a player's next */
+#define NETWORK_VR_GRAB_REACH 0.197f
+#define NETWORK_VR_GRAB_TICKS 6
 
 void network_vr_reset(void);
 /* any player's pose was taken this game (none: no body to pose) */
@@ -88,11 +96,24 @@ void network_vr_drop(long player, real_vector3d const *velocity, short slot);
 machine's stream alone) */
 word network_vr_drop_entry_size(void);
 void network_vr_handle_drop(long machine_index, void const *entries, short count, boolean stream);
-/* (players.c) the unit carries four weapons, not two, those past the
-second taken by the hand (a swap that drops none): this machine's
-headset's player's by a VR server's rules (or in a game with no
-network), or a VR server's player whose pose comes */
+/* (players.c) the unit carries four weapons, not two, taken with the hand
+alone (the game's action takes none): this machine's headset's player's by
+a VR server's rules (or in a game with no network) with the weapons in
+their places, or a VR server's player whose pose says so */
 boolean network_vr_carries_four(long unit_index);
+/* (a headset's player's machine, the weapons in their places) the weapon
+on the ground taken by the player's hand (0 the left, 1 the right),
+added as the game adds one, readied by nothing: by a game with no network
+itself, by a VR server's host when it asks, which checks it; nothing on
+another server */
+void network_vr_grab(long player, long weapon_index, short hand);
+/* the request's entry size and its handler (the host: over the
+machine's stream alone) */
+word network_vr_grab_entry_size(void);
+void network_vr_handle_grab(long machine_index, void const *entries, short count, boolean stream);
+/* the distance squared from `point` to the segment from `a` to `b` (a
+hand's reach of a weapon along its length: vr_view.c's too) */
+real network_vr_segment_distance_squared(real_point3d const *point, real_point3d const *a, real_point3d const *b);
 /* (a headset's player's machine) the player's grenade thrown with the
 arm (vr.throw_gesture): the hand's velocity and its place from the eyes as
 it let go (the world's axes: world units a tick, world units), for the
