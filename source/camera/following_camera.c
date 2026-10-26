@@ -42,6 +42,7 @@ symbols in this file:
 
 #include "following_camera.h"
 #include "passenger_camera.h" /* port: port/linux/game/passenger_camera.c */
+#include "halo_vr.h" /* port: port/linux/game/vr_view.c */
 #include "cseries/errors.h" /* port: (error, for a short camera track) */
 #include "observer.h"
 
@@ -259,6 +260,11 @@ void following_camera_update(
 		/* port: keep the reference camera inside this passenger's weapon arc */
 		if (passenger)
 			passenger_camera_clamp_facing(controls->local_player_index, &facing);
+		/* port: a headset's eyes pitch with the head, and its camera behind
+		the vehicle stays level rather than going round it as the facing
+		pitches (port/linux/game/vr_view.c) */
+		if (vr_render_chase_level(controls->local_player_index))
+			facing.pitch = 0.f;
 		vector3d_from_euler_angles2d(&command->forward, &facing);
 
 		match_vassert(

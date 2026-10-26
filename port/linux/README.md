@@ -766,6 +766,8 @@ screen, with the cause in the log.
   sideways turns the wheels as far as it is pushed, forward and back are
   the throttle, seen from the seat or from behind: in a seat that has a
   view behind it, the moving hand's stick click switches between the two.
+  Seen from behind, the camera is level and turns smoothly with the
+  vehicle, as the game's camera is drawn between the ticks.
   The aiming stick turns (`vr.snap_turn`), and
   the mouse, the gamepad's stick and the game's own turns (a respawn, a
   script) turn the world around the player, as a turn of the body. Aim

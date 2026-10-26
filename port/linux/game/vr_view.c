@@ -668,6 +668,18 @@ int vr_render_seat_view(
 		vr_seat_of(player_control_get_unit_index(local_player_index), &vehicle_index, &seat);
 }
 
+/* following_camera_update: the headset's player's camera behind a vehicle
+is level. The eyes pitch with the head; a camera pitched with the facing
+(the head's pitch, driving: vr_drive_facing) went up and down round the
+vehicle as the head nodded, a tick or two after it. For the local view
+only: the shots' deterministic camera is the unit's aim
+(following_camera_deterministic) */
+int vr_render_chase_level(
+	short local_player_index)
+{
+	return vr_active() && local_player_index == local_player_get_next(NONE) && !cinematic_in_progress();
+}
+
 /* as the game takes the player's input: in a seat with a view of the
 game's own behind it (the seat's third-person camera, or the passenger
 camera: passenger_camera.c), a click of the move stick (vr_input.c)
@@ -1738,6 +1750,35 @@ static real vr_heading(
 	return vr_wrap_angle(vr_yaw_of(camera->forward.n, 0.0f) - vr_view.unaimed_head_yaw);
 }
 
+/* the heading behind a vehicle (the director's following camera) while
+the facing turns it (the drive's steering, the main hand's stick): the
+game's camera as drawn this frame (blended between the ticks,
+render_interpolation.c), turned from it as the heading is from the facing.
+The heading itself follows the facing a frame late, and the drive takes
+the facing from the vehicle's yaw as the last tick left it: the view
+turned in steps, one a tick, ahead of the camera whose place goes round
+the vehicle as the drawn camera faces. Else the heading */
+static real vr_chase_heading(
+	struct vr_frame const *frame,
+	struct render_window const *player)
+{
+	struct observer_result const *camera;
+
+	if (!vr_view.heading_valid || !(vr_view.driving || vr_view.seat_stick) ||
+		director_get_perspective(player->local_player_index) != _director_perspective_third_person)
+	{
+		return vr_heading(frame, &player->render_camera);
+	}
+	/* (the frame's blend again: main_game_render has taken this frame's
+	snapshot, so it is the same camera) */
+	camera = render_interpolation_camera(player->local_player_index,
+		observer_get_camera(player->local_player_index));
+	if (!camera)
+		return vr_view.heading;
+	return vr_wrap_angle(vr_yaw_of(camera->forward.n, vr_view.set_yaw) +
+		vr_wrap_angle(vr_view.heading - vr_view.set_yaw));
+}
+
 /* the HUD panel's field (vr.hud_distance and vr.hud_width, as vr_openxr.c
 places it): x and y each half the width over the distance, in the bounds'
 units for the HUD window's aspect */
@@ -2040,6 +2081,17 @@ short vr_render_windows(
 	player = windows[0];
 	console = windows[1];
 	anchor = player.render_camera.position;
+	/* (behind a vehicle, the observer's camera: not its shake, which moves
+	the game's camera once a tick, player_effects.c) */
+	if (!vr_view.seat_view && !cinematic_in_progress() &&
+		director_get_perspective(player.local_player_index) == _director_perspective_third_person)
+	{
+		struct observer_result const *camera = render_interpolation_camera(player.local_player_index,
+			observer_get_camera(player.local_player_index));
+
+		if (camera)
+			anchor = camera->position;
+	}
 	/* (seen from a seat, the eyes at the unit's head, held in the seat
 	(vr_seat_eye): the first person's camera there is the unit's standing
 	eye height over its origin, inside the vehicle's body; astromaddie's) */
@@ -2058,7 +2110,7 @@ short vr_render_windows(
 		if (vr_view.cinematic)
 			vr_blink(VR_CUT_BLINK);
 		vr_view.cinematic = FALSE;
-		heading = vr_view.seat_view ? vr_seat_heading(TRUE) : vr_heading(frame, &player.render_camera);
+		heading = vr_view.seat_view ? vr_seat_heading(TRUE) : vr_chase_heading(frame, &player);
 	}
 	aspect = (real)(player.render_camera.viewport_bounds.x1 - player.render_camera.viewport_bounds.x0) /
 		(real)(player.render_camera.viewport_bounds.y1 - player.render_camera.viewport_bounds.y0);

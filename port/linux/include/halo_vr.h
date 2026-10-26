@@ -219,6 +219,9 @@ int vr_render_handles(void);
 it, not from the chase camera (vr.vehicle_view "first_person"); for the
 local view only, the shots' deterministic camera unchanged */
 int vr_render_seat_view(short local_player_index);
+/* following_camera_update: the headset's player's camera behind a vehicle
+is level, the eyes pitching with the head (vr_view.c) */
+int vr_render_chase_level(short local_player_index);
 /* a driver steered by the off stick (vr.vehicle_steering "drive"): its
 sideways push turns the facing, not the pad's left stick (vr_input.c) */
 int vr_render_drive(void);
@@ -337,6 +340,7 @@ void vr_render_rumble_hands(float const body[2], float const weapon[2], float co
 #define vr_render_seat_stick() 0
 #define vr_render_handles() 0
 #define vr_render_seat_view(local_player_index) 0
+#define vr_render_chase_level(local_player_index) 0
 #define vr_render_drive() 0
 #define vr_render_seat_weapon_hidden() 0
 #define vr_render_seat_switch() 0

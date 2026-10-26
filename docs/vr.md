@@ -312,6 +312,17 @@ What sets the size the world is seen at, each measured or derived:
   a turret's gunner is still carried round as the gun turns. A seated
   lean's height is taken from where the player sat, as its sideways and
   ahead are.
+- Behind a vehicle (the director's following camera), while the facing
+  turns the view (a driver's steering, the aiming stick), the heading is
+  the game's camera as drawn that frame, blended between the ticks, turned
+  from it as the heading is from the facing (`vr_chase_heading`): the
+  heading follows the facing a frame late and the drive's facing is the
+  vehicle's yaw as the last tick left it, so the view turned in a step
+  each tick. The eyes are placed at the observer's camera without its
+  shake, and that camera is level (`vr_render_chase_level`,
+  `following_camera_update`): pitched with the facing (the head's pitch,
+  driving), it went up and down round the vehicle a tick or two after a
+  nod.
 - What aims in a seat (`vr.vehicle_aim`): the main hand's aim (a gun, a
   tank's cannon, where a flier goes; a passenger's own weapon is held in
   the hand as on foot), its stick as the pad's right stick (`vr_input.c`:
