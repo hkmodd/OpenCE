@@ -94,6 +94,8 @@ struct vr_frame
 	int focused;
 	/* seconds between the headset's frames */
 	float display_period;
+	/* counts the frames whose eyes are drawn (one a pass of the main loop) */
+	unsigned long index;
 	struct vr_pose head;
 	struct vr_pose eye[2];
 	struct vr_fov fov[2];

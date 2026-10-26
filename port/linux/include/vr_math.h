@@ -35,6 +35,28 @@ void vr_quaternion_from_axes(const float x[3], const float y[3], const float z[3
 /* the shortest turn from one direction to another (each of length 1); half
 a turn about an axis across `from` when they are opposite */
 void vr_quaternion_between(const float from[3], const float to[3], float out[4]);
+/* `t` of the way from turn a to turn b (0 to 1), the shorter way round,
+of length 1 (normalised: close to the true arc for the small turns it is
+given) */
+void vr_quaternion_toward(const float a[4], const float b[4], float t, float out[4]);
+/* the angle (radians, 0 to pi) between two turns */
+float vr_quaternion_angle(const float a[4], const float b[4]);
+
+/* a turn steadied against a hand's tremor (vr_steady): low-passed, at rest
+below VR_STEADY_CUTOFF hertz, the cutoff rising with the turn's speed so
+that a quick swing lags little (a "1 euro" filter's rule). `valid` 0
+starts it over at the next turn given */
+struct vr_steady
+{
+	float raw[4];
+	float steady[4];
+	float speed;
+	int valid;
+};
+
+/* the turn `raw` of this frame, `seconds` after the last, steadied into
+`out` (raw itself as it starts over, or when either is not finite) */
+void vr_steady(struct vr_steady *state, const float raw[4], float seconds, float out[4]);
 
 /* a LOCAL direction or offset in the game's axes (+x forward, +y left, +z
 up) for a viewer whose heading is `yaw` (radians, growing to the left from

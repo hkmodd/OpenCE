@@ -17,6 +17,11 @@ the game's own frustum.
 #include <math.h>
 
 #define VR_PI 3.14159265358979
+/* vr_steady: the cutoff at rest (hertz) and the more for each radian a
+second the turn goes, and the cutoff its speed is smoothed at */
+#define VR_STEADY_CUTOFF 1.5f
+#define VR_STEADY_SPEED_CUTOFF 1.0f
+#define VR_STEADY_SPEED_SMOOTHING 4.0f
 
 void vr_rotate(const float q[4], const float v[3], float out[3])
 {
@@ -41,6 +46,69 @@ void vr_quaternion_multiply(const float a[4], const float b[4], float out[4])
 	out[1] = y;
 	out[2] = z;
 	out[3] = w;
+}
+
+void vr_quaternion_toward(const float a[4], const float b[4], float t, float out[4])
+{
+	float dot = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
+	float sign = dot < 0.0f ? -1.0f : 1.0f;
+	float length = 0.0f;
+	int axis;
+
+	for (axis = 0; axis < 4; axis++)
+	{
+		out[axis] = a[axis] + (b[axis] * sign - a[axis]) * t;
+		length += out[axis] * out[axis];
+	}
+	length = sqrtf(length);
+	if (!(length > 1e-6f))
+	{
+		for (axis = 0; axis < 4; axis++)
+			out[axis] = a[axis];
+		return;
+	}
+	for (axis = 0; axis < 4; axis++)
+		out[axis] /= length;
+}
+
+float vr_quaternion_angle(const float a[4], const float b[4])
+{
+	float dot = (float)fabs(a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3]);
+
+	return dot >= 1.0f ? 0.0f : 2.0f * acosf(dot);
+}
+
+/* a low pass's share of the way to the new value a frame `seconds` long
+takes, at `cutoff` hertz */
+static float vr_steady_share(float cutoff, float seconds)
+{
+	float time_constant = 1.0f / (2.0f * (float)VR_PI * cutoff);
+
+	return seconds / (seconds + time_constant);
+}
+
+void vr_steady(struct vr_steady *state, const float raw[4], float seconds, float out[4])
+{
+	float speed;
+	int axis;
+
+	if (!state->valid || !(seconds > 0.0f) || !vr_finite(raw, 4) || !vr_finite(&seconds, 1))
+	{
+		for (axis = 0; axis < 4; axis++)
+			state->raw[axis] = state->steady[axis] = out[axis] = raw[axis];
+		state->speed = 0.0f;
+		state->valid = vr_finite(raw, 4);
+		return;
+	}
+	speed = vr_quaternion_angle(state->raw, raw) / seconds;
+	state->speed += (speed - state->speed) * vr_steady_share(VR_STEADY_SPEED_SMOOTHING, seconds);
+	vr_quaternion_toward(state->steady, raw,
+		vr_steady_share(VR_STEADY_CUTOFF + VR_STEADY_SPEED_CUTOFF * state->speed, seconds), state->steady);
+	for (axis = 0; axis < 4; axis++)
+	{
+		state->raw[axis] = raw[axis];
+		out[axis] = state->steady[axis];
+	}
 }
 
 void vr_quaternion_between(const float from[3], const float to[3], float out[4])

@@ -225,7 +225,12 @@ What sets the size the world is seen at, each measured or derived:
   controller), turned up by `vr.aim_pitch`; with the off hand's
   grip ahead of the main hand on a weapon not held as a pistol (by its
   label: "pistol", "plasma pistol", "needler"), from the main hand to the
-  off; with it at the main hand (supporting it), as the main hand. The
+  off; with it at the main hand (supporting it), from both
+  (`vr_two_hands_steady`): the middle of the main hand's pointing and the
+  other's, turned as it was against the main hand's as it took hold, then
+  smoothed against the hands' tremor (`vr_steady`, a "1 euro" filter: 1.5
+  Hz at rest, the cutoff rising 1 Hz for each radian a second the aim
+  turns), once a frame (the frame's `index`). The
   off stick is turned to move where the head faces, and the first-person
   weapon is posed from a camera behind the hand.
 - The weapon stays as the hand holds it: `first_person_weapons.c` gives it

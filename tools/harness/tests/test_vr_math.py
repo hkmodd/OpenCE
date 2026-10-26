@@ -8,7 +8,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from harness import CHECK_FAILED, build, enum_with, function, mutated, read, run, structure
 
-CASES = ["bounds", "pose", "helpers", "between", "axes", "steer", "elbow", "twist", "handles"]
+CASES = ["bounds", "pose", "helpers", "between", "axes", "steer", "elbow", "twist", "handles", "steady"]
 CONTROLS = {
     "bottom-is-top": (("bounds[2] = (float)tan(fov->down);", "bounds[2] = (float)tan(fov->up);"), "bounds"),
     "no-aspect": (("bounds[0] = (float)tan(fov->left) / aspect;", "bounds[0] = (float)tan(fov->left);"), "bounds"),
@@ -52,6 +52,10 @@ CONTROLS = {
     "handles-pivot-behind": (("pivot[axis] = grip[axis] + aim[axis] * lever;",
                               "pivot[axis] = grip[axis] - aim[axis] * lever;"), "handles"),
     "handles-not-pushed": (("\tif (length < lever)\n\t\tvr_handles_pivot(grip, aim, lever, pivot);\n", ""), "handles"),
+    "steady-unfiltered": (("vr_quaternion_toward(state->steady, raw,\n\t\tvr_steady_share(VR_STEADY_CUTOFF + VR_STEADY_SPEED_CUTOFF * state->speed, seconds), state->steady);",
+                           "vr_quaternion_toward(state->steady, raw, 1.0f, state->steady);"), "steady"),
+    "steady-no-speed": (("VR_STEADY_CUTOFF + VR_STEADY_SPEED_CUTOFF * state->speed", "VR_STEADY_CUTOFF"), "steady"),
+    "toward-long-way": (("float sign = dot < 0.0f ? -1.0f : 1.0f;", "float sign = 1.0f;"), "steady"),
     "handles-always-pulled": (("\tif (length < lever)\n", "\tif (1)\n"), "handles"),
 }
 

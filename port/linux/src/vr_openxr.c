@@ -2067,6 +2067,7 @@ int vr_frame_begin(void)
 		vr.frames++;
 		vr_simulate_frame();
 		vr.stereo_frames++;
+		vr.frame.index = vr.stereo_frames;
 		vr.dumping = vr_dump_due();
 		return 1;
 	}
@@ -2168,6 +2169,7 @@ int vr_frame_begin(void)
 	}
 	vr.frame.stereo = 1;
 	vr.stereo_frames++;
+	vr.frame.index = vr.stereo_frames;
 	vr.dumping = vr_dump_due();
 	return 1;
 }

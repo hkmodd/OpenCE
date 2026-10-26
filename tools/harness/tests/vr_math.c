@@ -152,6 +152,14 @@ static void check_edges(struct vr_fov const *fov, short width, short height)
     }
 }
 
+/* a turn of `angle` radians about LOCAL's up (a yaw) */
+static void yaw_turn(float angle, float q[4])
+{
+    q[0] = q[2] = 0.0f;
+    q[1] = sinf(angle * 0.5f);
+    q[3] = cosf(angle * 0.5f);
+}
+
 static int same3(float const *a, float x, float y, float z)
 {
     return close_to(a[0], x, 1e-5f) && close_to(a[1], y, 1e-5f) && close_to(a[2], z, 1e-5f);
@@ -418,6 +426,63 @@ int main(int argc, char **argv)
         CHECK(close_to(pivot[2], pushed[2] - 0.25f, 1e-5f), "the pivot the lever ahead of them (%f)", (double)pivot[2]);
         CHECK(!vr_handles_aim(pivot, pivot, 0.25f, aim), "the grips at the pivot: no aim");
         CHECK(!vr_handles_aim(bad, pivot, 0.25f, aim), "not a number: no aim");
+    }
+    CASE("steady") {
+        /* a pistol held with both hands: its aim steadied against the hands' tremor, not lagging a quick swing */
+        struct vr_steady state;
+        float q[4], r[4], out[4], degree = 3.14159265f / 180.0f, seconds = 1.0f / 90.0f, largest = 0.0f, lag;
+        int frame;
+        yaw_turn(0.0f, q);
+        yaw_turn(20.0f * degree, r);
+        vr_quaternion_toward(q, r, 0.5f, out);
+        yaw_turn(10.0f * degree, q);
+        CHECK(vr_quaternion_angle(out, q) < 1e-4f, "halfway between 0 and 20 degrees is 10");
+        r[0] = -r[0]; r[1] = -r[1]; r[2] = -r[2]; r[3] = -r[3];
+        yaw_turn(0.0f, q);
+        vr_quaternion_toward(q, r, 0.5f, out);
+        yaw_turn(10.0f * degree, q);
+        CHECK(vr_quaternion_angle(out, q) < 1e-4f, "the shorter way round, whichever sign the turn has");
+        yaw_turn(30.0f * degree, r);
+        CHECK(close_to(vr_quaternion_angle(q, r), 20.0f * degree, 1e-4f), "the angle between two turns");
+        /* starting, the turn itself; held still, still it */
+        memset(&state, 0, sizeof(state));
+        yaw_turn(5.0f * degree, q);
+        vr_steady(&state, q, seconds, out);
+        CHECK(state.valid && vr_quaternion_angle(out, q) < 1e-6f, "started: the turn given");
+        for (frame = 0; frame < 90; frame++)
+            vr_steady(&state, q, seconds, out);
+        CHECK(vr_quaternion_angle(out, q) < 1e-5f, "held still, still");
+        /* a tremor of half a degree each way at the headset's rate: much less of it is left */
+        for (frame = 0; frame < 180; frame++)
+        {
+            yaw_turn((5.0f + (frame & 1 ? 0.5f : -0.5f)) * degree, r);
+            vr_steady(&state, r, seconds, out);
+            if (frame >= 90 && vr_quaternion_angle(out, q) > largest)
+                largest = vr_quaternion_angle(out, q);
+        }
+        CHECK(largest < 0.1f * degree, "the tremor steadied (%f degrees left of 0.5)", (double)(largest / degree));
+        /* a step of 10 degrees: part of the way at once, all of it within a second */
+        yaw_turn(15.0f * degree, r);
+        vr_steady(&state, r, seconds, out);
+        CHECK(vr_quaternion_angle(out, r) < 9.9f * degree && vr_quaternion_angle(out, q) > 0.5f * degree,
+            "a step: part of the way at once");
+        for (frame = 0; frame < 90; frame++)
+            vr_steady(&state, r, seconds, out);
+        CHECK(vr_quaternion_angle(out, r) < 0.1f * degree, "all of it within a second");
+        /* a quick swing, 3 radians a second: it lags little */
+        for (frame = 0; frame < 45; frame++)
+        {
+            yaw_turn(15.0f * degree + 3.0f * seconds * (float)(frame + 1), r);
+            vr_steady(&state, r, seconds, out);
+        }
+        lag = vr_quaternion_angle(out, r);
+        CHECK(lag < 0.15f, "a quick swing lags little (%f degrees)", (double)(lag / degree));
+        /* not a number: started over, then the turn given */
+        r[0] = NAN;
+        vr_steady(&state, r, seconds, out);
+        CHECK(!state.valid, "not a number: started over");
+        vr_steady(&state, q, seconds, out);
+        CHECK(state.valid && vr_quaternion_angle(out, q) < 1e-6f, "then the turn given");
     }
     return 0;
 }

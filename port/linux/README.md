@@ -745,7 +745,8 @@ screen, with the cause in the log.
 - Each arm is its own (`vr.arms`): from the player's shoulders, the
   weapon's hand holds the weapon and the other hand its controller; it
   holds the weapon too while both hands do (the off grip at the aiming
-  hand, supporting it, or ahead of it on a rifle, aiming it) and
+  hand, supporting it: a pistol held so aims steadier, from both hands,
+  its tremor smoothed; or ahead of it on a rifle, aiming it) and
   while the weapon is reloaded, readied, put away, swung or a grenade
   thrown. The free hand opens and closes with its controller's grip, the
   index finger with its trigger.

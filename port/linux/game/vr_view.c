@@ -421,6 +421,13 @@ static struct
 	taken (vr_input.c's) */
 	boolean seat_switch;
 	unsigned long view_switches;
+	/* a pistol held with both hands (vr_two_hands_steady): the other hand's
+	pointing's turn from the main hand's as it took hold, the aim steadied,
+	and the frame it was last taken for */
+	float steady_offset[4];
+	struct vr_steady steady;
+	float steady_aim[4];
+	unsigned long steady_frame;
 	/* the eyes' place in the seat (vr_seat_eye), in its node's frame, and
 	whether it is taken */
 	real_point3d seat_eye;
@@ -792,19 +799,64 @@ static boolean vr_drive_facing(
 	return TRUE;
 }
 
+/* a pistol held with both hands (vr_two_handed's support, its main hand's
+pointing given in `orientation`) aims steadier than with one, as a rifle
+held by its fore-end does: from the middle of the main hand's pointing and
+the other hand's, turned as it was against the main hand's as it took
+hold (whichever way its fingers close about the grip), smoothed against
+the hands' tremor (vr_steady). Once a frame, however often the aim is
+asked for; started over as the hands take hold */
+static void vr_two_hands_steady(
+	struct vr_frame const *frame,
+	float orientation[4])
+{
+	struct vr_hand const *off_hand = &frame->hand[vr_view.main_hand == VR_HAND_LEFT ? VR_HAND_RIGHT : VR_HAND_LEFT];
+	float off_pointing[4], inverse[4], other[4], middle[4];
+
+	if (vr_view.steady.valid && vr_view.steady_frame == frame->index)
+	{
+		memcpy(orientation, vr_view.steady_aim, sizeof(vr_view.steady_aim));
+		return;
+	}
+	vr_hand_pointing(off_hand, vr_view.aim_pitch, off_pointing);
+	if (!vr_view.steady.valid || vr_view.steady_frame + 1 != frame->index)
+	{
+		/* (the turn from the other hand's pointing to the main's: the
+		conjugate's, the poses' turns being of length 1) */
+		inverse[0] = -off_pointing[0];
+		inverse[1] = -off_pointing[1];
+		inverse[2] = -off_pointing[2];
+		inverse[3] = off_pointing[3];
+		vr_quaternion_multiply(inverse, orientation, vr_view.steady_offset);
+		vr_view.steady.valid = 0;
+	}
+	vr_quaternion_multiply(off_pointing, vr_view.steady_offset, other);
+	vr_quaternion_toward(orientation, other, 0.5f, middle);
+	vr_steady(&vr_view.steady, middle, frame->display_period, orientation);
+	memcpy(vr_view.steady_aim, orientation, sizeof(vr_view.steady_aim));
+	vr_view.steady_frame = frame->index;
+}
+
 /* the aim's orientation: the hand's, or with the off hand holding the
-weapon too, from the main hand to it (vr_two_handed); never with a weapon
-of the off hand's own in it (dual_wield.c) */
+weapon too, from the main hand to it (vr_two_handed), a pistol steadied by
+both (vr_two_hands_steady); never with a weapon of the off hand's own in
+it (dual_wield.c) */
 static void vr_hand_aim(
 	struct vr_frame const *frame,
 	struct vr_hand const *hand,
 	float orientation[4])
 {
-	if (dual_wield_weapon(vr_view.unit_index) != NONE ||
-		!vr_two_handed(frame, vr_view.main_hand == VR_HAND_LEFT, vr_view.pistol_grip, vr_view.aim_pitch,
-		orientation))
+	int held = dual_wield_weapon(vr_view.unit_index) != NONE ? VR_HELD_ONE :
+		vr_two_handed(frame, vr_view.main_hand == VR_HAND_LEFT, vr_view.pistol_grip, vr_view.aim_pitch, orientation);
+
+	if (held == VR_HELD_ONE)
 	{
+		vr_view.steady.valid = 0;
 		vr_hand_pointing(hand, vr_view.aim_pitch, orientation);
+	}
+	else if (held == VR_HELD_SUPPORT)
+	{
+		vr_two_hands_steady(frame, orientation);
 	}
 }
 
@@ -3127,6 +3179,7 @@ void vr_view_reset(
 	vr_view.driving = FALSE;
 	vr_view.handles_held = 0;
 	vr_view.handles_taken = FALSE;
+	vr_view.steady.valid = 0;
 	vr_view.seat_switch = FALSE;
 	vr_view.view_switches = vr_input_view_switches();
 	vr_view.seat_eye_valid = FALSE;
