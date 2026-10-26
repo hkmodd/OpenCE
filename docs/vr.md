@@ -376,18 +376,25 @@ A host decides how its game's headsets play (`network.vr_rules`, VR SERVER
 on the VR HEADSET screen, false by default). On any other server, a VR
 player plays as any player does: the hands' holding, shoulders, bare hands
 and taking with the hand all come down to the buttons and the weapon
-switches a gamepad presses, and nothing a network game sends changes. A VR
-server says so with the game's settings (a bit of the game's port switches,
-`_network_game_port_vr_rules_bit`, network version 39), which every machine
-has, and in its LAN advertisement and internet listing (a bit of its kind,
-`GAME_MODES_KIND_VR`: the server browser shows "VR" before its gametype).
+switches a gamepad presses, a melee strikes where the weapon aims (not
+through the fist: the host checks no strike's direction), and nothing a
+network game sends changes, so that the VR build plays standard games with
+every build of its network version (38). A VR server says so with the
+game's settings (a bit of the game's port switches,
+`_network_game_port_vr_rules_bit`), which every machine has, and in its LAN
+advertisement and internet listing: its version with
+`HALO_PORT_NETWORK_VR_SERVER_BIT`, which other builds take for a newer one
+and do not join, and its VR revision (`HALO_PORT_NETWORK_VR_REVISION`),
+which a VR build must match to join; the server browser shows "VR" before
+its gametype (`GAME_MODES_KIND_VR`). `vr_rules_active` decides by the
+host's word alone in a network game, and none before it comes.
 Its own rules (weapons let go falling or thrown, a weapon in each hand, the
 other players' bodies as their headsets pose them) come with the steps
 below; a game with no network, the campaign or a local game, plays by them.
 
 In a VR server's game each headset's player's machine sends the host the
 head's and the hands' places from the player's unit and their axes once a
-tick (`port/linux/game/network_vr.c`, network version 40). The host takes a
+tick (`port/linux/game/network_vr.c`, VR revision 1). The host takes a
 pose only of the sending machine's own player, newer than the last, its head
 within 0.5 world units (1.5 m) of the unit and its hands within 0.4 (1.2 m)
 of the head, and sends it on to each machine that sees the player; every
@@ -407,7 +414,7 @@ markers stay the game's.
 A VR server's headset's player who lets go of the weapon at no shoulder
 lets it fall, thrown with the hand's velocity (its last 50 ms): the game
 itself drops it in a game with no network, the host when the player's
-machine asks it (network version 41), checking that the player is the
+machine asks it (VR revision 1), checking that the player is the
 machine's own, on foot and alive, no oftener than every half second and
 no faster than 0.3 world units a tick (27 m/s). On any other server the
 weapon let go goes back to its shoulder, as before.
@@ -428,7 +435,7 @@ passes the other hand's weapon to the main hand, the hands swapping. Before the 
 inventory or deletes it, the other hand's weapon goes back first. The
 HUD shows the weapon in hand's ammunition only. In a network game the
 player's machine says with the pose which slot the other hand holds and
-how far its trigger is pulled (network version 42); every other
+how far its trigger is pulled (VR revision 1); every other
 machine's copy of the unit, the host's too, holds that weapon in its
 other hand (the posed body's) and fires it with that trigger, so its shots
 are seen everywhere and its ammunition is the host's. Its hits are the
@@ -449,8 +456,8 @@ for adds the weapon, none dropped, in `players.c`; the host's for a VR
 server's player whose pose comes, `network_vr_carries_four`): the one
 taken goes to the hand that took it, and the hand that held a weapon
 then, still gripping it, goes on holding it in the other hand. The other
-hand's weapon let fall is asked of the host with its slot (network
-version 43), which drops it as a swap drops a weapon
+hand's weapon let fall is asked of the host with its slot
+VR revision 1), which drops it as a swap drops a weapon
 (`unit_drop_inventory_slot`). On any other server a player carries two,
 the shoulders as before.
 

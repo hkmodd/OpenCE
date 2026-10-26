@@ -808,14 +808,15 @@ static unsigned long network_game_client_link_down_time;
 static unsigned long network_game_client_link_checked_time;
 static boolean network_game_client_link_down;
 
-/* each advertised game's host's network version and netcode, and the game's
-kind (game_modes_kind), by its place in the client's available_games
-(HALO_PORT_NETWORK_VERSION) */
+/* each advertised game's host's network version and netcode, the game's
+kind (game_modes_kind) and a VR server's VR revision, by its place in the
+client's available_games (HALO_PORT_NETWORK_VERSION) */
 static struct
 {
 	word version;
 	byte flags;
 	byte kind;
+	byte vr_revision;
 } network_game_client_advertised_versions[MAXIMUM_NETWORK_ADVERTISED_GAMES];
 
 struct network_game_client network_game_client_dont_use_directly;
@@ -2540,6 +2541,8 @@ static boolean add_advertised_game(
 				advertisement->__unknown5A[HALO_PORT_ADVERTISED_FLAGS_OFFSET];
 			network_game_client_advertised_versions[game_index].kind =
 				advertisement->__unknown5A[HALO_PORT_ADVERTISED_KIND_OFFSET];
+			network_game_client_advertised_versions[game_index].vr_revision =
+				advertisement->__unknown5A[HALO_PORT_ADVERTISED_VR_REVISION_OFFSET];
 		}
 
 		if (advertisement->game_name[0] != L'\0')
@@ -3140,8 +3143,9 @@ the system link list does (network_game_join_game_from_server_list) */
 void platform_show_message(char const *title, char const *message);
 
 /* whether this client can join the advertised game: its host's network
-version is this machine's (HALO_PORT_NETWORK_VERSION), and it plays the
-distributed netcode (a host of this version built before the lockstep
+version is this machine's (HALO_PORT_NETWORK_VERSION; a VR server's with
+HALO_PORT_NETWORK_VR_SERVER_BIT, and this build's VR revision), and it plays
+the distributed netcode (a host of this version built before the lockstep
 netcode was removed may play that). If not the player is told why (when
 tell), and nothing is joined. */
 boolean network_game_client_advertised_game_compatible(
@@ -3152,20 +3156,36 @@ boolean network_game_client_advertised_game_compatible(
 	long game_index = client ? game - client->available_games : NONE;
 	unsigned int ours = HALO_PORT_NETWORK_VERSION;
 	unsigned int theirs;
+	unsigned int revision;
 	boolean distributed;
+	boolean vr_server;
 	char message[400];
 
 	if (game_index < 0 || game_index >= MAXIMUM_NETWORK_ADVERTISED_GAMES)
 		return FALSE;
 	theirs = network_game_client_advertised_versions[game_index].version;
+	revision = network_game_client_advertised_versions[game_index].vr_revision;
 	distributed = (network_game_client_advertised_versions[game_index].flags &
 		HALO_PORT_ADVERTISED_DISTRIBUTED_FLAG) != 0;
-	if (theirs == ours && distributed)
+	vr_server = (theirs & HALO_PORT_NETWORK_VR_SERVER_BIT) != 0;
+	if (HALO_PORT_NETWORK_VERSION_JOINABLE(theirs, revision) && distributed)
 	{
-		network_event("joining a host of network version %u", theirs);
+		network_event("joining a host of network version %u%s", theirs & ~HALO_PORT_NETWORK_VR_SERVER_BIT,
+			vr_server ? " (a VR server)" : "");
 		return TRUE;
 	}
-	if (theirs == ours)
+	theirs &= ~HALO_PORT_NETWORK_VR_SERVER_BIT;
+	if (vr_server && theirs == ours && distributed)
+	{
+		csprintf(message,
+			"The host is a VR server of another VR version than you.\n\n"
+			"You are on VR version %u. The host is on VR version %u.\n\n"
+			"%s",
+			HALO_PORT_NETWORK_VR_REVISION, revision,
+			revision > HALO_PORT_NETWORK_VR_REVISION ? "Update the game to join this host." :
+				"Ask the host to update the game.");
+	}
+	else if (theirs == ours)
 	{
 		csprintf(message,
 			"The host is using the lockstep network code, which this version no longer has.\n\n"
@@ -3189,8 +3209,8 @@ boolean network_game_client_advertised_game_compatible(
 	}
 	if (tell)
 	{
-		network_event("not joining a host of network version %u%s (this machine's is %u)", theirs,
-			distributed ? "" : " with the lockstep netcode", ours);
+		network_event("not joining a host of network version %u%s%s (this machine's is %u)", theirs,
+			distributed ? "" : " with the lockstep netcode", vr_server ? " (a VR server)" : "", ours);
 		platform_show_message("Halo: cannot join this game", message);
 	}
 	return FALSE;
@@ -3209,7 +3229,8 @@ boolean network_game_client_advertised_game_in_progress(
 }
 
 /* port: the advertised game's kind (an OpenCE gametype's mode, and Hardcore:
-port/linux/game/game_modes.h), for the server browser's name of it */
+port/linux/game/game_modes.h; and GAME_MODES_KIND_VR, a VR server's, by its
+version), for the server browser's name of it */
 byte network_game_client_advertised_game_kind(
 	struct network_game_client *client,
 	struct network_advertised_game const *game)
@@ -3217,7 +3238,9 @@ byte network_game_client_advertised_game_kind(
 	long game_index = client ? game - client->available_games : NONE;
 
 	return game_index >= 0 && game_index < MAXIMUM_NETWORK_ADVERTISED_GAMES ?
-		network_game_client_advertised_versions[game_index].kind : 0;
+		(byte)(network_game_client_advertised_versions[game_index].kind |
+			((network_game_client_advertised_versions[game_index].version & HALO_PORT_NETWORK_VR_SERVER_BIT) ?
+				HALO_PORT_ADVERTISED_KIND_VR : 0)) : 0;
 }
 
 boolean network_game_client_join_first_available_game(

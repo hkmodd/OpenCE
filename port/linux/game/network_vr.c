@@ -33,7 +33,7 @@ void platform_log(char const *format, ...);
 /* a pose on the wire: its player, flags, the head's and hands' places
 and axes, the other hand's weapon's slot (-1: none) and its trigger (of
 255) */
-struct network_vr_pose_entry
+struct distributed_vr_pose
 {
 	byte player_index;
 	byte flags;
@@ -47,12 +47,12 @@ struct network_vr_pose_entry
 	byte off_trigger;
 };
 
-typedef char network_vr_pose_entry_size_assert[sizeof(struct network_vr_pose_entry) == 2 + 9 * 6 + 2 ? 1 : -1];
+typedef char network_vr_pose_entry_size_assert[sizeof(struct distributed_vr_pose) == 2 + 9 * 6 + 2 ? 1 : -1];
 
-struct network_vr_pose_message
+struct distributed_vr_pose_message
 {
 	struct distributed_message_header header;
-	struct network_vr_pose_entry entry;
+	struct distributed_vr_pose entry;
 };
 
 /* each player's latest pose, the tick it was sent at (NONE: none), by
@@ -101,11 +101,11 @@ boolean network_vr_poses_kept(void)
 
 word network_vr_entry_size(void)
 {
-	return (word)sizeof(struct network_vr_pose_entry);
+	return (word)sizeof(struct distributed_vr_pose);
 }
 
 static void network_vr_pose_pack(short player_index, struct network_vr_pose const *pose,
-	struct network_vr_pose_entry *entry)
+	struct distributed_vr_pose *entry)
 {
 	short hand;
 
@@ -127,7 +127,7 @@ static void network_vr_pose_pack(short player_index, struct network_vr_pose cons
 	}
 }
 
-static void network_vr_pose_unpack(struct network_vr_pose_entry const *entry, struct network_vr_pose *pose)
+static void network_vr_pose_unpack(struct distributed_vr_pose const *entry, struct network_vr_pose *pose)
 {
 	short hand;
 
@@ -223,7 +223,7 @@ player, but the one it came from (NONE: the host's) */
 static void network_vr_relay(short player_index, long from_machine_index)
 {
 	long machines[HALO_PORT_MAXIMUM_NETWORK_MACHINES];
-	struct network_vr_pose_message message;
+	struct distributed_vr_pose_message message;
 	short count, index;
 
 	network_vr_pose_pack(player_index, &network_vr_poses[player_index].pose, &message.entry);
@@ -240,7 +240,7 @@ static void network_vr_relay(short player_index, long from_machine_index)
 
 void network_vr_send(long player, struct network_vr_pose const *pose)
 {
-	struct network_vr_pose_message message;
+	struct distributed_vr_pose_message message;
 	long time = game_time_get();
 	short player_index = (short)DATUM_INDEX_TO_ABSOLUTE_INDEX(player);
 
@@ -264,7 +264,7 @@ void network_vr_send(long player, struct network_vr_pose const *pose)
 
 void network_vr_handle_up(long machine_index, long game_time, void const *entries, short count)
 {
-	struct network_vr_pose_entry entry;
+	struct distributed_vr_pose entry;
 	struct network_vr_pose pose;
 	short player_index;
 
@@ -284,7 +284,7 @@ void network_vr_handle_up(long machine_index, long game_time, void const *entrie
 
 void network_vr_handle_down(long game_time, void const *entries, short count)
 {
-	struct network_vr_pose_entry entry;
+	struct distributed_vr_pose entry;
 	struct network_vr_pose pose;
 	short player_index;
 
@@ -353,24 +353,24 @@ unit a tick */
 /* a client's request to the host: its player's weapon let fall (0: the
 one in hand; else 1 and the slot of the other hand's), thrown with a
 velocity (the world's axes, world units a tick) */
-struct network_vr_drop_entry
+struct distributed_vr_drop
 {
 	byte player_index;
 	byte slot;
 	struct distributed_vector velocity;
 };
 
-typedef char network_vr_drop_entry_size_assert[sizeof(struct network_vr_drop_entry) == 8 ? 1 : -1];
+typedef char network_vr_drop_entry_size_assert[sizeof(struct distributed_vr_drop) == 8 ? 1 : -1];
 
-struct network_vr_drop_message
+struct distributed_vr_drop_message
 {
 	struct distributed_message_header header;
-	struct network_vr_drop_entry entry;
+	struct distributed_vr_drop entry;
 };
 
 word network_vr_drop_entry_size(void)
 {
-	return (word)sizeof(struct network_vr_drop_entry);
+	return (word)sizeof(struct distributed_vr_drop);
 }
 
 /* the player's unit lets its weapon in hand (slot NONE), or another of
@@ -441,7 +441,7 @@ static boolean network_vr_drop_weapon(short player_index, real_vector3d const *v
 
 void network_vr_drop(long player, real_vector3d const *velocity, short slot)
 {
-	struct network_vr_drop_message message;
+	struct distributed_vr_drop_message message;
 	short player_index = (short)DATUM_INDEX_TO_ABSOLUTE_INDEX(player);
 
 	if (player == NONE || player_index >= MAXIMUM_TRACKED_PLAYERS || !game_in_progress())
@@ -467,7 +467,7 @@ void network_vr_drop(long player, real_vector3d const *velocity, short slot)
 
 void network_vr_handle_drop(long machine_index, void const *entries, short count, boolean stream)
 {
-	struct network_vr_drop_entry entry;
+	struct distributed_vr_drop entry;
 	real_vector3d velocity;
 
 	if (count != 1 || !stream || !network_vr_server())
@@ -492,7 +492,7 @@ void network_vr_handle_drop(long machine_index, void const *entries, short count
 /* a client's word to the host: its player's grenade thrown with the arm,
 the hand's velocity and its place from the eyes as it let go (the
 world's axes: world units a tick, world units) */
-struct network_vr_throw_entry
+struct distributed_vr_throw
 {
 	byte player_index;
 	byte pad;
@@ -500,17 +500,17 @@ struct network_vr_throw_entry
 	struct distributed_vector offset;
 };
 
-typedef char network_vr_throw_entry_size_assert[sizeof(struct network_vr_throw_entry) == 14 ? 1 : -1];
+typedef char network_vr_throw_entry_size_assert[sizeof(struct distributed_vr_throw) == 14 ? 1 : -1];
 
-struct network_vr_throw_message
+struct distributed_vr_throw_message
 {
 	struct distributed_message_header header;
-	struct network_vr_throw_entry entry;
+	struct distributed_vr_throw entry;
 };
 
 word network_vr_throw_entry_size(void)
 {
-	return (word)sizeof(struct network_vr_throw_entry);
+	return (word)sizeof(struct distributed_vr_throw);
 }
 
 /* the throw kept for the player's next grenade: its place no further
@@ -535,7 +535,7 @@ static boolean network_vr_throw_take(short player_index, real_vector3d const *ve
 
 void network_vr_throw(long player, real_vector3d const *velocity, real_vector3d const *offset)
 {
-	struct network_vr_throw_message message;
+	struct distributed_vr_throw_message message;
 	short player_index = (short)DATUM_INDEX_TO_ABSOLUTE_INDEX(player);
 
 	if (player == NONE || player_index >= MAXIMUM_TRACKED_PLAYERS || !game_in_progress())
@@ -561,7 +561,7 @@ void network_vr_throw(long player, real_vector3d const *velocity, real_vector3d 
 
 void network_vr_handle_throw(long machine_index, void const *entries, short count, boolean stream)
 {
-	struct network_vr_throw_entry entry;
+	struct distributed_vr_throw entry;
 	real_vector3d velocity, offset;
 
 	if (!stream || count != 1 || !network_vr_server())

@@ -15,6 +15,11 @@ test_linux_port.py fails when the sources differ from the record. An item
 changed or removed is one older builds cannot read: raise the version and
 say why in NETCODE.md. An item added (a message kind, a bit) may be one they
 ignore. Then record it: network_format.py --record
+
+The items of a VR server's wire alone (named for VR: its messages, sent only
+between machines of a VR server, HALO_PORT_NETWORK_VR_SERVER_BIT) are the VR
+revision's (HALO_PORT_NETWORK_VR_REVISION), not the version's: changing,
+adding or removing one raises the VR revision.
 """
 
 import hashlib
@@ -127,12 +132,26 @@ def items():
         add(f"size {name}", " ".join(size.split()))
     for fields, name in re.findall(r"\t\{\n((?:\t\t.*\n)*?)\t\},\n\tNETWORK_GAME_MESSAGE_DEFINITION\((\w+),", messages):
         add(f"fields {name}", _hash(fields))
+    add(REVISION, vr_revision())
     return result
 
 
 def version():
     limits = (ROOT / "port/linux/include/halo_port_limits.h").read_text()
     return int(re.search(r"#define HALO_PORT_NETWORK_VERSION (\d+)", limits).group(1))
+
+
+def vr_revision():
+    limits = (ROOT / "port/linux/include/halo_port_limits.h").read_text()
+    return int(re.search(r"#define HALO_PORT_NETWORK_VR_REVISION (\d+)", limits).group(1))
+
+
+REVISION = "revision HALO_PORT_NETWORK_VR_REVISION"
+
+
+def vr_item(name):
+    """an item of a VR server's wire alone (the VR revision's)"""
+    return name != REVISION and re.search(r"(?<![a-z0-9])vr_|_vr_", name.split(" ", 1)[1].lower()) is not None
 
 
 def recorded():
@@ -149,26 +168,39 @@ def check():
     """what is wrong with the record, as lines to show"""
     problems = []
     recorded_version, old = recorded()
-    breaking, added = changes(old, items())
+    new = items()
+    breaking, added = changes(old, new)
+    vr = sorted(name for name in breaking + added if vr_item(name))
+    breaking = [name for name in breaking if not vr_item(name) and name != REVISION]
+    added = [name for name in added if not vr_item(name) and name != REVISION]
     for names, what in ((breaking, "changed or removed (older builds cannot read them: raise the version)"),
-                        (added, "added (raise the version unless older builds ignore them)")):
+                        (added, "added (raise the version unless older builds ignore them)"),
+                        (vr, "of a VR server's wire, changed, added or removed (raise "
+                             "HALO_PORT_NETWORK_VR_REVISION)")):
         problems += [what + ":"] + [f"  {name}" for name in names] if names else []
     if recorded_version != version():
         problems.append(f"recorded for version {recorded_version}, the sources' is {version()}")
+    if old.get(REVISION) != new[REVISION]:
+        problems.append(f"recorded for VR revision {old.get(REVISION)}, the sources' is {new[REVISION]}")
     if problems:
         problems.append("then record them: python tools/network_format.py --record")
     netcode = (ROOT / "port/linux/NETCODE.md").read_text()
     if not re.search(rf"\bversion\s+{version()}\b", netcode):
         problems.append(f"port/linux/NETCODE.md's versions say nothing of version {version()}")
+    if not re.search(rf"\bVR revision\s+{vr_revision()}\b", netcode):
+        problems.append(f"port/linux/NETCODE.md's versions say nothing of VR revision {vr_revision()}")
     return problems
 
 
 def record():
     new = items()
     recorded_version, old = recorded()
-    breaking = changes(old, new)[0]
+    breaking = [name for name in changes(old, new)[0] if not vr_item(name) and name != REVISION]
+    vr = [name for name in sum(changes(old, new), []) if vr_item(name)]
     if breaking and recorded_version == version():
         sys.exit("changed or removed: " + ", ".join(breaking) + "\nraise HALO_PORT_NETWORK_VERSION first")
+    if vr and old.get(REVISION) == new[REVISION]:
+        sys.exit("of a VR server's wire: " + ", ".join(vr) + "\nraise HALO_PORT_NETWORK_VR_REVISION first")
     RECORD.write_text(f"version {version()}\n" + "".join(f"{name} {new[name]}\n" for name in sorted(new)))
 
 

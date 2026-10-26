@@ -175,9 +175,9 @@ static struct network_vr_pose pose_of(void)
 }
 
 /* a pose's wire entry, as a client's machine sends it, of a player */
-static struct network_vr_pose_entry entry_of(short player_index, struct network_vr_pose const *pose)
+static struct distributed_vr_pose entry_of(short player_index, struct network_vr_pose const *pose)
 {
- struct network_vr_pose_entry entry;
+ struct distributed_vr_pose entry;
  network_vr_pose_pack(player_index,pose,&entry);
  return entry;
 }
@@ -197,7 +197,7 @@ int main(int argc,char **argv)
  const char *case_name=argc>1?argv[1]:"";
  CASE("wire") {
   struct network_vr_pose pose=pose_of(),back;
-  struct network_vr_pose_entry entry=entry_of(5,&pose);
+  struct distributed_vr_pose entry=entry_of(5,&pose);
   CHECK(network_vr_entry_size()==58,"the entry is 58 bytes: %d",(int)network_vr_entry_size());
   CHECK(entry.player_index==5,"its player");
   network_vr_pose_unpack(&entry,&back);
@@ -252,7 +252,7 @@ int main(int argc,char **argv)
   CHECK(!network_vr_pose_valid(&pose),"a trigger past its end refused");
  } else CASE("host") {
   struct network_vr_pose pose=pose_of();
-  struct network_vr_pose_entry entry;
+  struct distributed_vr_pose entry;
   connection=_game_connection_network_server;
   players();
   game.cooperative_flags=0;
@@ -293,7 +293,7 @@ int main(int argc,char **argv)
   network_vr_send(distributed_player_from_byte(1),&pose);
   network_vr_send(distributed_player_from_byte(1),&pose);
   CHECK(sent_up==1,"a VR server's host: once a tick");
-  CHECK(((struct network_vr_pose_message *)last_message)->entry.player_index==1,"of the player");
+  CHECK(((struct distributed_vr_pose_message *)last_message)->entry.player_index==1,"of the player");
   now++;pose.head.k=3.0f;
   network_vr_send(distributed_player_from_byte(1),&pose);
   CHECK(sent_up==1,"a pose not fit to take not sent");
@@ -306,7 +306,7 @@ int main(int argc,char **argv)
    "the host: its own player's to the machines that see the player");
  } else CASE("client") {
   struct network_vr_pose pose=pose_of();
-  struct network_vr_pose_entry entry;
+  struct distributed_vr_pose entry;
   connection=_game_connection_network_client;
   players();local[2]=TRUE;
   entry=entry_of(1,&pose);
@@ -329,7 +329,7 @@ int main(int argc,char **argv)
   CHECK(network_vr_pose_get(distributed_player_from_byte(1))!=NULL,
    "a pose sent by a clock ahead of this machine's aged from when it was taken");
  } else CASE("drop") {
-  struct network_vr_drop_entry entry;
+  struct distributed_vr_drop entry;
   real_vector3d velocity;
   short index;
   connection=_game_connection_network_server;
@@ -411,10 +411,10 @@ int main(int argc,char **argv)
   game.cooperative_flags=FLAG(_network_game_port_vr_rules_bit);
   network_vr_drop(distributed_player_from_byte(0),&velocity,NONE);
   CHECK(drops==4 && asked_drops==1,"a VR server's client: asked, reliably, not dropped itself");
-  CHECK(((struct network_vr_drop_message *)last_message)->entry.player_index==0 &&
-   ((struct network_vr_drop_message *)last_message)->entry.slot==0,"for its player, the weapon in hand");
+  CHECK(((struct distributed_vr_drop_message *)last_message)->entry.player_index==0 &&
+   ((struct distributed_vr_drop_message *)last_message)->entry.slot==0,"for its player, the weapon in hand");
   network_vr_drop(distributed_player_from_byte(0),&velocity,1);
-  CHECK(asked_drops==2 && ((struct network_vr_drop_message *)last_message)->entry.slot==2,
+  CHECK(asked_drops==2 && ((struct distributed_vr_drop_message *)last_message)->entry.slot==2,
    "the other hand's: 1 and its slot");
   network_vr_drop(distributed_player_from_byte(0),&velocity,MAXIMUM_WEAPONS_PER_UNIT);
   CHECK(asked_drops==2,"a slot past the inventory not asked");
@@ -428,7 +428,7 @@ int main(int argc,char **argv)
   game.cooperative_flags=FLAG(_network_game_port_vr_rules_bit);
   CHECK(!network_vr_carries_four(1),"a VR server's player with no pose: two");
   {
-   struct network_vr_pose_entry entry=entry_of(1,&pose);
+   struct distributed_vr_pose entry=entry_of(1,&pose);
    network_vr_handle_up(2,now,&entry,1);
   }
   CHECK(network_vr_carries_four(1),"a VR server's player whose pose comes: four");
@@ -447,7 +447,7 @@ int main(int argc,char **argv)
   pose farther ahead of the head; none without a pose, nor for this
   machine's own player (its headset's, vr_view.c) */
   struct network_vr_pose pose=pose_of();
-  struct network_vr_pose_entry entry;
+  struct distributed_vr_pose entry;
   real_point3d point;
   connection=_game_connection_network_server;
   players();
@@ -475,7 +475,7 @@ int main(int argc,char **argv)
   local[1]=TRUE;
   CHECK(!network_vr_melee_point(1,&point),"this machine's own player: its headset's, not a pose");
  } else CASE("throw") {
-  struct network_vr_throw_entry entry;
+  struct distributed_vr_throw entry;
   real_vector3d hand,offset,velocity,game_velocity;
   real_point3d origin;
   real speed;
@@ -558,14 +558,14 @@ int main(int argc,char **argv)
   CHECK(sent_throws==0 && !network_vr_grenade_throw(0,&origin,&velocity),"an ordinary server's client: nothing sent, none kept");
   game.cooperative_flags=FLAG(_network_game_port_vr_rules_bit);
   network_vr_throw(distributed_player_from_byte(0),&hand,&offset);
-  CHECK(sent_throws==1 && ((struct network_vr_throw_message *)last_message)->entry.player_index==0,
+  CHECK(sent_throws==1 && ((struct distributed_vr_throw_message *)last_message)->entry.player_index==0,
    "a VR server's client: sent reliably, of its player");
   CHECK(network_vr_grenade_throw(0,&origin,&velocity),"kept by the client too, for the throw it predicts");
   /* the host takes a throw only reliably, only of the sender's own player,
   only in a VR server's game */
   connection=_game_connection_network_server;
   CHECK(network_vr_throw_entry_size()==14,"the entry is 14 bytes");
-  entry=((struct network_vr_throw_message *)last_message)->entry;
+  entry=((struct distributed_vr_throw_message *)last_message)->entry;
   entry.player_index=1;
   network_vr_handle_throw(2,&entry,1,FALSE);
   CHECK(!network_vr_grenade_throw(1,&origin,&velocity),"a throw in a datagram refused");

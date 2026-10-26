@@ -2931,8 +2931,11 @@ int vr_render_melee_point(
 {
 	int hand = vr_input_melee_hand();
 
-	if (!vr_view.stereo || !vr_view.hand_aiming || unit_index == NONE || unit_index != vr_view.unit_index ||
-		hand < 0 || hand >= VR_HAND_COUNT || !vr_view.grip_valid[hand])
+	/* (by a VR server's rules alone: on any other the strike goes where the
+	weapon aims, as every player's, whose direction its host does not check,
+	network_damage.c) */
+	if (!vr_rules_active() || !vr_view.stereo || !vr_view.hand_aiming || unit_index == NONE ||
+		unit_index != vr_view.unit_index || hand < 0 || hand >= VR_HAND_COUNT || !vr_view.grip_valid[hand])
 	{
 		return FALSE;
 	}
@@ -2947,8 +2950,9 @@ int vr_render_off_hand_strike(
 {
 	int hand = vr_input_melee_hand();
 
-	return vr_view.stereo && vr_view.hand_aiming && unit_index != NONE && unit_index == vr_view.unit_index &&
-		hand >= 0 && hand != vr_view.main_hand;
+	/* (as the strike: vr_render_melee_point) */
+	return vr_rules_active() && vr_view.stereo && vr_view.hand_aiming && unit_index != NONE &&
+		unit_index == vr_view.unit_index && hand >= 0 && hand != vr_view.main_hand;
 }
 
 int vr_render_rumble(
@@ -3063,9 +3067,15 @@ int vr_rules_active(
 {
 	struct network_game *game = network_game_get_game();
 
-	/* (a local game has a server of its own, which takes no one else) */
-	return !game || network_game_is_splitscreen_local() ||
-		TEST_FLAG(game->cooperative_flags, _network_game_port_vr_rules_bit);
+	/* (a game with no network, and a local one, whose server takes no one
+	else) */
+	if (game_connection() == _game_connection_local || game_connection() == _game_connection_film_playback ||
+		network_game_is_splitscreen_local())
+	{
+		return TRUE;
+	}
+	/* (a network game: by its host's word alone, and none before it comes) */
+	return game && TEST_FLAG(game->cooperative_flags, _network_game_port_vr_rules_bit);
 }
 
 int vr_render_on_foot(

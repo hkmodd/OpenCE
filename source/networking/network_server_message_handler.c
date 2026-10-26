@@ -1740,6 +1740,10 @@ static boolean network_game_server_handle_message_client_broadcast_game_search(
 			struct message_server_game_advertise advertisement = {0};
 			struct transport_address address;
 			struct network_message *reply;
+			/* port: a VR server's version and VR revision
+			(HALO_PORT_NETWORK_VR_SERVER_BIT) */
+			boolean vr_server = TEST_FLAG(game->cooperative_flags, _network_game_port_vr_rules_bit);
+			word version = (word)(HALO_PORT_NETWORK_VERSION | (vr_server ? HALO_PORT_NETWORK_VR_SERVER_BIT : 0));
 
 			address.address_length = IPV4_ADDRESS_LENGTH;
 			address.address.long_words[0] = NONE;
@@ -1784,8 +1788,10 @@ static boolean network_game_server_handle_message_client_broadcast_game_search(
 			/* the native builds' network version and netcode (a client
 			refuses a host of another version, or of the lockstep netcode
 			older builds had: network_client_manager.c) */
-			advertisement.reserved[HALO_PORT_ADVERTISED_VERSION_OFFSET] = (byte)(HALO_PORT_NETWORK_VERSION & 0xFF);
-			advertisement.reserved[HALO_PORT_ADVERTISED_VERSION_OFFSET + 1] = (byte)(HALO_PORT_NETWORK_VERSION >> 8);
+			advertisement.reserved[HALO_PORT_ADVERTISED_VERSION_OFFSET] = (byte)(version & 0xFF);
+			advertisement.reserved[HALO_PORT_ADVERTISED_VERSION_OFFSET + 1] = (byte)(version >> 8);
+			advertisement.reserved[HALO_PORT_ADVERTISED_VR_REVISION_OFFSET] =
+				(byte)(vr_server ? HALO_PORT_NETWORK_VR_REVISION : 0);
 			advertisement.reserved[HALO_PORT_ADVERTISED_FLAGS_OFFSET] =
 				HALO_PORT_ADVERTISED_DISTRIBUTED_FLAG;
 			if (network_game_server_get_state(server, NULL) != _network_game_server_state_pregame ||
@@ -1793,11 +1799,9 @@ static boolean network_game_server_handle_message_client_broadcast_game_search(
 			{
 				advertisement.reserved[HALO_PORT_ADVERTISED_FLAGS_OFFSET] |= HALO_PORT_ADVERTISED_IN_PROGRESS_FLAG;
 			}
-			/* (an OpenCE gametype's kind, the server browser's name for it,
-			and whether it is a VR server) */
+			/* (an OpenCE gametype's kind, the server browser's name for it) */
 			advertisement.reserved[HALO_PORT_ADVERTISED_KIND_OFFSET] = game_modes_kind(&game->variant,
-				&game->variant_options) |
-				(TEST_FLAG(game->cooperative_flags, _network_game_port_vr_rules_bit) ? GAME_MODES_KIND_VR : 0);
+				&game->variant_options);
 			/* (open to joins: not while the machines load the game, nor
 			once it is over, nor in progress when no player can join it) */
 			if (network_game_server_get_state(server, NULL) == _network_game_server_state_ingame

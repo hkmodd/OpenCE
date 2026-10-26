@@ -47,10 +47,11 @@ wchar_t const *game_modes_variant_kind_name(struct game_variant const *variant,
 	struct game_variant_options const *options);
 /* a game's kind in a byte, as its LAN advertisement and internet listing
 carry it to the server browser: the mode it plays (game_modes_variant_mode),
-and GAME_MODES_KIND_HARDCORE; and, set by the host, GAME_MODES_KIND_VR (a VR
-server: network.vr_rules), which game_modes_kind_name leaves to its caller */
+and GAME_MODES_KIND_HARDCORE; and GAME_MODES_KIND_VR (a VR server:
+network.vr_rules, which the host's version says, HALO_PORT_NETWORK_VR_SERVER_BIT,
+not this byte), which game_modes_kind_name leaves to its caller */
 #define GAME_MODES_KIND_HARDCORE 0x80
-#define GAME_MODES_KIND_VR 0x40
+#define GAME_MODES_KIND_VR HALO_PORT_ADVERTISED_KIND_VR
 byte game_modes_kind(struct game_variant const *variant, struct game_variant_options const *options);
 /* the name of a game engine's game of that kind, in full or abbreviated
 ("HC CTF": the server browser's column), NULL for the game engine's own

@@ -270,42 +270,47 @@ browser names in its gametype column ("SWAT", "HC CTF"); a browser takes a
 mode for a Slayer game only, and one it does not know as none. Then version 38
 lets the host's shield effects be `players` (SHIELD EFFECTS' PLAYERS' OWN), a
 value of distributed message 91 that tells each client to draw its own
-settings', not synced. Then version 39 sends with the game's settings whether
-it is a VR server (`network.vr_rules`: a bit of the game's port switches,
-`_network_game_port_vr_rules_bit`), by whose rules every machine plays its
-headset's players, and with its LAN advertisement and internet listing a bit
-of its kind (`GAME_MODES_KIND_VR`), which the server browser shows as "VR"
-before the gametype. Then version 40, in a VR server's game, has each
-headset's player's machine send its head and hands, from its unit, to the
-host once a tick (distributed message 92, `network_vr.c`, unreliably), which
-takes a pose only of the sending machine's own player, newer than the last,
-its head within 0.5 world units of the unit and its hands within 0.4 of the
-head, and sends it on to each client machine that sees the player (message
-93); each machine keeps a player's latest for a second, to pose the
-player's body by. It is only drawn: hits, shots and movement are the
-unit's. Then version 41 lets a VR server's headset's player let their weapon
-fall, thrown as the hand moved: the player's machine asks the host
-(distributed message 94, `network_vr.c`, over its stream), which takes it
-only for the machine's own player, on foot and alive, not within half a
-second of their last, no faster than 0.3 world units a tick on top of the
-unit's own, and drops the weapon as the game drops one; the other machines
-get the weapon as any dropped one. Then version 42 adds to the pose the
-slot of the weapon the player's other hand holds (or none) and that hand's
-trigger: every other machine's copy of the unit, the host's too, holds
-that weapon of its inventory in its other hand and fires it with that
-trigger (`dual_wield.c`), and the host takes the hits of a player who held
-one in the last three seconds at twice the rate. Then version 43 lets the
-request to let a weapon fall name the other hand's weapon (the byte after
-the player, 0 before: 1 and its slot; the host drops it if it is of the
-player's inventory and not in hand), and lets a VR server's headset's
-player whose pose comes carry four weapons, those past the second taken
-by the hand (its grab's swap adds the weapon, dropping none), and lets a
-VR server's client tell the host how its player's arm threw a grenade
-(distributed message 95, `network_vr.c`, over its stream: the hand's
+settings', not synced.
+
+VR servers (the VR branch's builds, `network.vr_rules`) play version 38 too,
+and play a standard game with every build of it, their headsets' players
+with the VR extras off. A VR server advertises, and lists, its version with
+`HALO_PORT_NETWORK_VR_SERVER_BIT` (0x8000) set, which every build that
+compares versions alone takes for a newer one and does not join, and its VR
+revision (`HALO_PORT_NETWORK_VR_REVISION`: the advertisement's fifth
+reserved byte, the listing stamp's second); a VR build joins it only at its
+own VR revision, and shows it as "VR" before the gametype. Its game's
+settings say so too (a bit of the game's port switches,
+`_network_game_port_vr_rules_bit`, which other builds leave alone): every
+machine plays its headsets' players by its rules. VR revision 1, in a VR
+server's game: each headset's player's machine sends its head and hands,
+from its unit, to the host once a tick (distributed message 92,
+`network_vr.c`, unreliably), which takes a pose only of the sending
+machine's own player, newer than the last, its head within 0.5 world units
+of the unit and its hands within 0.4 of the head, and sends it on to each
+client machine that sees the player (message 93); each machine keeps a
+player's latest for a second, to pose the player's body by. The pose also
+carries the slot of the weapon the player's other hand holds (or none) and
+that hand's trigger: every other machine's copy of the unit, the host's
+too, holds that weapon of its inventory in its other hand and fires it with
+that trigger (`dual_wield.c`), and the host takes the hits of a player who
+held one in the last three seconds at twice the rate. A player whose pose
+comes carries four weapons, those past the second taken by the hand (its
+grab's swap adds the weapon, dropping none). The player may let a weapon
+fall, thrown as the hand moved: its machine asks the host (distributed
+message 94, over its stream: the player, 0 for the weapon in hand or 1 and
+the slot of the other hand's, and the velocity), which takes it only for
+the machine's own player, on foot and alive, not within half a second of
+their last, no faster than 0.3 world units a tick on top of the unit's own,
+and drops the weapon as the game drops one; the other machines get the
+weapon as any dropped one. A client tells the host how its player's arm
+threw a grenade (distributed message 95, over its stream: the hand's
 velocity and its place from the eyes, no further than 0.4 world units,
 taken only for the machine's own player); the host's next throw of that
 player's grenade within a second leaves from the hand the way the hand
-threw it, between 0.4 and 1.25 times the game's own speed.
+threw it, between 0.4 and 1.25 times the game's own speed. Elsewhere a
+headset's player plays as any: shots leave the unit's eyes, a melee strikes
+where the weapon aims, two weapons, no other hand's, no arm's throw.
 
 `port/linux/network_format.txt` records the wire format of the current
 version (`tools/network_format.py`): `test_linux_port.py` fails when the

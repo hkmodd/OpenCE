@@ -11,16 +11,17 @@ whose X25519 form's hash is the invite's host part (p2p.c), so no one but
 the host can list its invite, alter its listing, or list another's under
 false details:
 
-	"HL", format 1, the lobby version (2: HALO_PORT_NETWORK_VERSION; browsers
-	hide others), flags (open, under way, teams, closed, password), sequence
+	"HL", format 1, the lobby version (2: HALO_PORT_NETWORK_VERSION, a VR
+	server's with HALO_PORT_NETWORK_VR_SERVER_BIT; browsers hide others), flags (open, under way, teams, closed, password), sequence
 	(4: newest wins), Unix time (4), the Ed25519 key (32), the invite's token
 	(16; a password's game's sealed with the password's key, 56:
 	p2p_seal_token; a tombstone's zero), players, most players, the
 	gametype's engine (1 each), the game's name,
 	map and gametype (a length byte, then up to 32, 32 and 24 characters of
 	printable ASCII), a stamp (8: the game's kind, an OpenCE gametype's mode
-	and Hardcore, port/linux/game/game_modes.h's game_modes_kind; the rest
-	reserved, zero), and the signature (64) of "hceu-lobby-1" and all before
+	and Hardcore, port/linux/game/game_modes.h's game_modes_kind; then a VR
+	server's VR revision, HALO_PORT_NETWORK_VR_REVISION; the rest reserved,
+	zero), and the signature (64) of "hceu-lobby-1" and all before
 	it.
 
 Each host has a slot, hceu/3/lobby/s/<its key's hash in hex>: its listing,
@@ -124,7 +125,7 @@ struct listing
 	unsigned char token[P2P_TOKEN_SIZE];
 	/* (_listing_password: its token, sealed) */
 	unsigned char sealed_token[P2P_SEALED_TOKEN_SIZE];
-	int player_count, maximum_player_count, engine_type, kind;
+	int player_count, maximum_player_count, engine_type, kind, vr_revision;
 	char name[P2P_LISTING_NAME_SIZE + 1];
 	char map[P2P_LISTING_MAP_SIZE + 1];
 	char gametype[P2P_LISTING_GAMETYPE_SIZE + 1];
@@ -286,14 +287,17 @@ static int listing_make(unsigned char *bytes, int flags)
 	unsigned char *signed_part = bytes;
 	unsigned char data[sizeof(signature_label) - 1 + MAXIMUM_LISTING_SIZE];
 	int size = 0;
+	/* (a VR server's: its version's bit, and its VR revision in the stamp) */
+	int vr_server = (lobby.kind & HALO_PORT_ADVERTISED_KIND_VR) != 0;
+	int version = HALO_PORT_NETWORK_VERSION | (vr_server ? HALO_PORT_NETWORK_VR_SERVER_BIT : 0);
 
 	if (lobby.has_password && !(flags & _listing_closed))
 		flags |= _listing_password;
 	bytes[size++] = 'H';
 	bytes[size++] = 'L';
 	bytes[size++] = LISTING_FORMAT;
-	bytes[size++] = (unsigned char)(HALO_PORT_NETWORK_VERSION >> 8);
-	bytes[size++] = (unsigned char)HALO_PORT_NETWORK_VERSION;
+	bytes[size++] = (unsigned char)(version >> 8);
+	bytes[size++] = (unsigned char)version;
 	bytes[size++] = (unsigned char)flags;
 	put_long(bytes + size, ++lobby.sequence);
 	size += 4;
@@ -322,7 +326,9 @@ static int listing_make(unsigned char *bytes, int flags)
 	size += put_text(bytes + size, lobby.map, P2P_LISTING_MAP_SIZE);
 	size += put_text(bytes + size, lobby.gametype, P2P_LISTING_GAMETYPE_SIZE);
 	memset(bytes + size, 0, STAMP_SIZE);
-	bytes[size] = (unsigned char)lobby.kind;
+	bytes[size] = (unsigned char)(lobby.kind & ~HALO_PORT_ADVERTISED_KIND_VR);
+	if (vr_server)
+		bytes[size + 1] = (unsigned char)HALO_PORT_NETWORK_VR_REVISION;
 	size += STAMP_SIZE;
 	memcpy(data, signature_label, sizeof(signature_label) - 1);
 	memcpy(data + sizeof(signature_label) - 1, signed_part, (size_t)size);
@@ -390,6 +396,7 @@ static int listing_read(const unsigned char *bytes, int size, struct listing *li
 	/* (the stamp: the game's kind first; a listing too short for it fails
 	the size check below) */
 	listing->kind = offset < size ? bytes[offset] : 0;
+	listing->vr_revision = offset + 1 < size ? bytes[offset + 1] : 0;
 	offset += STAMP_SIZE;
 	if (offset + P2P_SIGNATURE_SIZE != size)
 		return 0;
@@ -672,7 +679,8 @@ static void listing_take(const struct queued *queued, const struct listing *list
 	shown->player_count = (unsigned char)listing->player_count;
 	shown->maximum_player_count = (unsigned char)listing->maximum_player_count;
 	shown->engine_type = (unsigned char)listing->engine_type;
-	shown->kind = (unsigned char)listing->kind;
+	shown->kind = (unsigned char)(listing->kind |
+		((listing->version & HALO_PORT_NETWORK_VR_SERVER_BIT) ? HALO_PORT_ADVERTISED_KIND_VR : 0));
 	shown->open = (listing->flags & _listing_open) != 0;
 	shown->in_progress = (listing->flags & _listing_in_progress) != 0;
 	shown->has_teams = (listing->flags & _listing_has_teams) != 0;
@@ -749,14 +757,19 @@ static void update_browsing(void)
 
 		memmove(lobby.queue, lobby.queue + 1, sizeof(*lobby.queue) * (size_t)(--lobby.queue_count));
 		/* (a newer version's game is counted, not shown: its host's key
-		hash only, unverified, so it is no more than a count) */
+		hash only, unverified, so it is no more than a count; a VR server's
+		of this version, by its VR revision) */
 		if (lobby.browsing && listing_read(queued.payload, queued.size, &listing) &&
-			listing.version > HALO_PORT_NETWORK_VERSION && !(listing.flags & _listing_closed))
+			!(listing.flags & _listing_closed) &&
+			((listing.version & ~HALO_PORT_NETWORK_VR_SERVER_BIT) > HALO_PORT_NETWORK_VERSION ||
+				(listing.version == (HALO_PORT_NETWORK_VERSION | HALO_PORT_NETWORK_VR_SERVER_BIT) &&
+					listing.vr_revision > HALO_PORT_NETWORK_VR_REVISION)))
 		{
 			newer_heard(queued.key_hash);
 			continue;
 		}
-		if (!listing_read(queued.payload, queued.size, &listing) || listing.version != HALO_PORT_NETWORK_VERSION ||
+		if (!listing_read(queued.payload, queued.size, &listing) ||
+			!HALO_PORT_NETWORK_VERSION_JOINABLE(listing.version, listing.vr_revision) ||
 			!signing_key_hash(listing.key, key_hash) || memcmp(key_hash, queued.key_hash, P2P_KEY_HASH_SIZE))
 		{
 			continue;

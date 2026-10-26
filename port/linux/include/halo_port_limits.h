@@ -66,13 +66,34 @@ is newer (network_client_manager.c). A host advertises it, with its netcode,
 in its game's advertisement's reserved bytes (network_server_message_handler.c),
 which hosts built before there was a version send as zeros: version 0.
 Raise it with any change to what the machines send each other. */
-#define HALO_PORT_NETWORK_VERSION 43
+#define HALO_PORT_NETWORK_VERSION 38
+/* ... a VR server's (network.vr_rules: the VR branch's builds) is advertised
+and listed with this bit set in its version, which every build that
+compares versions alone takes for a newer one and does not join; and with
+the VR extras' own revision (HALO_PORT_NETWORK_VR_REVISION), raised with any
+change to what a VR server's machines send each other alone, which a VR
+build must match to join one. A host that is no VR server advertises
+HALO_PORT_NETWORK_VERSION alone and plays with any build of it. */
+#define HALO_PORT_NETWORK_VR_SERVER_BIT 0x8000
+#define HALO_PORT_NETWORK_VR_REVISION 1
 /* ... the advertisement's reserved bytes: the version (a little-endian word),
 then flags, then the game's kind (an OpenCE gametype's mode, and Hardcore:
-port/linux/game/game_modes.h's game_modes_kind), for the server browser */
+port/linux/game/game_modes.h's game_modes_kind), for the server browser, then
+a VR server's VR revision (0 for any other host) */
 #define HALO_PORT_ADVERTISED_VERSION_OFFSET 0
 #define HALO_PORT_ADVERTISED_FLAGS_OFFSET 2
 #define HALO_PORT_ADVERTISED_KIND_OFFSET 3
+#define HALO_PORT_ADVERTISED_VR_REVISION_OFFSET 4
+/* the bit of a game's kind that says it is a VR server, as a VR build
+shows it (game_modes.h's GAME_MODES_KIND_VR): never sent in the kind byte */
+#define HALO_PORT_ADVERTISED_KIND_VR 0x40
+/* whether a host advertising (or listing) version `theirs`, of VR revision
+`revision`, can be joined: one of this version, or a VR server of this
+version and this build's VR revision */
+#define HALO_PORT_NETWORK_VERSION_JOINABLE(theirs, revision) \
+	((theirs) == HALO_PORT_NETWORK_VERSION || \
+	((theirs) == (HALO_PORT_NETWORK_VERSION | HALO_PORT_NETWORK_VR_SERVER_BIT) && \
+		(revision) == HALO_PORT_NETWORK_VR_REVISION))
 /* ... the host plays the distributed netcode (always, since the lockstep
 netcode was removed; hosts of version 4 built before then may not) */
 #define HALO_PORT_ADVERTISED_DISTRIBUTED_FLAG 0x01
