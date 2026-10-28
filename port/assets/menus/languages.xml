@@ -162,19 +162,15 @@
 	<bitmap name="main_menu/multiplayer_type_select/server_settings/voice_options/header_voice_options" language="it">
 		<frame png="languages/it/main_menu/multiplayer_type_select/server_settings/voice_options/header_voice_options__0.png" width="512" height="64"/>
 	</bitmap>
-	<line text="%d %s on a newer version: update the game to join" language="it" translation="%d %s su una versione più recente: aggiorna il gioco per entrare"/>
 	<line text="%d players of %d, on %d machines%s" language="it" translation="%d di %d giocatori, su %d computer%s"/>
-	<line text="%s: %d %s of %d%s%s" language="it" translation="%s: %d %s su %d%s%s"/>
+	<line text="%s%s\n%s\n%d of %d players\n\n%s" language="it" translation="%s%s\n%s\n%d di %d giocatori\n\n%s"/>
 	<line text="%s\n%d of %d players\non %d machines" language="it" translation="%s\n%d di %d giocatori\nsu %d computer"/>
-	<line text="%s\n%s\n%d of %d players\n\n%s" language="it" translation="%s\n%s\n%d di %d giocatori\n\n%s"/>
 	<line text="%s\n%s\nScore to win: %ld" language="it" translation="%s\n%s\nPunti per vincere: %ld"/>
 	<line text="%s\nFree for all\nA kill with each weapon" language="it" translation="%s\nTutti contro tutti\nUn'uccisione per arma"/>
 	<line text="%s\nTeams\nRound time: %d min" language="it" translation="%s\nSquadre\nDurata round: %d min"/>
 	<line text="%s\nTeams\nUntil no human is left" language="it" translation="%s\nSquadre\nFino all'ultimo umano"/>
 	<line text="%s\n\nThis game is under way.\n\n%s" language="it" translation="%s\n\nQuesta partita è in corso.\n\n%s"/>
 	<line text=", TEAMS" language="it" translation=", SQUADRE"/>
-	<line text=", full or starting" language="it" translation=", piena o in avvio"/>
-	<line text=", under way" language="it" translation=", in corso"/>
 	<line text="1 SECOND" language="it" translation="1 SECONDO"/>
 	<line text="10 SECONDS" language="it" translation="10 SECONDI"/>
 	<line text="15 SECONDS" language="it" translation="15 SECONDI"/>
@@ -192,9 +188,11 @@
 	<line text="A team game's scoreboard: a column for each team,\nor every player in order of score." language="it" translation="Il punteggio a squadre: una colonna per squadra,\no tutti i giocatori in ordine di punteggio."/>
 	<line text="ADD PLAYER" language="it" translation="+ GIOCATORE"/>
 	<line text="AIM ASSIST:" language="it" translation="MIRA ASSISTITA:"/>
+	<line text="ALL GAMES" language="it" translation="TUTTE LE PARTITE"/>
 	<line text="ALLIES" language="it" translation="ALLEATI"/>
 	<line text="ALLOWED" language="it" translation="CONSENTITA"/>
 	<line text="ALLY FRIENDLY FIRE:" language="it" translation="FUOCO AMICO ALLEATI:"/>
+	<line text="ANY" language="it" translation="QUALSIASI"/>
 	<line text="ANYONE NEAR" language="it" translation="CHIUNQUE VICINO"/>
 	<line text="ARM SHIELDS:" language="it" translation="SCUDI SULLE BRACCIA:"/>
 	<line text="ASSAULT RIFLE" language="it" translation="FUCILE D'ASSALTO"/>
@@ -202,7 +200,8 @@
 	<line text="Adjust the mouse's sensitivity\nand aiming.\n\nProfile:" language="it" translation="Regola la sensibilità del mouse\ne la mira.\n\nProfilo:"/>
 	<line text="Adjust the volume of the music\nand of everything else.\n\nProfile:" language="it" translation="Regola il volume della musica\ne di tutto il resto.\n\nProfilo:"/>
 	<line text="Another controller: START joins." language="it" translation="Un altro controller: START per unirsi."/>
-	<line text="Anyone can see and join your game: it is listed\nin everyone's Server Browser." language="it" translation="Chiunque può vedere la partita e unirsi: appare\nnell'elenco server di tutti."/>
+	<line text="Anyone can see and join your game: it is listed\nfor everyone through the brokers." language="it" translation="Chiunque può vedere la tua partita ed entrare:\nè elencata per tutti tramite i broker."/>
+	<line text="Asking the brokers for the host..." language="it" translation="Richiesta dell'host ai broker..."/>
 	<line text="BLOCK M+KB" language="it" translation="BLOCCA M+T"/>
 	<line text="BORDERLESS" language="it" translation="SENZA BORDI"/>
 	<line text="BUTTON LAYOUT:" language="it" translation="DISPOSIZIONE PULSANTI:"/>
@@ -229,15 +228,18 @@
 	<line text="Choose the rules of OpenCE's\ngametypes: SWAT, Infection,\nGun Game and Hardcore.\nThis gametype:" language="it" translation="Scegli le regole delle\nmodalità di OpenCE: SWAT,\nInfezione, Gun Game e\nHardcore. Questa modalità:"/>
 	<line text="Choose what to show, with left and right." language="it" translation="Scegli cosa mostrare con sinistra e destra."/>
 	<line text="Classic: plain Xbox buttons. Gems: shaded Xbox\nbuttons. Dark Gems: the menu's button artwork." language="it" translation="Classico: pulsanti Xbox piatti. Gemme: pulsanti\nXbox sfumati. Gemme scure: la grafica dei menu."/>
-	<line text="Connecting to %s..." language="it" translation="Connessione a %s..."/>
+	<line text="Connected: joining the game..." language="it" translation="Connesso: ingresso nella partita..."/>
 	<line text="Copy an invite link and PASTE LINK, or accept a Discord invite" language="it" translation="Copia un link d'invito e INCOLLA LINK, o accetta un invito Discord"/>
 	<line text="Could not join the game." language="it" translation="Impossibile unirsi alla partita."/>
-	<line text="Could not reach %s" language="it" translation="Impossibile raggiungere %s"/>
 	<line text="DARK GEMS" language="it" translation="GEMME SCURE"/>
+	<line text="DEDICATED" language="it" translation="DEDICATI"/>
+	<line text="DEDICATED FIRST" language="it" translation="PRIMA I DEDICATI"/>
 	<line text="DIRECT LINK" language="it" translation="LINK DIRETTO"/>
 	<line text="DISPLAY MODE:" language="it" translation="MODALITÀ SCHERMO:"/>
 	<line text="DOWNLOAD MAPS:" language="it" translation="SCARICA MAPPE:"/>
 	<line text="Damage from the other players will only reduce\nshields. Health will be unaffected." language="it" translation="I danni degli altri giocatori ridurranno solo\ngli scudi. La salute non ne risentirà."/>
+	<line text="Dedicated server" language="it" translation="Server dedicato"/>
+	<line text="Dedicated server by" language="it" translation="Server dedicato di"/>
 	<line text="Disable mouse aim assist for mouse/keyboard players.\nController and touch aim assist are unchanged." language="it" translation="Disattiva la mira assistita per chi usa mouse e\ntastiera. Controller e touch restano invariati."/>
 	<line text="Downloading Custom Edition maps you do not have,\nand helping send them to other players." language="it" translation="Scaricare le mappe Custom Edition che non hai,\ne aiutare a inviarle agli altri giocatori."/>
 	<line text="Draw a clock at the bottom right in multiplayer,\ncounting up from the start of the game." language="it" translation="In multigiocatore, un orologio in basso a destra\nche conta dall'inizio della partita."/>
@@ -253,6 +255,7 @@
 	<line text="EXTRA PICKUPS:" language="it" translation="OGGETTI AGGIUNTIVI:"/>
 	<line text="EXTRA VEHICLES:" language="it" translation="VEICOLI AGGIUNTIVI:"/>
 	<line text="Each kill gives the next weapon; a kill with the\nlast wins. Free for all Slayer only." language="it" translation="Ogni uccisione dà l'arma successiva; vince chi\nuccide con l'ultima. Solo Slayer tutti contro tutti."/>
+	<line text="Each kill scores a point for the killer's team (a\nbetrayal takes one away), and each capture is worth\nKills per Capture. The limit is in captures." language="it" translation="Ogni uccisione dà un punto alla squadra di chi\nuccide (un tradimento lo toglie), e ogni cattura vale\nUccisioni per cattura. Il limite è in catture."/>
 	<line text="Each team's vehicles and their respawn time, for\nthis game." language="it" translation="I veicoli di ogni squadra e il loro tempo di\nriapparizione, per questa partita."/>
 	<line text="Echo sounds as the place you are in does, and\nmuffle those behind walls, as the Xbox did." language="it" translation="L'eco dei suoni come nel luogo in cui sei, e quelli\ndietro i muri attutiti, come su Xbox."/>
 	<line text="Enemy squads are as the campaign has them." language="it" translation="Le squadre nemiche sono quelle della campagna."/>
@@ -284,6 +287,7 @@
 	<line text="Everyone's shields light their surroundings as\nthey flare." language="it" translation="Gli scudi di tutti illuminano ciò che li circonda\nquando brillano."/>
 	<line text="FAILED" language="it" translation="ERRORE"/>
 	<line text="FIRST ZOMBIES:" language="it" translation="PRIMI ZOMBIE:"/>
+	<line text="FORCE TEAM SPAWNS:" language="it" translation="RIAPPARIZIONI DI SQUADRA:"/>
 	<line text="FOV AND VIEWMODELS:" language="it" translation="FOV E MODELLI ARMA:"/>
 	<line text="FRAME RATE LIMIT:" language="it" translation="LIMITE FOTOGRAMMI:"/>
 	<line text="FRIENDLY FIRE OFF" language="it" translation="FUOCO AMICO SPENTO"/>
@@ -303,12 +307,14 @@
 	<line text="Fullscreen takes the display; borderless covers it\nwith a window. F11 switches to the window." language="it" translation="Schermo intero occupa lo schermo; senza bordi lo\ncopre con una finestra. F11 passa alla finestra."/>
 	<line text="GAME LOBBY" language="it" translation="LOBBY PARTITA"/>
 	<line text="GAME NAME:" language="it" translation="NOME PARTITA:"/>
+	<line text="GAME TYPE" language="it" translation="TIPO PARTITA"/>
 	<line text="GAME TYPE:" language="it" translation="TIPO PARTITA:"/>
 	<line text="GEMS" language="it" translation="GEMME"/>
 	<line text="GLOW" language="it" translation="BAGLIORE"/>
 	<line text="GLOW INTENSITY:" language="it" translation="INTENSITÀ BAGLIORE:"/>
 	<line text="GLOW+OVERSHIELD" language="it" translation="BAGLIORE+SOVRASCUDO"/>
 	<line text="GRAPHICS:" language="it" translation="GRAFICA:"/>
+	<line text="Games on a newer version (update the game to join them):" language="it" translation="Partite su una versione più recente (aggiorna il gioco per entrare):"/>
 	<line text="HDR DISPLAY:" language="it" translation="SCHERMO HDR:"/>
 	<line text="HELP SEND MAPS:" language="it" translation="AIUTA A INVIARE:"/>
 	<line text="HIDE" language="it" translation="NASCONDI"/>
@@ -320,6 +326,7 @@
 	<line text="Hide offensive words in names and text from\nother players, maps and mods, as stars." language="it" translation="Nasconde con asterischi le parole offensive nei\nnomi e nei testi di giocatori, mappe e mod."/>
 	<line text="Host a game on the Internet:\nplayers join by its invite\nlink or Discord." language="it" translation="Ospita una partita su Internet:\ni giocatori entrano col link\nd'invito o con Discord."/>
 	<line text="Host and join games over the internet by invite\nlinks; off keeps to the local network." language="it" translation="Ospita partite su Internet ed entra con i link\nd'invito; se disattivato, solo la rete locale."/>
+	<line text="Hosted by a player (anonymous listing)" language="it" translation="Ospitata da un giocatore (annuncio anonimo)"/>
 	<line text="How fast the right stick turns the view." language="it" translation="Velocità della visuale con la levetta destra."/>
 	<line text="How fast the view turns side to side for the\nmouse's movement." language="it" translation="Velocità con cui la visuale gira di lato al\nmovimento del mouse."/>
 	<line text="How fast the view turns up and down; Same\nturns it as fast as side to side." language="it" translation="Velocità con cui la visuale gira in alto e in basso;\nUguale la gira come di lato."/>
@@ -329,6 +336,7 @@
 	<line text="How long the round waits, once two players are\nalive, before the first zombies are chosen." language="it" translation="Quanto attende il round, con due giocatori in\nvita, prima di scegliere i primi zombie."/>
 	<line text="How sounds are converted to the output's rate:\nsinc is clean; linear is brighter, with aliasing." language="it" translation="Conversione dei suoni alla frequenza d'uscita:\nsinc è pulito; lineare è più vivo, con aliasing."/>
 	<line text="Humans killed join the zombies, who win when\nno human is left. Team Slayer only." language="it" translation="Gli umani uccisi diventano zombie, che vincono\nquando non resta nessun umano. Solo Slayer a squadre."/>
+	<line text="IF DOWNLOADABLE" language="it" translation="SE SCARICABILI"/>
 	<line text="IN-GAME HELP:" language="it" translation="AIUTO IN GIOCO:"/>
 	<line text="INDICATOR OPTIONS:" language="it" translation="OPZIONI INDICATORE:"/>
 	<line text="INFECTION" language="it" translation="INFEZIONE"/>
@@ -345,14 +353,18 @@
 	<line text="In first person, turn the view the moment the\nmouse moves, not up to two ticks later." language="it" translation="In prima persona, gira la visuale appena il mouse\nsi muove, non fino a due tick dopo."/>
 	<line text="In multiplayer, whose names are drawn above their\nheads." language="it" translation="In multigiocatore, di chi mostrare il nome sopra\nla testa."/>
 	<line text="Internet play is off (Settings)" language="it" translation="Il gioco su Internet è disattivato (Impostazioni)"/>
+	<line text="Internet play is off:\nSettings &gt; Network Setup" language="it" translation="Il gioco su Internet è disattivato:\nImpostazioni &gt; Rete"/>
 	<line text="Internet play, updates and the\nmultiplayer HUD.\n\nProfile:" language="it" translation="Gioco su Internet, aggiornamenti\ne HUD multigiocatore.\n\nProfilo:"/>
 	<line text="It cannot be joined now:\nit is loading, over or full." language="it" translation="Ora non è possibile entrare:\nsta caricando, è finita o è piena."/>
 	<line text="JOIN FROM CLIPBOARD:" language="it" translation="ENTRA DAGLI APPUNTI:"/>
 	<line text="JOIN GAME joins it now;\nits players show then." language="it" translation="PARTECIPA per entrare ora;\npoi appariranno i giocatori."/>
+	<line text="JOINING" language="it" translation="INGRESSO"/>
 	<line text="JOINING THE GAME\nYou spawn beside a teammate once it is safe" language="it" translation="INGRESSO IN PARTITA\nRiapparirai accanto a un compagno appena sarà sicuro"/>
 	<line text="Join a game by its invite link,\nor one a Discord invite\nreached." language="it" translation="Entra in una partita col suo\nlink d'invito o con un invito\nDiscord."/>
 	<line text="Join the game of an invite link copied before\nswitching to the game." language="it" translation="Entra nella partita di un link d'invito copiato\nprima di passare al gioco."/>
 	<line text="Joining a game on a Custom Edition map you do not\nhave: download it from the players (if shared)." language="it" translation="Entrando in una partita su una mappa Custom Edition\nche non hai: scaricala dai giocatori (se condivisa)."/>
+	<line text="KILLS PER CAPTURE:" language="it" translation="UCCISIONI PER CATTURA:"/>
+	<line text="KILLS SCORE:" language="it" translation="PUNTI UCCISIONI:"/>
 	<line text="Keep floors and walls sharp at a grazing angle,\nwhich the Xbox did not. Off: as the Xbox." language="it" translation="Pavimenti e muri nitidi anche di sbieco, come\nsu Xbox non erano. Se disattivato, come su Xbox."/>
 	<line text="Keep the light of explosions, plasma and the sun\npast white, and roll it off instead of clipping." language="it" translation="Tiene la luce di esplosioni, plasma e sole oltre\nil bianco, e la attenua invece di tagliarla."/>
 	<line text="Keypad Comma" language="it" translation="TASTIERINO ,"/>
@@ -364,9 +376,11 @@
 	<line text="LIGHT SHOW" language="it" translation="SPETTACOLO DI LUCI"/>
 	<line text="LINEAR" language="it" translation="LINEARE"/>
 	<line text="LISTING:" language="it" translation="VISIBILITÀ:"/>
+	<line text="LISTS:" language="it" translation="ELENCA:"/>
 	<line text="LIVE" language="it" translation="IN CORSO"/>
 	<line text="LOADOUT:" language="it" translation="DOTAZIONE:"/>
 	<line text="LOBBY VOICE CHAT:" language="it" translation="CHAT VOCALE LOBBY:"/>
+	<line text="LOCKED FIRST" language="it" translation="PRIMA LE PROTETTE"/>
 	<line text="LOOK SENSITIVITY:" language="it" translation="SENSIBILITÀ VISUALE:"/>
 	<line text="Left" language="it" translation="FRECCIA SX"/>
 	<line text="Left Alt" language="it" translation="ALT SX"/>
@@ -377,14 +391,20 @@
 	<line text="Level the view while walking." language="it" translation="Livella la visuale mentre cammini."/>
 	<line text="Light Show: three times as far, at full from a\nthird of the flare. Online: the host's choice." language="it" translation="Spettacolo di luci: tre volte più ampio, pieno da\nun terzo del lampo. Online: lo sceglie l'host."/>
 	<line text="Light models for each pixel, without the facets\nof the Xbox's lighting for each vertex." language="it" translation="Illumina i modelli per pixel, senza le sfaccettature\ndell'illuminazione per vertice di Xbox."/>
+	<line text="List games no one is playing yet." language="it" translation="Elenca le partite in cui non gioca ancora nessuno."/>
+	<line text="List games on maps you do not have: IF\nDOWNLOADABLE, those Map Sharing can download." language="it" translation="Elenca le partite su mappe che non hai: SE\nSCARICABILI, quelle che Condivisione mappe può scaricare."/>
+	<line text="List games with no room left." language="it" translation="Elenca le partite senza più posti."/>
+	<line text="Listed for everyone through the brokers, and on\nthe master servers with your publisher key." language="it" translation="Elencata per tutti tramite i broker, e sui\nmaster server con la tua chiave di pubblicazione."/>
 	<line text="Lives, health, shields and respawning, for this game." language="it" translation="Vite, salute, scudi e riapparizione, per questa partita."/>
 	<line text="Look for a new version when the game starts." language="it" translation="Cerca una nuova versione all'avvio del gioco."/>
 	<line text="Looking for games on your LAN..." language="it" translation="Ricerca partite sulla tua LAN..."/>
 	<line text="Looking for public games..." language="it" translation="Ricerca partite pubbliche..."/>
 	<line text="MADE WHEN THE GAME STARTS" language="it" translation="CREATO ALL'AVVIO DELLA PARTITA"/>
+	<line text="MAP" language="it" translation="MAPPA"/>
 	<line text="MAP SHARING" language="it" translation="CONDIVISIONE MAPPE"/>
 	<line text="MAP SHARING:" language="it" translation="CONDIVISIONE MAPPE:"/>
 	<line text="MAP WEAPONS:" language="it" translation="ARMI DELLA MAPPA:"/>
+	<line text="MASTER SERVERS:" language="it" translation="MASTER SERVER:"/>
 	<line text="MATCH TIMER:" language="it" translation="TIMER PARTITA:"/>
 	<line text="MAXIMUM PLAYERS:" language="it" translation="GIOCATORI MAX:"/>
 	<line text="MELEE" language="it" translation="CORPO A CORPO"/>
@@ -397,22 +417,32 @@
 	<line text="MOVE DOWN" language="it" translation="SPOSTA GIÙ"/>
 	<line text="MOVE FORWARD" language="it" translation="AVANZA"/>
 	<line text="MOVE UP" language="it" translation="SPOSTA SU"/>
+	<line text="MULTI-HILL:" language="it" translation="PIÙ COLLINE:"/>
 	<line text="MULTIPLAYER HUD:" language="it" translation="HUD MULTIGIOCATORE:"/>
 	<line text="MULTIPLIER:" language="it" translation="MOLTIPLICATORE:"/>
 	<line text="Mouse Left" language="it" translation="PULSANTE SX"/>
 	<line text="Mouse Middle" language="it" translation="CLIC RUOTA"/>
 	<line text="Mouse Right" language="it" translation="PULSANTE DX"/>
 	<line text="Moving the mouse forward looks down." language="it" translation="Spostando il mouse in avanti si guarda in basso."/>
+	<line text="NAME" language="it" translation="NOME"/>
 	<line text="NATIVE" language="it" translation="NATIVA"/>
 	<line text="NEEDLER" language="it" translation="PISTOLA AD AGHI"/>
+	<line text="NEWER" language="it" translation="PIÙ NUOVA"/>
 	<line text="NO GRENADES" language="it" translation="NIENTE GRANATE"/>
+	<line text="NONE LISTED" language="it" translation="NESSUNO IN ELENCO"/>
 	<line text="NONE: A LAN GAME" language="it" translation="NESSUNO: PARTITA IN LAN"/>
+	<line text="NOT ASKED YET" language="it" translation="NON ANCORA INTERROGATI"/>
 	<line text="Name-calling and insults that are not slurs." language="it" translation="Offese e insulti non discriminatori."/>
 	<line text="Native draws at the resolution; Original draws\nthe Xbox's 640x480 and scales it up." language="it" translation="Nativa disegna alla risoluzione; Originale disegna\na 640x480 come Xbox e ingrandisce."/>
+	<line text="Needs the newer build: Settings &gt; Network Setup &gt; Check for updates" language="it" translation="Serve la build più recente: Impostazioni &gt; Rete &gt; Cerca aggiornamenti"/>
+	<line text="Neither the master servers\nnor the brokers answer:\ncheck the connection" language="it" translation="Né i master server\nné i broker rispondono:\ncontrolla la connessione"/>
 	<line text="New player: press START." language="it" translation="Nuovo giocatore: premi START."/>
+	<line text="No games match the filters" language="it" translation="Nessuna partita corrisponde ai filtri"/>
+	<line text="No master server answered: showing player-hosted games only" language="it" translation="Nessun master server ha risposto: solo partite ospitate da giocatori"/>
 	<line text="No motion sensor, no aim assist, and a kill\nrestores the killer's health and shields." language="it" translation="Niente rilevatore né mira assistita; uccidere\nripristina salute e scudi di chi uccide."/>
 	<line text="No primary weapon." language="it" translation="Nessuna arma principale."/>
 	<line text="No public games found" language="it" translation="Nessuna partita pubblica trovata"/>
+	<line text="No route to the host: a forwarded port on either side helps" language="it" translation="Host irraggiungibile: aiuta una porta inoltrata da una delle due parti"/>
 	<line text="No secondary weapon." language="it" translation="Nessuna arma secondaria."/>
 	<line text="No shields, and a shot to the head kills. Slayer only." language="it" translation="Niente scudi, e un colpo alla testa uccide. Solo Slayer."/>
 	<line text="No text chat in the game." language="it" translation="Nessuna chat testuale nella partita."/>
@@ -420,6 +450,8 @@
 	<line text="No voice chat in the lobby." language="it" translation="Nessuna chat vocale nella lobby."/>
 	<line text="No weapons appear on the map: with a loadout of\nNONE and NONE, melee and grenades only." language="it" translation="Nessuna arma nella mappa: con dotazione NESSUNO\ne NESSUNO, solo corpo a corpo e granate."/>
 	<line text="Not synced: each player sees the shield effects\nof their own Video Setup settings." language="it" translation="Non sincronizzati: ognuno vede gli effetti scudo\ndelle proprie impostazioni video."/>
+	<line text="OF" language="it" translation="SU"/>
+	<line text="OLDER" language="it" translation="PIÙ VECCHIA"/>
 	<line text="OPEN MIC" language="it" translation="MICROFONO APERTO"/>
 	<line text="OPENCE OPTIONS" language="it" translation="OPZIONI OPENCE"/>
 	<line text="ORIGINAL" language="it" translation="ORIGINALE"/>
@@ -427,7 +459,9 @@
 	<line text="OVERSHIELD" language="it" translation="SOVRASCUDO"/>
 	<line text="OVERSHIELD:" language="it" translation="SOVRASCUDO:"/>
 	<line text="On foot, horizontal at 16:9, in degrees.\nDefault keeps the stock view." language="it" translation="A piedi, orizzontale in 16:9, in gradi.\nPredefinito mantiene la visuale originale."/>
+	<line text="Only flag captures score." language="it" translation="Contano solo le catture della bandiera."/>
 	<line text="Only players with your invite link can join." language="it" translation="Solo chi ha il tuo link d'invito può entrare."/>
+	<line text="P2P GAMES" language="it" translation="PARTITE P2P"/>
 	<line text="PASSENGER THIRD PERSON:" language="it" translation="TERZA PERSONA PASSEGGERI:"/>
 	<line text="PASTE LINK" language="it" translation="INCOLLA LINK"/>
 	<line text="PAUSE MENU" language="it" translation="MENU PAUSA"/>
@@ -442,6 +476,7 @@
 	<line text="PLAYER NAME SIZE:" language="it" translation="DIMENSIONE NOMI:"/>
 	<line text="PLAYER NAMES:" language="it" translation="NOMI GIOCATORI:"/>
 	<line text="PLAYER OPTIONS:" language="it" translation="OPZIONI GIOCATORI:"/>
+	<line text="PLAYERS" language="it" translation="GIOCATORI"/>
 	<line text="PLAYERS' OWN" language="it" translation="DI OGNUNO"/>
 	<line text="PRESS A KEY" language="it" translation="PREMI UN TASTO"/>
 	<line text="PRESS SPACE OR A TO VOTE TO SKIP   %d OF %d" language="it" translation="PREMI SPAZIO O A PER VOTARE IL SALTO   %d SU %d"/>
@@ -449,6 +484,7 @@
 	<line text="PRIVATE" language="it" translation="PRIVATA"/>
 	<line text="PUBLIC" language="it" translation="PUBBLICA"/>
 	<line text="PUSH TO TALK" language="it" translation="PREMI E PARLA"/>
+	<line text="Password required" language="it" translation="Password richiesta"/>
 	<line text="Pickups are as the campaign has them." language="it" translation="Gli oggetti sono quelli della campagna."/>
 	<line text="Pickups grow with the players: by the value of\n'Per Player' for each player past the first." language="it" translation="Gli oggetti crescono con i giocatori: di\n'Per giocatore' per ogni giocatore oltre il primo."/>
 	<line text="Pickups use 'Multiplier', up to eight times as many,\nhowever many players there are." language="it" translation="Gli oggetti usano 'Moltiplicatore', fino a otto volte\ntanti, qualunque sia il numero di giocatori."/>
@@ -482,7 +518,9 @@
 	<line text="Players walk through each other, so that no one\nblocks a doorway. The AI's characters still block." language="it" translation="I giocatori si attraversano, così nessuno blocca\nuna porta. I personaggi dell'IA bloccano ancora."/>
 	<line text="Players who join without the map cannot play." language="it" translation="Chi entra senza la mappa non può giocare."/>
 	<line text="Players who join without the map download it\nfrom you and the other players." language="it" translation="Chi entra senza la mappa la scarica\nda te e dagli altri giocatori."/>
-	<line text="Players' names above their heads, the\nscoreboard, and the text chat." language="it" translation="I nomi sopra la testa dei giocatori, il\npunteggio e la chat testuale."/>
+	<line text="Players will only spawn at their own team's\nCapture the Flag spawn points." language="it" translation="I giocatori riappariranno solo nei punti di\nriapparizione Cattura la bandiera della loro squadra."/>
+	<line text="Players will spawn at any spawn point the\ngametype allows." language="it" translation="I giocatori riappariranno in qualsiasi punto\nche il tipo di partita consente."/>
+	<line text="Players' names above their heads, the\nscoreboard, the text chat and the match clock." language="it" translation="I nomi sopra la testa dei giocatori, il\npunteggio, la chat testuale e il timer della partita."/>
 	<line text="Press a key, a mouse button or turn the wheel...\nEscape cancels, Delete clears it." language="it" translation="Premi un tasto, un pulsante del mouse o gira la\nrotella... Esc annulla, Canc lo cancella."/>
 	<line text="Pushing the right stick up looks down." language="it" translation="Spingendo in su la levetta destra si guarda in basso."/>
 	<line text="RANDOM" language="it" translation="CASUALE"/>
@@ -496,11 +534,13 @@
 	<line text="Right GUI" language="it" translation="WINDOWS DX"/>
 	<line text="Right Shift" language="it" translation="MAIUSC DX"/>
 	<line text="Rumble the controller." language="it" translation="Fa vibrare il controller."/>
+	<line text="Runs an older build: it can be joined once it updates" language="it" translation="Usa una build più vecchia: potrai entrare quando si aggiorna"/>
 	<line text="SAME" language="it" translation="UGUALE"/>
 	<line text="SCOREBOARD LAYOUT:" language="it" translation="DISPOSIZIONE PUNTEGGI:"/>
 	<line text="SCOREBOARD PANEL:" language="it" translation="PANNELLO PUNTEGGI:"/>
 	<line text="SECONDARY WEAPON:" language="it" translation="ARMA SECONDARIA:"/>
 	<line text="SERVER BROWSER" language="it" translation="ELENCO SERVER"/>
+	<line text="SERVER BROWSER:" language="it" translation="ELENCO SERVER:"/>
 	<line text="SETTINGS" language="it" translation="IMPOSTAZIONI"/>
 	<line text="SEVERE" language="it" translation="GRAVI"/>
 	<line text="SHADOW RESOLUTION:" language="it" translation="RISOLUZIONE OMBRE:"/>
@@ -510,6 +550,9 @@
 	<line text="SHIELD GLOW:" language="it" translation="BAGLIORE SCUDO:"/>
 	<line text="SHOTGUN" language="it" translation="FUCILE"/>
 	<line text="SHOW" language="it" translation="MOSTRA"/>
+	<line text="SHOW EMPTY SERVERS:" language="it" translation="MOSTRA SERVER VUOTI:"/>
+	<line text="SHOW FULL SERVERS:" language="it" translation="MOSTRA SERVER PIENI:"/>
+	<line text="SHOW MISSING MAPS:" language="it" translation="MOSTRA MAPPE MANCANTI:"/>
 	<line text="SHOW the text chat, or HIDE it: no lines, and\nits keys and D-pad Up open nothing." language="it" translation="MOSTRA la chat testuale, o NASCONDI: niente righe,\ne i suoi tasti e la croce in su non aprono nulla."/>
 	<line text="SHOW+OVERSHIELD" language="it" translation="LUCI+SOVRASCUDO"/>
 	<line text="SHOW:" language="it" translation="MOSTRA:"/>
@@ -517,6 +560,7 @@
 	<line text="SKULL DAMAGE:" language="it" translation="DANNO TESCHIO:"/>
 	<line text="SMOOTH MOTION:" language="it" translation="MOVIMENTO FLUIDO:"/>
 	<line text="SNIPER RIFLE" language="it" translation="FUCILE DI PRECISIONE"/>
+	<line text="SORT BY:" language="it" translation="ORDINA PER:"/>
 	<line text="SOUND PROCESSING:" language="it" translation="ELABORAZIONE AUDIO:"/>
 	<line text="SOUND:" language="it" translation="AUDIO:"/>
 	<line text="SOUTHPAW" language="it" translation="MANCINA"/>
@@ -541,6 +585,7 @@
 	<line text="Set this profile's controller\nsensitivity and layouts.\n\nProfile:" language="it" translation="Imposta sensibilità e disposizione\ndel controller di questo profilo.\n\nProfilo:"/>
 	<line text="Seventy-five kills to win. Settle in for a long\nfight." language="it" translation="Settantacinque uccisioni per vincere. Preparati a\nuna lunga battaglia."/>
 	<line text="Shields light their surroundings as they flare.\nOnline: the host's choice." language="it" translation="Gli scudi illuminano ciò che li circonda quando\nbrillano. Online: lo sceglie l'host."/>
+	<line text="Show servers on maps you do not have if their\nhost shares them: they download as you join." language="it" translation="Mostra i server su mappe che non hai se il loro\nhost le condivide: si scaricano mentre entri."/>
 	<line text="Show the game's hints about its controls." language="it" translation="Mostra i suggerimenti del gioco sui controlli."/>
 	<line text="Slow and drag the view along with a target while\naiming with the mouse, as with a controller." language="it" translation="Rallenta e trascina la visuale col bersaglio mentre\nmiri col mouse, come con un controller."/>
 	<line text="Slurs about race, sexuality, gender and\ndisability." language="it" translation="Insulti su etnia, orientamento, genere e\ndisabilità."/>
@@ -550,7 +595,7 @@
 	<line text="Starting in:" language="it" translation="Inizio tra:"/>
 	<line text="Static amounts for the options set to this mode.\nPickups are capped at eight times as many." language="it" translation="Quantità fisse per le opzioni in questa modalità.\nGli oggetti arrivano al massimo a otto volte tanti."/>
 	<line text="Stock picks models' detail by the Xbox's 480 lines;\nnative by this display's; highest, always the best." language="it" translation="Originale sceglie il dettaglio dalle 480 linee Xbox;\nnativa dallo schermo; massima, sempre la migliore."/>
-	<line text="Strict NAT, turn on UPnP: could not reach %s" language="it" translation="NAT rigido, attiva UPnP: impossibile raggiungere %s"/>
+	<line text="Strict NAT: turn on UPnP, or forward a port" language="it" translation="NAT rigido: attiva UPnP, o inoltra una porta"/>
 	<line text="Swearing and sexual words (STRONG AND WORSE\nleaves the mildest showing)." language="it" translation="Volgarità e parole sessuali (FORTI E PEGGIO\nlascia visibili le più lievi)."/>
 	<line text="TEAM" language="it" translation="SQUADRA"/>
 	<line text="TEAM CHAT" language="it" translation="CHAT SQUADRA"/>
@@ -571,8 +616,20 @@
 	<line text="The game is gone." language="it" translation="La partita non c'è più."/>
 	<line text="The game type's own rules." language="it" translation="Le regole proprie del tipo di gioco."/>
 	<line text="The gametype and its rules, for this game." language="it" translation="Il tipo di partita e le sue regole, per questa partita."/>
+	<line text="The host answered: connecting (UDP hole punching)..." language="it" translation="L'host ha risposto: connessione (UDP hole punching)..."/>
+	<line text="The host did not answer (offline, or its listing is stale)" language="it" translation="L'host non ha risposto (offline, o il suo annuncio è vecchio)"/>
+	<line text="The host refused: another version" language="it" translation="L'host ha rifiutato: altra versione"/>
+	<line text="The host refused: banned" language="it" translation="L'host ha rifiutato: sei bannato"/>
+	<line text="The host refused: closed" language="it" translation="L'host ha rifiutato: partita chiusa"/>
+	<line text="The host refused: full" language="it" translation="L'host ha rifiutato: partita piena"/>
+	<line text="The host refused: its invite changed" language="it" translation="L'host ha rifiutato: il suo invito è cambiato"/>
+	<line text="The host refused: wrong password" language="it" translation="L'host ha rifiutato: password errata"/>
+	<line text="The host refused: your player name" language="it" translation="L'host ha rifiutato: il tuo nome giocatore"/>
+	<line text="The list's order. Its column titles sort it too;\nchoosing one again reverses it." language="it" translation="L'ordine dell'elenco. Lo ordinano anche i titoli\ndelle colonne; sceglierne di nuovo uno lo inverte."/>
 	<line text="The map's weapons appear where its designers\nplaced them." language="it" translation="Le armi della mappa appaiono dove i suoi autori\nle hanno messe."/>
 	<line text="The map's weapons, without any grenades." language="it" translation="Le armi della mappa, senza granate."/>
+	<line text="The master servers (masters.txt) that answered\nwhen the Server Browser last asked." language="it" translation="I master server (masters.txt) che hanno risposto\nall'ultima richiesta dell'Elenco server."/>
+	<line text="The master servers' dedicated servers, the games\nplayers host (through the brokers), or all of them." language="it" translation="I server dedicati dei master server, le partite\nospitate dai giocatori (tramite i broker), o tutti."/>
 	<line text="The microphone voice chat listens to." language="it" translation="Il microfono usato dalla chat vocale."/>
 	<line text="The most players the game takes (up to 128)." language="it" translation="Il massimo di giocatori della partita (fino a 128)."/>
 	<line text="The most you send of maps to other players, so\nthat the game keeps the rest of your upload." language="it" translation="Il massimo che invii di mappe agli altri giocatori,\nperché il gioco tenga il resto del tuo upload."/>
@@ -594,6 +651,11 @@
 	<line text="The weapons follow the weapon set above." language="it" translation="Le armi seguono il set di armi sopra."/>
 	<line text="The window's size: 4:3, then 16:10, 16:9 and 21:9\n(its edges can also be dragged)." language="it" translation="La dimensione della finestra: 4:3, poi 16:10, 16:9 e\n21:9 (si possono anche trascinare i bordi)."/>
 	<line text="The zombies chosen when the round starts\n(a human is always left)." language="it" translation="Gli zombie scelti all'inizio del round\n(resta sempre almeno un umano)."/>
+	<line text="There will be five Hills at once. Holding any of\nthem scores." language="it" translation="Ci saranno cinque colline insieme. Tenerne una\nqualsiasi fa punti."/>
+	<line text="There will be four Hills at once. Holding any of\nthem scores." language="it" translation="Ci saranno quattro colline insieme. Tenerne una\nqualsiasi fa punti."/>
+	<line text="There will be only one Hill at a time." language="it" translation="Ci sarà una sola collina alla volta."/>
+	<line text="There will be three Hills at once. Holding any of\nthem scores." language="it" translation="Ci saranno tre colline insieme. Tenerne una\nqualsiasi fa punti."/>
+	<line text="There will be two Hills at once. Holding either one\nscores." language="it" translation="Ci saranno due colline insieme. Tenerne una\nqualsiasi fa punti."/>
 	<line text="Third-person Warthog and Scorpion passengers in\nthe campaign and co-op. Weapon zoom is disabled." language="it" translation="Passeggeri di Warthog e Scorpion in terza persona\nin campagna e co-op. Lo zoom delle armi è disattivato."/>
 	<line text="This game has a password. Type it, then press\nEnter to join." language="it" translation="Questa partita ha una password. Digitala, poi\npremi Invio per entrare."/>
 	<line text="Two hundred and fifty kills to win." language="it" translation="Duecentocinquanta uccisioni per vincere."/>
@@ -634,12 +696,23 @@
 	<line text="Waiting for players" language="it" translation="In attesa di giocatori"/>
 	<line text="Weapons, grenades and starting equipment, for\nthis game." language="it" translation="Armi, granate e dotazione iniziale, per\nquesta partita."/>
 	<line text="What fullscreen and borderless draw at. Fullscreen\nsets the display to it; borderless scales it." language="it" translation="La risoluzione di schermo intero e senza bordi.\nSchermo intero la imposta; senza bordi la scala."/>
+	<line text="What the Server Browser lists and its order: the\nsame settings as its Filters screen." language="it" translation="Cosa elenca l'Elenco server e in che ordine: le\nstesse impostazioni della sua schermata Filtri."/>
 	<line text="Wheel Down" language="it" translation="RUOTA GIÙ"/>
 	<line text="Wheel Up" language="it" translation="RUOTA SU"/>
 	<line text="Where the game's sound and the voices play." language="it" translation="Dove si sentono l'audio del gioco e le voci."/>
 	<line text="Which of the controller's buttons does what (not\nthe keyboard's: Controls Setup sets those)." language="it" translation="Cosa fa ogni pulsante del controller (non quelli\ndella tastiera: li imposta Impostazioni controlli)."/>
 	<line text="Which stick moves and which looks." language="it" translation="Quale levetta muove e quale guarda."/>
 	<line text="With HDR, on an HDR display, show that light\nbrighter than white. From the next start." language="it" translation="Con l'HDR, su schermo HDR, mostra quella luce\npiù brillante del bianco. Dal prossimo avvio."/>
+	<line text="With Kills Score on, each flag capture is worth\n10 points (a kill is worth 1)." language="it" translation="Con Punti uccisioni attivo, ogni cattura della\nbandiera vale 10 punti (un'uccisione vale 1)."/>
+	<line text="With Kills Score on, each flag capture is worth\n100 points (a kill is worth 1)." language="it" translation="Con Punti uccisioni attivo, ogni cattura della\nbandiera vale 100 punti (un'uccisione vale 1)."/>
+	<line text="With Kills Score on, each flag capture is worth\n15 points (a kill is worth 1)." language="it" translation="Con Punti uccisioni attivo, ogni cattura della\nbandiera vale 15 punti (un'uccisione vale 1)."/>
+	<line text="With Kills Score on, each flag capture is worth\n20 points (a kill is worth 1)." language="it" translation="Con Punti uccisioni attivo, ogni cattura della\nbandiera vale 20 punti (un'uccisione vale 1)."/>
+	<line text="With Kills Score on, each flag capture is worth\n25 points (a kill is worth 1)." language="it" translation="Con Punti uccisioni attivo, ogni cattura della\nbandiera vale 25 punti (un'uccisione vale 1)."/>
+	<line text="With Kills Score on, each flag capture is worth\n30 points (a kill is worth 1)." language="it" translation="Con Punti uccisioni attivo, ogni cattura della\nbandiera vale 30 punti (un'uccisione vale 1)."/>
+	<line text="With Kills Score on, each flag capture is worth\n40 points (a kill is worth 1)." language="it" translation="Con Punti uccisioni attivo, ogni cattura della\nbandiera vale 40 punti (un'uccisione vale 1)."/>
+	<line text="With Kills Score on, each flag capture is worth\n5 points (a kill is worth 1)." language="it" translation="Con Punti uccisioni attivo, ogni cattura della\nbandiera vale 5 punti (un'uccisione vale 1)."/>
+	<line text="With Kills Score on, each flag capture is worth\n50 points (a kill is worth 1)." language="it" translation="Con Punti uccisioni attivo, ogni cattura della\nbandiera vale 50 punti (un'uccisione vale 1)."/>
+	<line text="With Kills Score on, each flag capture is worth\n75 points (a kill is worth 1)." language="it" translation="Con Punti uccisioni attivo, ogni cattura della\nbandiera vale 75 punti (un'uccisione vale 1)."/>
 	<line text="With V-Sync off, the most frames a second. Auto:\ntwice the display's refresh rate." language="it" translation="Senza V-Sync, il massimo di fotogrammi al secondo.\nAuto: il doppio della frequenza dello schermo."/>
 	<line text="You come back beside them once it is safe" language="it" translation="Tornerai al suo fianco appena sarà sicuro"/>
 	<line text="You join them when they're on foot" language="it" translation="Ti unirai quando sarà a piedi"/>
@@ -652,10 +725,14 @@
 	<line text="Zombies have shields, as humans do." language="it" translation="Gli zombie hanno gli scudi, come gli umani."/>
 	<line text="\n\nInvite link copied:\npaste it to friends" language="it" translation="\n\nLink d'invito copiato:\nincollalo agli amici"/>
 	<line text="\n\nJoining from here:" language="it" translation="\n\nEntra da qui:"/>
-	<line text="game is" language="it" translation="partita è"/>
-	<line text="games are" language="it" translation="partite sono"/>
+	<line text="dedicated" language="it" translation="dedicato"/>
+	<line text="full or starting" language="it" translation="piena o in avvio"/>
+	<line text="listed on" language="it" translation="elencata su"/>
+	<line text="master servers" language="it" translation="master server"/>
+	<line text="of" language="it" translation="su"/>
 	<line text="player" language="it" translation="giocatore"/>
 	<line text="players" language="it" translation="giocatori"/>
+	<line text="under way" language="it" translation="in corso"/>
 	<line text="ANY ORDER" language="it" translation="ORDINE LIBERO" shorter="yes"/>
 	<line text="AUTO TEAM BALANCE:" language="it" translation="BILANCIAMENTO SQUADRE:" shorter="yes"/>
 	<line text="CONTROLS SETUP" language="it" translation="CONTROLLI" shorter="yes"/>
