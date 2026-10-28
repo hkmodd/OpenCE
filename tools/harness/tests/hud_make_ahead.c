@@ -95,6 +95,12 @@ static long hud_hires_asset_count(void)
 	return asset_count;
 }
 
+/* (a renderer with OpenGL: a dedicated server's has none) */
+static int xgpu_gl_ready(void)
+{
+	return 1;
+}
+
 static int hud_enabled = 1, null_renderer;
 
 static int config_boolean(const char *name)
