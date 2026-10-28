@@ -202,7 +202,7 @@ What sets the size the world is seen at, each measured or derived:
   pad's: the seat's secondary trigger). The throw keeps the hand's smoothed velocity
   at its fastest and where the hand let go; `vr_view.c` gives them, in
   the world's axes, to `network_vr_throw` (a VR server's client sends
-  them to the host, distributed message 95, reliably; the host, or a
+  them to the host, distributed message 97, reliably; the host, or a
   game with no network, keeps them a second), and when the game lets
   the grenade go (`unit_throw_grenade_release`) it leaves from the hand,
   unless a wall is between the hand and the eyes, the way the hand threw
@@ -379,7 +379,7 @@ and taking with the hand all come down to the buttons and the weapon
 switches a gamepad presses, a melee strikes where the weapon aims (not
 through the fist: the host checks no strike's direction), and nothing a
 network game sends changes, so that the VR build plays standard games with
-every build of its network version (38). A VR server says so with the
+every build of its network version (39). A VR server says so with the
 game's settings (a bit of the game's port switches,
 `_network_game_port_vr_rules_bit`), which every machine has, and in its LAN
 advertisement and internet listing: its version with

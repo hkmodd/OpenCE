@@ -117,6 +117,7 @@ symbols in this file:
 #include "models/models.h"
 #include "networking/network_connection.h"
 #include "objects/objects.h"
+#include "rasterizer/rasterizer.h" /* port: rasterizer_memory_alloc */
 #include "rasterizer/rasterizer_model_types.h"
 #include "render/render.h"
 #include "saved games/game_state.h"
@@ -566,7 +567,21 @@ static void first_person_weapon_draw_weapon(
 					struct animation_graph *animation_graph= animation_graph_definition_get(
 						weapon_definition->weapon.interface_definition.first_person_animations.index);
 					struct render_lighting *lighting= object_get_cached_render_lighting(unit_index, FLT_MAX);
+					real values[NUMBER_OF_OUTGOING_OBJECT_FUNCTIONS];
+					real const *weapon_functions = weapon->object.outgoing_function_values;
+					real const *unit_functions = unit->object.outgoing_function_values;
+					real *kept;
 
+					/* port: the tick's functions, moved into this frame, so the
+					charge clicks with the picture instead of once a tick; kept
+					in the rasterizer's memory for the frame, as the groups drawn
+					later read them (render_objects.c) */
+					object_function_values_for_render(first_person_weapon->weapon_index, values);
+					if ((kept = rasterizer_memory_alloc(values, sizeof(values))) != NULL)
+						weapon_functions = kept;
+					object_function_values_for_render(unit_index, values);
+					if ((kept = rasterizer_memory_alloc(values, sizeof(values))) != NULL)
+						unit_functions = kept;
 					model_effect.modifier_shader= NULL;
 					if (TEST_FLAG(unit->unit.flags, _unit_active_camouflaged_bit) ||
 						unit->unit.active_camouflage>0.0f)
@@ -600,7 +615,7 @@ static void first_person_weapon_draw_weapon(
 							model_node_matrices,
 							NULL,
 							weapon->object.outgoing_change_colors,
-							weapon->object.outgoing_function_values,
+							weapon_functions,
 							lighting,
 							&render.camera.position,
 							0.0f,
@@ -629,7 +644,7 @@ static void first_person_weapon_draw_weapon(
 								model_effect.modifier_animation.colors= shield_color_colors(unit_index,
 									unit->object.outgoing_change_colors);
 								model_effect.modifier_animation.values= overshield_effect_values(unit_index,
-									unit->object.outgoing_function_values, TRUE);
+									unit_functions, TRUE);
 							}
 						}
 					}
@@ -652,7 +667,7 @@ static void first_person_weapon_draw_weapon(
 							model_node_matrices,
 							NULL,
 							unit->object.outgoing_change_colors,
-							unit->object.outgoing_function_values,
+							unit_functions,
 							lighting,
 							&render.camera.position,
 							0.0f,
@@ -1014,13 +1029,14 @@ short first_person_weapon_arm_nodes(
 	return marked;
 }
 
-void first_person_weapon_center_flashlight(
+boolean first_person_weapon_center_flashlight(
 	long unit_index,
 	real_point3d *position,
 	real_vector3d *forward,
 	real_vector3d *up)
 {
 	short local_player_index= first_person_weapon_index_from_unit_index(unit_index);
+	boolean centered= FALSE; /* port: returned */
 
 	if (local_player_index!=NONE)
 	{
@@ -1041,11 +1057,12 @@ void first_person_weapon_center_flashlight(
 				position->z= marker.matrix.position.z - marker.matrix.forward.k*0.5f;
 				*forward= marker.matrix.forward;
 				*up= marker.matrix.up;
+				centered= TRUE;
 			}
 		}
 	}
 
-	return;
+	return centered;
 }
 
 boolean first_person_weapon_adjust_light(

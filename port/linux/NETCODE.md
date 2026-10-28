@@ -270,9 +270,36 @@ browser names in its gametype column ("SWAT", "HC CTF"); a browser takes a
 mode for a Slayer game only, and one it does not know as none. Then version 38
 lets the host's shield effects be `players` (SHIELD EFFECTS' PLAYERS' OWN), a
 value of distributed message 91 that tells each client to draw its own
-settings', not synced.
+settings', not synced. Then version 39 marks a dedicated server's game (a
+host with no player of its own, `halo --server`: "Dedicated servers"
+below) with a flag of its LAN advertisement (`HALO_PORT_ADVERTISED_DEDICATED_FLAG`,
+0x04 of the third reserved byte) and of its internet listing (32), which
+the server browser shows. With no new version, each client then tells the
+host its build (distributed message 92, `_distributed_message_client_build`,
+reliably once a game after its ready, over its connection alone): its
+number, configuration, the label it shows ("OpenCE Linux | build 282
+(release)"), the GitHub repository it is made from (owner/name, which the
+build scripts take from CI's `GITHUB_REPOSITORY` or the checkout's origin
+remote) and the mods it plays, a line each ("folder version", in the load
+order); the host keeps it printable and logs it once, and a dedicated
+server shows it in `/api/players` (`client`). A host without the message
+drops it as a kind it does not know.
+Distributed message 93 (`network_damage.c`) needs no new version either,
+as a host that does not know it drops it: a client whose players' shots
+leave from elsewhere than their units' cameras (a VR build, whose weapon
+fires from the player's hand) sends the host where from, unreliably when it
+changes and every eighth tick: an offset from the camera of no more than 0.4
+world units (a player leaning out and an arm). The host keeps it a second,
+for that machine's own players only. When none of the shooter's eyes (nor a
+vehicle's gun) had a line to a reported hit's target, the host's line of
+sight check then also looks from the hand, with the line from the eye to it
+clear (a hand through a wall does not hit) and the hand where one firing at
+the target can be: no more than 0.05 world units behind the eye along the
+line to the target, 0.2 to its side and 0.1 above it (a client cannot claim
+a hand far past a corner). Such hits are counted in the host's log, and the
+host's `network.fire_origins` (true by default) turns the hand off.
 
-VR servers (the VR branch's builds, `network.vr_rules`) play version 38 too,
+VR servers (the VR branch's builds, `network.vr_rules`) play version 39 too,
 and play a standard game with every build of it, their headsets' players
 with the VR extras off. A VR server advertises, and lists, its version with
 `HALO_PORT_NETWORK_VR_SERVER_BIT` (0x8000) set, which every build that
@@ -282,13 +309,14 @@ reserved byte, the listing stamp's second); a VR build joins it only at its
 own VR revision, and shows it as "VR" before the gametype. Its game's
 settings say so too (a bit of the game's port switches,
 `_network_game_port_vr_rules_bit`, which other builds leave alone): every
-machine plays its headsets' players by its rules. VR revision 2, in a VR
+machine plays its headsets' players by its rules. VR revision 3 (its
+messages numbered after the client's build and fire origins), in a VR
 server's game: each headset's player's machine sends its head and hands,
-from its unit, to the host once a tick (distributed message 92,
+from its unit, to the host once a tick (distributed message 94,
 `network_vr.c`, unreliably), which takes a pose only of the sending
 machine's own player, newer than the last, its head within 0.5 world units
 of the unit and its hands within 0.4 of the head, and sends it on to each
-client machine that sees the player (message 93); each machine keeps a
+client machine that sees the player (message 95); each machine keeps a
 player's latest for a second, to pose the player's body by. The pose also
 carries the slot of the weapon the player's other hand holds (or none) and
 that hand's trigger: every other machine's copy of the unit, the host's
@@ -298,20 +326,20 @@ held one in the last three seconds at twice the rate. A player whose pose
 says its weapons are in their places (a bit of the pose) carries four, each
 where the player put it (the hands, the shoulders): neither the game's
 action nor walking over one takes a weapon, the player's hand does. Its
-machine asks the host (distributed message 96, over its stream: the player,
+machine asks the host (distributed message 98, over its stream: the player,
 the hand and the weapon), which takes it only for the machine's own player,
 on foot and alive, with a slot free, not within 6 ticks of their last, the
 hand empty by the pose and within 0.197 world units of the weapon along its
 length, and adds the weapon to the inventory readying none; the player's
 machine puts it in that hand. The player may let a weapon
 fall, thrown as the hand moved: its machine asks the host (distributed
-message 94, over its stream: the player, 0 for the weapon in hand or 1 and
+message 96, over its stream: the player, 0 for the weapon in hand or 1 and
 the slot of the other hand's, and the velocity), which takes it only for
 the machine's own player, on foot and alive, not within half a second of
 their last, no faster than 0.3 world units a tick on top of the unit's own,
 and drops the weapon as the game drops one; the other machines get the
 weapon as any dropped one. A client tells the host how its player's arm
-threw a grenade (distributed message 95, over its stream: the hand's
+threw a grenade (distributed message 97, over its stream: the hand's
 velocity and its place from the eyes, no further than 0.4 world units,
 taken only for the machine's own player); the host's next throw of that
 player's grenade within a second leaves from the hand the way the hand
@@ -376,7 +404,13 @@ hardware id is in it (a line taken out unbans). Both are as the player's
 machine tells them: anyone with administrator or root access can change
 them, and players behind one address share it. The console's `kick <player
 name>` drops a player as `ban` does (every machine told), but adds no line
-and keeps no address out: the player may join again at once.
+and keeps no address out: the player may join again at once. Besides
+`bans.txt`, the host keeps out a machine dropped for cheating or banned for
+ever while it runs, by its address as it joined (an internet play peer's
+stand-in), its real address and its hardware id, any of them; a dedicated
+server's ban for a while (`ban <player> 30m`) is left to its `bans.txt`
+line, whose `until=` ends it, and its `unban` lets the machine in again by
+the line's address or hardware id (`network_game_server_port_forget_kicked_address`).
 
 The players' votes to kick a player (`network_votekick.c`): a client sends
 `_distributed_message_votekick` (the player's absolute index) reliably, and
@@ -431,8 +465,9 @@ names of the network game's players, which the lobby has too). A
 machine's own scoreboard mute stays its own: it plays none of that
 machine's voice and shows none of its players' lines, and tells no one.
 The host's chat settings (`network.text_chat`: on, links allowed, or off;
-always off while its game is listed in the server browser,
-`p2p_hosting_listed`) go to every client in
+always off while a player's game is listed in the server browser,
+`p2p_hosting_listed`, but a dedicated server's own, `chat_listing_allows`)
+go to every client in
 `_distributed_message_chat_config` (one byte of flags), reliably, as they
 change and every 3 seconds. A client without them (from a host without the
 chat, or before they come) has the chat off, and so does a client in a
@@ -440,7 +475,10 @@ public game it joined from the server browser, whatever its host sends (a
 changed host could turn the chat on): while the tunnel reaches the host of
 the listing it joined (`p2p_join_listing`, `p2p_joined_listed_host`; any
 other invite joined since forgets it), it takes no chat line or notice and
-sends none. A client refuses a line the
+sends none, unless the listing was a dedicated server's that a master
+server lists (`p2p_joined_listed_dedicated`: the master's word, from an
+approved operator's key; a listing's own dedicated flag, which any host can
+set, does not count), whose settings it follows. A client refuses a line the
 settings refuse before sending it, and the host refuses it again whatever
 the client knew, telling its machine why: a changed build gets no further.
 Links are found in the line's text (`chat_text_has_link`): a scheme, `www.`,
@@ -513,13 +551,56 @@ do (in free for all, a team of its own).
 
 The game is closed to joins while its machines load and after it ends.
 A machine must join within 10 seconds of connecting; in a game, the host
-drops a machine it has heard nothing from for 15 seconds, and one that
+drops a machine it has heard nothing from for 15 seconds
+(`network.client_timeout_seconds`), and one that
 joined the game in progress and has not loaded in two minutes.
 
 Until it has loaded, the machine hears none of the game's messages (which a
 machine in the pregame refuses, and which the others no longer need), only
 a pregame keep-alive every five seconds from the host
 (`network_server_manager.c`, `network_server_message_handler.c`).
+
+## Dedicated servers
+
+A dedicated server (`halo --server`: `docs/dedicated_server.md`) is a host
+as any other, with these differences, all on the host's side:
+
+- **No player of its own.** The host machine is in the game as machine 0
+  but has no player, so its lobby counts the joined machines' players only
+  (`network_server_manager.c`'s `server_ok_to_countdown`, which asks
+  `server_director_ok_to_countdown` for `server.min_players` and
+  `server.team_start`), and a game with one team's players may start (the
+  next players to join balance the teams). The host waits for no player of
+  its own to precache, and a client's player that quits the game does not
+  end the host's (`network_client_manager.c`: only a local player's quit
+  leaves).
+- **No ticks of its own player.** The host's own action queue may hold no
+  action (`player_queues_new.c`), as a game with no local player has none.
+- **The director.** `port/linux/game/server_director.c` drives the lobby as
+  a player at the pregame screen would: it sets the map and gametype of the
+  rotation's entry, starts the countdown once the server's own rule allows
+  it (`network_game_server_port_ok_to_countdown`, the rule the server checks
+  each tick, then `network_game_server_port_countdown_begin`), and after the postgame
+  goes back to the lobby with the next entry. The clients see a lobby, a
+  game and a postgame as with any host.
+- **Shutdown.** On SIGTERM, a game in progress goes to its postgame, and
+  the host tells every machine it goes (`network_game_server_graceful_shutdown`)
+  before it exits, so that the clients show the scores rather than a lost
+  connection.
+- **The flags.** Since version 39 a dedicated server's LAN advertisement
+  carries `HALO_PORT_ADVERTISED_DEDICATED_FLAG` and its internet listing the
+  dedicated flag (32); a listing published to the master servers is the
+  same signed listing (`docs/master_protocol.md`), and the master's probe
+  is answered on the tunnel's socket (`p2p.c`, `server_master_probe`).
+- **The timeout.** `network.client_timeout_seconds` (15 seconds by
+  default) sets how long a host waits for a silent machine, and two more
+  waits with it: how long a stream's writes may stall before its connection
+  is dropped (`network_connection.c`), on every machine, clients too; and
+  how long a host in a game rides out its network going (an address
+  renewed, a wifi drop: `network_game_server_network_lost`). So it is not
+  the host's alone, and not a dedicated server's only: each machine reads
+  its own setting, and nothing on the wire changes (the machines need not
+  agree on it).
 
 ## Map sharing
 
@@ -716,13 +797,12 @@ its name alone beside it, has its name given back as the map lists find it.
    rest is on the ground, so it lies limp again where it stops instead of
    keeping the pose of its fall in the air. A client puts its copies there, and the difference is
    drawn fading over a few ticks (`render_interpolation.c`) instead of a
-   jump. A vehicle no player drives is carried between those updates along
-   the positions the host sent, a recording's lifepod as well as a Pelican.
-   Its physics velocity swings about that path, so the carry steps from
-   one of those positions to the next, and a jump further than a step of
-   the path is left where the host put it. The host's word that it is at
-   rest stops that step, and the step is kept only for the last gap
-   between positions, so a late word does not drive it on. A client drives its own player's vehicle and sends where it is,
+   jump. A vehicle no player drives, a recording's lifepod as well as a
+   Pelican, moves toward each new position the host sends at its path's
+   speed (the last two positions' difference over the host's ticks between
+   them), and goes on along the path for a few ticks if the next is late,
+   coming back to the newest if none comes. A
+   jump further than a step of the path is left where the host put it. A client drives its own player's vehicle and sends where it is,
    which the host takes within a tolerance, as it does its own player's
    unit, and no further from an anchor (one it took, a newer once a
    second) than the vehicle moves in the client's ticks since, those no

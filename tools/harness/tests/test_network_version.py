@@ -17,7 +17,8 @@ def generated(fault=None):
                          re.M)
     versions = re.search(r'^static struct\n\{\n\tword version;.*?\} network_game_client_advertised_versions\['
                          r'MAXIMUM_NETWORK_ADVERTISED_GAMES\];', client, re.M | re.S).group(0)
-    code = '\n'.join(defines + [versions, function(client, 'network_game_client_advertised_game_compatible'),
+    code = '\n'.join(defines + [versions, function(client, 'network_game_client_tell_version'),
+                                function(client, 'network_game_client_advertised_game_compatible'),
                                 function(client, 'network_game_client_advertised_game_kind')])
     if fault:
         code = mutated(code, *fault)

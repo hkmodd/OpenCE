@@ -66,7 +66,7 @@ is newer (network_client_manager.c). A host advertises it, with its netcode,
 in its game's advertisement's reserved bytes (network_server_message_handler.c),
 which hosts built before there was a version send as zeros: version 0.
 Raise it with any change to what the machines send each other. */
-#define HALO_PORT_NETWORK_VERSION 38
+#define HALO_PORT_NETWORK_VERSION 39
 /* ... a VR server's (network.vr_rules: the VR branch's builds) is advertised
 and listed with this bit set in its version, which every build that
 compares versions alone takes for a newer one and does not join; and with
@@ -75,7 +75,7 @@ change to what a VR server's machines send each other alone, which a VR
 build must match to join one. A host that is no VR server advertises
 HALO_PORT_NETWORK_VERSION alone and plays with any build of it. */
 #define HALO_PORT_NETWORK_VR_SERVER_BIT 0x8000
-#define HALO_PORT_NETWORK_VR_REVISION 2
+#define HALO_PORT_NETWORK_VR_REVISION 3
 /* ... the advertisement's reserved bytes: the version (a little-endian word),
 then flags, then the game's kind (an OpenCE gametype's mode, and Hardcore:
 port/linux/game/game_modes.h's game_modes_kind), for the server browser, then
@@ -100,6 +100,9 @@ netcode was removed; hosts of version 4 built before then may not) */
 /* ... the game is under way (loading, playing or over), not in its lobby:
 the menus show it before joining it (hosts built before then never set it) */
 #define HALO_PORT_ADVERTISED_IN_PROGRESS_FLAG 0x02
+/* ... the host is a dedicated server, with no player of its own (halo
+--server: port/linux/src/server_mode.c): the menus say so (from version 39) */
+#define HALO_PORT_ADVERTISED_DEDICATED_FLAG 0x04
 
 /* a message header's 12-bit length allows messages of up to 0xFFF bytes,
 header included; the per-tick update of 128 players is 3,857 */
