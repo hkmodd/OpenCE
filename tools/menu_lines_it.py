@@ -10,19 +10,15 @@ shotgun), PARTECIPA (join game), multigiocatore, Profilo:."""
 
 # the English line: its Italian
 LINES = {
-    "%d %s on a newer version: update the game to join": "%d %s su una versione più recente: aggiorna il gioco per entrare",
     "%d players of %d, on %d machines%s": "%d di %d giocatori, su %d computer%s",
-    "%s: %d %s of %d%s%s": "%s: %d %s su %d%s%s",
+    "%s%s\\n%s\\n%d of %d players\\n\\n%s": "%s%s\\n%s\\n%d di %d giocatori\\n\\n%s",
     "%s\\n%d of %d players\\non %d machines": "%s\\n%d di %d giocatori\\nsu %d computer",
-    "%s\\n%s\\n%d of %d players\\n\\n%s": "%s\\n%s\\n%d di %d giocatori\\n\\n%s",
     "%s\\n%s\\nScore to win: %ld": "%s\\n%s\\nPunti per vincere: %ld",
     "%s\\nFree for all\\nA kill with each weapon": "%s\\nTutti contro tutti\\nUn'uccisione per arma",
     "%s\\nTeams\\nRound time: %d min": "%s\\nSquadre\\nDurata round: %d min",
     "%s\\nTeams\\nUntil no human is left": "%s\\nSquadre\\nFino all'ultimo umano",
     "%s\\n\\nThis game is under way.\\n\\n%s": "%s\\n\\nQuesta partita è in corso.\\n\\n%s",
     ", TEAMS": ", SQUADRE",
-    ", full or starting": ", piena o in avvio",
-    ", under way": ", in corso",
     "1 SECOND": "1 SECONDO",
     "10 SECONDS": "10 SECONDI",
     "15 SECONDS": "15 SECONDI",
@@ -44,9 +40,11 @@ LINES = {
         "Il punteggio a squadre: una colonna per squadra,\\no tutti i giocatori in ordine di punteggio.",
     "ADD PLAYER": "+ GIOCATORE",
     "AIM ASSIST:": "MIRA ASSISTITA:",
+    "ALL GAMES": "TUTTE LE PARTITE",
     "ALLIES": "ALLEATI",
     "ALLOWED": "CONSENTITA",
     "ALLY FRIENDLY FIRE:": "FUOCO AMICO ALLEATI:",
+    "ANY": "QUALSIASI",
     "ANYONE NEAR": "CHIUNQUE VICINO",
     "ARM SHIELDS:": "SCUDI SULLE BRACCIA:",
     "ASSAULT RIFLE": "FUCILE D'ASSALTO",
@@ -56,8 +54,9 @@ LINES = {
     "Adjust the volume of the music\\nand of everything else.\\n\\nProfile:":
         "Regola il volume della musica\\ne di tutto il resto.\\n\\nProfilo:",
     "Another controller: START joins.": "Un altro controller: START per unirsi.",
-    "Anyone can see and join your game: it is listed\\nin everyone's Server Browser.":
-        "Chiunque può vedere la partita e unirsi: appare\\nnell'elenco server di tutti.",
+    "Anyone can see and join your game: it is listed\\nfor everyone through the brokers.":
+        "Chiunque può vedere la tua partita ed entrare:\\nè elencata per tutti tramite i broker.",
+    "Asking the brokers for the host...": "Richiesta dell'host ai broker...",
     "BLOCK M+KB": "BLOCCA M+T",
     "BORDERLESS": "SENZA BORDI",
     "BUTTON LAYOUT:": "DISPOSIZIONE PULSANTI:",
@@ -81,17 +80,20 @@ LINES = {
     "Choose what to show, with left and right.": "Scegli cosa mostrare con sinistra e destra.",
     "Classic: plain Xbox buttons. Gems: shaded Xbox\\nbuttons. Dark Gems: the menu's button artwork.":
         "Classico: pulsanti Xbox piatti. Gemme: pulsanti\\nXbox sfumati. Gemme scure: la grafica dei menu.",
-    "Connecting to %s...": "Connessione a %s...",
+    "Connected: joining the game...": "Connesso: ingresso nella partita...",
     "Copy an invite link and PASTE LINK, or accept a Discord invite":
         "Copia un link d'invito e INCOLLA LINK, o accetta un invito Discord",
     "Could not join the game.": "Impossibile unirsi alla partita.",
-    "Could not reach %s": "Impossibile raggiungere %s",
     "DARK GEMS": "GEMME SCURE",
+    "DEDICATED": "DEDICATI",
+    "DEDICATED FIRST": "PRIMA I DEDICATI",
     "DIRECT LINK": "LINK DIRETTO",
     "DISPLAY MODE:": "MODALITÀ SCHERMO:",
     "DOWNLOAD MAPS:": "SCARICA MAPPE:",
     "Damage from the other players will only reduce\\nshields. Health will be unaffected.":
         "I danni degli altri giocatori ridurranno solo\\ngli scudi. La salute non ne risentirà.",
+    "Dedicated server": "Server dedicato",
+    "Dedicated server by": "Server dedicato di",
     "Disable mouse aim assist for mouse/keyboard players.\\nController and touch aim assist are unchanged.":
         "Disattiva la mira assistita per chi usa mouse e\\ntastiera. Controller e touch restano invariati.",
     "Downloading Custom Edition maps you do not have,\\nand helping send them to other players.":
@@ -116,6 +118,8 @@ LINES = {
     "EXTRA VEHICLES:": "VEICOLI AGGIUNTIVI:",
     "Each kill gives the next weapon; a kill with the\\nlast wins. Free for all Slayer only.":
         "Ogni uccisione dà l'arma successiva; vince chi\\nuccide con l'ultima. Solo Slayer tutti contro tutti.",
+    "Each kill scores a point for the killer's team (a\\nbetrayal takes one away), and each capture is worth\\nKills per Capture. The limit is in captures.":
+        "Ogni uccisione dà un punto alla squadra di chi\\nuccide (un tradimento lo toglie), e ogni cattura vale\\nUccisioni per cattura. Il limite è in catture.",
     "Each team's vehicles and their respawn time, for\\nthis game.":
         "I veicoli di ogni squadra e il loro tempo di\\nriapparizione, per questa partita.",
     "Echo sounds as the place you are in does, and\\nmuffle those behind walls, as the Xbox did.":
@@ -175,6 +179,7 @@ LINES = {
         "Gli scudi di tutti illuminano ciò che li circonda\\nquando brillano.",
     "FAILED": "ERRORE",
     "FIRST ZOMBIES:": "PRIMI ZOMBIE:",
+    "FORCE TEAM SPAWNS:": "RIAPPARIZIONI DI SQUADRA:",
     "FOV AND VIEWMODELS:": "FOV E MODELLI ARMA:",
     "FRAME RATE LIMIT:": "LIMITE FOTOGRAMMI:",
     "FRIENDLY FIRE OFF": "FUOCO AMICO SPENTO",
@@ -200,12 +205,15 @@ LINES = {
     "Fullscreen takes the display; borderless covers it\\nwith a window. F11 switches to the window.":
         "Schermo intero occupa lo schermo; senza bordi lo\\ncopre con una finestra. F11 passa alla finestra.",
     "GAME NAME:": "NOME PARTITA:",
+    "GAME TYPE": "TIPO PARTITA",
     "GAME TYPE:": "TIPO PARTITA:",
     "GEMS": "GEMME",
     "GLOW": "BAGLIORE",
     "GLOW INTENSITY:": "INTENSITÀ BAGLIORE:",
     "GLOW+OVERSHIELD": "BAGLIORE+SOVRASCUDO",
     "GRAPHICS:": "GRAFICA:",
+    "Games on a newer version (update the game to join them):":
+        "Partite su una versione più recente (aggiorna il gioco per entrare):",
     "HDR DISPLAY:": "SCHERMO HDR:",
     "HELP SEND MAPS:": "AIUTA A INVIARE:",
     "HIGH-RES HUD:": "HUD ALTA RISOLUZIONE:",
@@ -218,6 +226,7 @@ LINES = {
         "Ospita una partita su Internet:\\ni giocatori entrano col link\\nd'invito o con Discord.",
     "Host and join games over the internet by invite\\nlinks; off keeps to the local network.":
         "Ospita partite su Internet ed entra con i link\\nd'invito; se disattivato, solo la rete locale.",
+    "Hosted by a player (anonymous listing)": "Ospitata da un giocatore (annuncio anonimo)",
     "How fast the right stick turns the view.": "Velocità della visuale con la levetta destra.",
     "How fast the view turns side to side for the\\nmouse's movement.":
         "Velocità con cui la visuale gira di lato al\\nmovimento del mouse.",
@@ -232,6 +241,7 @@ LINES = {
         "Conversione dei suoni alla frequenza d'uscita:\\nsinc è pulito; lineare è più vivo, con aliasing.",
     "Humans killed join the zombies, who win when\\nno human is left. Team Slayer only.":
         "Gli umani uccisi diventano zombie, che vincono\\nquando non resta nessun umano. Solo Slayer a squadre.",
+    "IF DOWNLOADABLE": "SE SCARICABILI",
     "IN-GAME HELP:": "AIUTO IN GIOCO:",
     "INDICATOR OPTIONS:": "OPZIONI INDICATORE:",
     "INFECTION": "INFEZIONE",
@@ -251,12 +261,14 @@ LINES = {
     "In multiplayer, whose names are drawn above their\\nheads.":
         "In multigiocatore, di chi mostrare il nome sopra\\nla testa.",
     "Internet play is off (Settings)": "Il gioco su Internet è disattivato (Impostazioni)",
+    "Internet play is off:\\nSettings > Network Setup": "Il gioco su Internet è disattivato:\\nImpostazioni > Rete",
     "Internet play, updates and the\\nmultiplayer HUD.\\n\\nProfile:":
         "Gioco su Internet, aggiornamenti\\ne HUD multigiocatore.\\n\\nProfilo:",
     "It cannot be joined now:\\nit is loading, over or full.":
         "Ora non è possibile entrare:\\nsta caricando, è finita o è piena.",
     "JOIN FROM CLIPBOARD:": "ENTRA DAGLI APPUNTI:",
     "JOIN GAME joins it now;\\nits players show then.": "PARTECIPA per entrare ora;\\npoi appariranno i giocatori.",
+    "JOINING": "INGRESSO",
     "JOINING THE GAME\\nYou spawn beside a teammate once it is safe":
         "INGRESSO IN PARTITA\\nRiapparirai accanto a un compagno appena sarà sicuro",
     "Join a game by its invite link,\\nor one a Discord invite\\nreached.":
@@ -265,6 +277,8 @@ LINES = {
         "Entra nella partita di un link d'invito copiato\\nprima di passare al gioco.",
     "Joining a game on a Custom Edition map you do not\\nhave: download it from the players (if shared).":
         "Entrando in una partita su una mappa Custom Edition\\nche non hai: scaricala dai giocatori (se condivisa).",
+    "KILLS PER CAPTURE:": "UCCISIONI PER CATTURA:",
+    "KILLS SCORE:": "PUNTI UCCISIONI:",
     "Keep floors and walls sharp at a grazing angle,\\nwhich the Xbox did not. Off: as the Xbox.":
         "Pavimenti e muri nitidi anche di sbieco, come\\nsu Xbox non erano. Se disattivato, come su Xbox.",
     "Keep the light of explosions, plasma and the sun\\npast white, and roll it off instead of clipping.":
@@ -276,9 +290,11 @@ LINES = {
     "LIGHT SHOW": "SPETTACOLO DI LUCI",
     "LINEAR": "LINEARE",
     "LISTING:": "VISIBILITÀ:",
+    "LISTS:": "ELENCA:",
     "LIVE": "IN CORSO",
     "LOADOUT:": "DOTAZIONE:",
     "LOBBY VOICE CHAT:": "CHAT VOCALE LOBBY:",
+    "LOCKED FIRST": "PRIMA LE PROTETTE",
     "LOOK SENSITIVITY:": "SENSIBILITÀ VISUALE:",
     "Let internet play ask the router to forward its\\nport, for networks that stop connections.":
         "Il gioco su Internet chiede al router di inoltrare\\nla porta, per le reti che bloccano le connessioni.",
@@ -287,14 +303,22 @@ LINES = {
         "Spettacolo di luci: tre volte più ampio, pieno da\\nun terzo del lampo. Online: lo sceglie l'host.",
     "Light models for each pixel, without the facets\\nof the Xbox's lighting for each vertex.":
         "Illumina i modelli per pixel, senza le sfaccettature\\ndell'illuminazione per vertice di Xbox.",
+    "List games no one is playing yet.": "Elenca le partite in cui non gioca ancora nessuno.",
+    "List games on maps you do not have: IF\\nDOWNLOADABLE, those Map Sharing can download.":
+        "Elenca le partite su mappe che non hai: SE\\nSCARICABILI, quelle che Condivisione mappe può scaricare.",
+    "List games with no room left.": "Elenca le partite senza più posti.",
+    "Listed for everyone through the brokers, and on\\nthe master servers with your publisher key.":
+        "Elencata per tutti tramite i broker, e sui\\nmaster server con la tua chiave di pubblicazione.",
     "Lives, health, shields and respawning, for this game.": "Vite, salute, scudi e riapparizione, per questa partita.",
     "Look for a new version when the game starts.": "Cerca una nuova versione all'avvio del gioco.",
     "Looking for games on your LAN...": "Ricerca partite sulla tua LAN...",
     "Looking for public games...": "Ricerca partite pubbliche...",
     "MADE WHEN THE GAME STARTS": "CREATO ALL'AVVIO DELLA PARTITA",
+    "MAP": "MAPPA",
     "MAP SHARING": "CONDIVISIONE MAPPE",
     "MAP SHARING:": "CONDIVISIONE MAPPE:",
     "MAP WEAPONS:": "ARMI DELLA MAPPA:",
+    "MASTER SERVERS:": "MASTER SERVER:",
     "MATCH TIMER:": "TIMER PARTITA:",
     "MAXIMUM PLAYERS:": "GIOCATORI MAX:",
     "MELEE DEMOTES:": "CORPO A CORPO RETROCEDE:",
@@ -302,19 +326,33 @@ LINES = {
     "MODEL DETAIL:": "DETTAGLIO MODELLI:",
     "MOVE DOWN": "SPOSTA GIÙ",
     "MOVE UP": "SPOSTA SU",
+    "MULTI-HILL:": "PIÙ COLLINE:",
     "MULTIPLIER:": "MOLTIPLICATORE:",
     "Moving the mouse forward looks down.": "Spostando il mouse in avanti si guarda in basso.",
+    "NAME": "NOME",
     "NATIVE": "NATIVA",
     "NEEDLER": "PISTOLA AD AGHI",
+    "NEWER": "PIÙ NUOVA",
     "NO GRENADES": "NIENTE GRANATE",
+    "NONE LISTED": "NESSUNO IN ELENCO",
     "NONE: A LAN GAME": "NESSUNO: PARTITA IN LAN",
+    "NOT ASKED YET": "NON ANCORA INTERROGATI",
     "Native draws at the resolution; Original draws\\nthe Xbox's 640x480 and scales it up.":
         "Nativa disegna alla risoluzione; Originale disegna\\na 640x480 come Xbox e ingrandisce.",
+    "Needs the newer build: Settings > Network Setup > Check for updates":
+        "Serve la build più recente: Impostazioni > Rete > Cerca aggiornamenti",
+    "Neither the master servers\\nnor the brokers answer:\\ncheck the connection":
+        "Né i master server\\nné i broker rispondono:\\ncontrolla la connessione",
     "New player: press START.": "Nuovo giocatore: premi START.",
+    "No games match the filters": "Nessuna partita corrisponde ai filtri",
+    "No master server answered: showing player-hosted games only":
+        "Nessun master server ha risposto: solo partite ospitate da giocatori",
     "No motion sensor, no aim assist, and a kill\\nrestores the killer's health and shields.":
         "Niente rilevatore né mira assistita; uccidere\\nripristina salute e scudi di chi uccide.",
     "No primary weapon.": "Nessuna arma principale.",
     "No public games found": "Nessuna partita pubblica trovata",
+    "No route to the host: a forwarded port on either side helps":
+        "Host irraggiungibile: aiuta una porta inoltrata da una delle due parti",
     "No secondary weapon.": "Nessuna arma secondaria.",
     "No shields, and a shot to the head kills. Slayer only.":
         "Niente scudi, e un colpo alla testa uccide. Solo Slayer.",
@@ -324,6 +362,8 @@ LINES = {
         "Nessuna arma nella mappa: con dotazione NESSUNO\\ne NESSUNO, solo corpo a corpo e granate.",
     "Not synced: each player sees the shield effects\\nof their own Video Setup settings.":
         "Non sincronizzati: ognuno vede gli effetti scudo\\ndelle proprie impostazioni video.",
+    "OF": "SU",
+    "OLDER": "PIÙ VECCHIA",
     "OPEN MIC": "MICROFONO APERTO",
     "OPENCE OPTIONS": "OPZIONI OPENCE",
     "ORIGINAL": "ORIGINALE",
@@ -332,7 +372,9 @@ LINES = {
     "OVERSHIELD:": "SOVRASCUDO:",
     "On foot, horizontal at 16:9, in degrees.\\nDefault keeps the stock view.":
         "A piedi, orizzontale in 16:9, in gradi.\\nPredefinito mantiene la visuale originale.",
+    "Only flag captures score.": "Contano solo le catture della bandiera.",
     "Only players with your invite link can join.": "Solo chi ha il tuo link d'invito può entrare.",
+    "P2P GAMES": "PARTITE P2P",
     "PASSENGER THIRD PERSON:": "TERZA PERSONA PASSEGGERI:",
     "PASTE LINK": "INCOLLA LINK",
     "PAUSE MENU": "MENU PAUSA",
@@ -346,6 +388,7 @@ LINES = {
     "PLAYER NAME SIZE:": "DIMENSIONE NOMI:",
     "PLAYER NAMES:": "NOMI GIOCATORI:",
     "PLAYER OPTIONS:": "OPZIONI GIOCATORI:",
+    "PLAYERS": "GIOCATORI",
     "PLAYERS' OWN": "DI OGNUNO",
     "PRESS A KEY": "PREMI UN TASTO",
     "PRESS SPACE OR A TO VOTE TO SKIP   %d OF %d": "PREMI SPAZIO O A PER VOTARE IL SALTO   %d SU %d",
@@ -353,6 +396,7 @@ LINES = {
     "PRIVATE": "PRIVATA",
     "PUBLIC": "PUBBLICA",
     "PUSH TO TALK": "PREMI E PARLA",
+    "Password required": "Password richiesta",
     "Pickups are as the campaign has them.": "Gli oggetti sono quelli della campagna.",
     "Pickups grow with the players: by the value of\\n'Per Player' for each player past the first.":
         "Gli oggetti crescono con i giocatori: di\\n'Per giocatore' per ogni giocatore oltre il primo.",
@@ -406,6 +450,10 @@ LINES = {
     "Players who join without the map cannot play.": "Chi entra senza la mappa non può giocare.",
     "Players who join without the map download it\\nfrom you and the other players.":
         "Chi entra senza la mappa la scarica\\nda te e dagli altri giocatori.",
+    "Players will only spawn at their own team's\\nCapture the Flag spawn points.":
+        "I giocatori riappariranno solo nei punti di\\nriapparizione Cattura la bandiera della loro squadra.",
+    "Players will spawn at any spawn point the\\ngametype allows.":
+        "I giocatori riappariranno in qualsiasi punto\\nche il tipo di partita consente.",
     "Press a key, a mouse button or turn the wheel...\\nEscape cancels, Delete clears it.":
         "Premi un tasto, un pulsante del mouse o gira la\\nrotella... Esc annulla, Canc lo cancella.",
     "Pushing the right stick up looks down.": "Spingendo in su la levetta destra si guarda in basso.",
@@ -415,11 +463,14 @@ LINES = {
     "REVERB:": "RIVERBERO:",
     "ROCKET LAUNCHER": "LANCIARAZZI",
     "Rumble the controller.": "Fa vibrare il controller.",
+    "Runs an older build: it can be joined once it updates":
+        "Usa una build più vecchia: potrai entrare quando si aggiorna",
     "SAME": "UGUALE",
     "SCOREBOARD LAYOUT:": "DISPOSIZIONE PUNTEGGI:",
     "SCOREBOARD PANEL:": "PANNELLO PUNTEGGI:",
     "SECONDARY WEAPON:": "ARMA SECONDARIA:",
     "SERVER BROWSER": "ELENCO SERVER",
+    "SERVER BROWSER:": "ELENCO SERVER:",
     "SETTINGS": "IMPOSTAZIONI",
     "SHADOW RESOLUTION:": "RISOLUZIONE OMBRE:",
     "SHARE MAPS:": "CONDIVIDI MAPPE:",
@@ -427,12 +478,16 @@ LINES = {
     "SHIELD EFFECTS:": "EFFETTI SCUDO:",
     "SHIELD GLOW:": "BAGLIORE SCUDO:",
     "SHOTGUN": "FUCILE",
+    "SHOW EMPTY SERVERS:": "MOSTRA SERVER VUOTI:",
+    "SHOW FULL SERVERS:": "MOSTRA SERVER PIENI:",
+    "SHOW MISSING MAPS:": "MOSTRA MAPPE MANCANTI:",
     "SHOW+OVERSHIELD": "LUCI+SOVRASCUDO",
     "SHOW:": "MOSTRA:",
     "SINGLEPLAYER": "GIOCATORE SINGOLO",
     "SKULL DAMAGE:": "DANNO TESCHIO:",
     "SMOOTH MOTION:": "MOVIMENTO FLUIDO:",
     "SNIPER RIFLE": "FUCILE DI PRECISIONE",
+    "SORT BY:": "ORDINA PER:",
     "SOUND PROCESSING:": "ELABORAZIONE AUDIO:",
     "SOUND:": "AUDIO:",
     "SOUTHPAW": "MANCINA",
@@ -456,6 +511,8 @@ LINES = {
         "Settantacinque uccisioni per vincere. Preparati a\\nuna lunga battaglia.",
     "Shields light their surroundings as they flare.\\nOnline: the host's choice.":
         "Gli scudi illuminano ciò che li circonda quando\\nbrillano. Online: lo sceglie l'host.",
+    "Show servers on maps you do not have if their\\nhost shares them: they download as you join.":
+        "Mostra i server su mappe che non hai se il loro\\nhost le condivide: si scaricano mentre entri.",
     "Show the game's hints about its controls.": "Mostra i suggerimenti del gioco sui controlli.",
     "Slow and drag the view along with a target while\\naiming with the mouse, as with a controller.":
         "Rallenta e trascina la visuale col bersaglio mentre\\nmiri col mouse, come con un controller.",
@@ -468,7 +525,7 @@ LINES = {
         "Quantità fisse per le opzioni in questa modalità.\\nGli oggetti arrivano al massimo a otto volte tanti.",
     "Stock picks models' detail by the Xbox's 480 lines;\\nnative by this display's; highest, always the best.":
         "Originale sceglie il dettaglio dalle 480 linee Xbox;\\nnativa dallo schermo; massima, sempre la migliore.",
-    "Strict NAT, turn on UPnP: could not reach %s": "NAT rigido, attiva UPnP: impossibile raggiungere %s",
+    "Strict NAT: turn on UPnP, or forward a port": "NAT rigido: attiva UPnP, o inoltra una porta",
     "TEAM": "SQUADRA",
     "TEAM NEAR": "SQUADRA VICINA",
     "TEAM, ENEMIES NEAR": "SQUADRA E NEMICI",
@@ -490,9 +547,25 @@ LINES = {
     "The game is gone.": "La partita non c'è più.",
     "The game type's own rules.": "Le regole proprie del tipo di gioco.",
     "The gametype and its rules, for this game.": "Il tipo di partita e le sue regole, per questa partita.",
+    "The host answered: connecting (UDP hole punching)...": "L'host ha risposto: connessione (UDP hole punching)...",
+    "The host did not answer (offline, or its listing is stale)":
+        "L'host non ha risposto (offline, o il suo annuncio è vecchio)",
+    "The host refused: another version": "L'host ha rifiutato: altra versione",
+    "The host refused: banned": "L'host ha rifiutato: sei bannato",
+    "The host refused: closed": "L'host ha rifiutato: partita chiusa",
+    "The host refused: full": "L'host ha rifiutato: partita piena",
+    "The host refused: its invite changed": "L'host ha rifiutato: il suo invito è cambiato",
+    "The host refused: wrong password": "L'host ha rifiutato: password errata",
+    "The host refused: your player name": "L'host ha rifiutato: il tuo nome giocatore",
+    "The list's order. Its column titles sort it too;\\nchoosing one again reverses it.":
+        "L'ordine dell'elenco. Lo ordinano anche i titoli\\ndelle colonne; sceglierne di nuovo uno lo inverte.",
     "The map's weapons appear where its designers\\nplaced them.":
         "Le armi della mappa appaiono dove i suoi autori\\nle hanno messe.",
     "The map's weapons, without any grenades.": "Le armi della mappa, senza granate.",
+    "The master servers (masters.txt) that answered\\nwhen the Server Browser last asked.":
+        "I master server (masters.txt) che hanno risposto\\nall'ultima richiesta dell'Elenco server.",
+    "The master servers' dedicated servers, the games\\nplayers host (through the brokers), or all of them.":
+        "I server dedicati dei master server, le partite\\nospitate dai giocatori (tramite i broker), o tutti.",
     "The microphone voice chat listens to.": "Il microfono usato dalla chat vocale.",
     "The most players the game takes (up to 128).": "Il massimo di giocatori della partita (fino a 128).",
     "The most you send of maps to other players, so\\nthat the game keeps the rest of your upload.":
@@ -524,6 +597,15 @@ LINES = {
         "La dimensione della finestra: 4:3, poi 16:10, 16:9 e\\n21:9 (si possono anche trascinare i bordi).",
     "The zombies chosen when the round starts\\n(a human is always left).":
         "Gli zombie scelti all'inizio del round\\n(resta sempre almeno un umano).",
+    "There will be five Hills at once. Holding any of\\nthem scores.":
+        "Ci saranno cinque colline insieme. Tenerne una\\nqualsiasi fa punti.",
+    "There will be four Hills at once. Holding any of\\nthem scores.":
+        "Ci saranno quattro colline insieme. Tenerne una\\nqualsiasi fa punti.",
+    "There will be only one Hill at a time.": "Ci sarà una sola collina alla volta.",
+    "There will be three Hills at once. Holding any of\\nthem scores.":
+        "Ci saranno tre colline insieme. Tenerne una\\nqualsiasi fa punti.",
+    "There will be two Hills at once. Holding either one\\nscores.":
+        "Ci saranno due colline insieme. Tenerne una\\nqualsiasi fa punti.",
     "Third-person Warthog and Scorpion passengers in\\nthe campaign and co-op. Weapon zoom is disabled.":
         "Passeggeri di Warthog e Scorpion in terza persona\\nin campagna e co-op. Lo zoom delle armi è disattivato.",
     "This game has a password. Type it, then press\\nEnter to join.":
@@ -577,12 +659,34 @@ LINES = {
         "Armi, granate e dotazione iniziale, per\\nquesta partita.",
     "What fullscreen and borderless draw at. Fullscreen\\nsets the display to it; borderless scales it.":
         "La risoluzione di schermo intero e senza bordi.\\nSchermo intero la imposta; senza bordi la scala.",
+    "What the Server Browser lists and its order: the\\nsame settings as its Filters screen.":
+        "Cosa elenca l'Elenco server e in che ordine: le\\nstesse impostazioni della sua schermata Filtri.",
     "Where the game's sound and the voices play.": "Dove si sentono l'audio del gioco e le voci.",
     "Which of the controller's buttons does what (not\\nthe keyboard's: Controls Setup sets those).":
         "Cosa fa ogni pulsante del controller (non quelli\\ndella tastiera: li imposta Impostazioni controlli).",
     "Which stick moves and which looks.": "Quale levetta muove e quale guarda.",
     "With HDR, on an HDR display, show that light\\nbrighter than white. From the next start.":
         "Con l'HDR, su schermo HDR, mostra quella luce\\npiù brillante del bianco. Dal prossimo avvio.",
+    "With Kills Score on, each flag capture is worth\\n10 points (a kill is worth 1).":
+        "Con Punti uccisioni attivo, ogni cattura della\\nbandiera vale 10 punti (un'uccisione vale 1).",
+    "With Kills Score on, each flag capture is worth\\n100 points (a kill is worth 1).":
+        "Con Punti uccisioni attivo, ogni cattura della\\nbandiera vale 100 punti (un'uccisione vale 1).",
+    "With Kills Score on, each flag capture is worth\\n15 points (a kill is worth 1).":
+        "Con Punti uccisioni attivo, ogni cattura della\\nbandiera vale 15 punti (un'uccisione vale 1).",
+    "With Kills Score on, each flag capture is worth\\n20 points (a kill is worth 1).":
+        "Con Punti uccisioni attivo, ogni cattura della\\nbandiera vale 20 punti (un'uccisione vale 1).",
+    "With Kills Score on, each flag capture is worth\\n25 points (a kill is worth 1).":
+        "Con Punti uccisioni attivo, ogni cattura della\\nbandiera vale 25 punti (un'uccisione vale 1).",
+    "With Kills Score on, each flag capture is worth\\n30 points (a kill is worth 1).":
+        "Con Punti uccisioni attivo, ogni cattura della\\nbandiera vale 30 punti (un'uccisione vale 1).",
+    "With Kills Score on, each flag capture is worth\\n40 points (a kill is worth 1).":
+        "Con Punti uccisioni attivo, ogni cattura della\\nbandiera vale 40 punti (un'uccisione vale 1).",
+    "With Kills Score on, each flag capture is worth\\n5 points (a kill is worth 1).":
+        "Con Punti uccisioni attivo, ogni cattura della\\nbandiera vale 5 punti (un'uccisione vale 1).",
+    "With Kills Score on, each flag capture is worth\\n50 points (a kill is worth 1).":
+        "Con Punti uccisioni attivo, ogni cattura della\\nbandiera vale 50 punti (un'uccisione vale 1).",
+    "With Kills Score on, each flag capture is worth\\n75 points (a kill is worth 1).":
+        "Con Punti uccisioni attivo, ogni cattura della\\nbandiera vale 75 punti (un'uccisione vale 1).",
     "With V-Sync off, the most frames a second. Auto:\\ntwice the display's refresh rate.":
         "Senza V-Sync, il massimo di fotogrammi al secondo.\\nAuto: il doppio della frequenza dello schermo.",
     "You come back beside them once it is safe": "Tornerai al suo fianco appena sarà sicuro",
@@ -598,10 +702,14 @@ LINES = {
     "Zombies have shields, as humans do.": "Gli zombie hanno gli scudi, come gli umani.",
     "\\n\\nInvite link copied:\\npaste it to friends": "\\n\\nLink d'invito copiato:\\nincollalo agli amici",
     "\\n\\nJoining from here:": "\\n\\nEntra da qui:",
-    "game is": "partita è",
-    "games are": "partite sono",
+    "dedicated": "dedicato",
+    "full or starting": "piena o in avvio",
+    "listed on": "elencata su",
+    "master servers": "master server",
+    "of": "su",
     "player": "giocatore",
     "players": "giocatori",
+    "under way": "in corso",
     # (the controls' keys and buttons no loc.map string says)
     "Keypad Comma": "TASTIERINO ,",
     "Wheel Up": "RUOTA SU",
@@ -631,8 +739,8 @@ LINES = {
         "I giocatori possono scriversi, anche link. Spenta\\nnelle partite internet pubbliche.",
     "Players can type to each other; lines with links\\nare refused. Off in a public internet game.":
         "I giocatori possono scriversi; le righe con link\\nsono rifiutate. Spenta nelle partite internet pubbliche.",
-    "Players' names above their heads, the\\nscoreboard, and the text chat.":
-        "I nomi sopra la testa dei giocatori, il\\npunteggio e la chat testuale.",
+    "Players' names above their heads, the\\nscoreboard, the text chat and the match clock.":
+        "I nomi sopra la testa dei giocatori, il\\npunteggio, la chat testuale e il timer della partita.",
     "SEVERE": "GRAVI",
     "SHOW": "MOSTRA",
     "SHOW the text chat, or HIDE it: no lines, and\\nits keys and D-pad Up open nothing.":
@@ -678,8 +786,8 @@ SAME = {
     "12 KBPS", "16 KBPS", "24 KBPS", "32 KBPS", "48 KBPS", "64 KBPS", "8 KBPS", "1 MB/S", "128 KB/S", "2 MB/S",
     "10 MB/S", "16 MB/S", "20 MB/S", "256 KB/S", "4 MB/S", "512 KB/S", "64 KB/S", "8 MB/S", "ANTI-ALIASING:",
     "AUTO", "BUMPER JUMPER", "CO-OP", "FOV:", "FXAA", "HDR:", "MSAA 2X", "MSAA 4X", "MSAA 8X", "PASSWORD", "PASSWORD:",
-    "SINC", "SMAA", "SSAA 2X", "V-SYNC:", ", password", "CHAT",
-    "GUN GAME", "HARDCORE:", "OPENCE", "PC", "SWAT",
+    "SINC", "SMAA", "SSAA 2X", "V-SYNC:", "CHAT",
+    "FISHSTICKS", "GUN GAME", "HARDCORE:", "KING", "OPENCE", "PC", "RECON", "SWAT", "master server",
 }
 
 # the PC version's strings the Italian edition's loc.map says wider than
