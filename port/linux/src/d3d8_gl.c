@@ -2015,6 +2015,9 @@ GLuint xgpu_compile_shader(GLenum type, const char *source, const char *what)
 		glDeleteShader(shader);
 		return 0;
 	}
+	/* (each shader's, display.shader_prewarm's compiled as a map loads too:
+	the shader cache finds a program by its two shaders' hashes) */
+	shader_hash_set(shader, source);
 	return shader;
 }
 
