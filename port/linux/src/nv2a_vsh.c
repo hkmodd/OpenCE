@@ -477,10 +477,10 @@ char *nv2a_vertex_shader_to_glsl(const DWORD *instructions, unsigned long instru
 	unsigned long index;
 	struct reversed_depth_rows rows;
 	BOOL position_converted = FALSE, reversed_rows;
+	char scale_register[16], offset_register[16];
 
 	rows.z_row = rows.w_row = -1;
 	rows.other = FALSE;
-	char scale_register[16], offset_register[16];
 
 #ifdef HALO_GLES
 	xgpu_text_append(&text, "#version %s\n", xgpu_capabilities.shading_language);
@@ -678,7 +678,7 @@ char *nv2a_vertex_shader_to_glsl(const DWORD *instructions, unsigned long instru
 		"\t\tvec3 ndc = (vec3(oPos.xy + vec2(0.5 + screen_offset, 0.5), oPos.z) - viewport_offset.xyz) / scale;\n"
 		"\t\tposition = vec4(ndc * oPos.w, oPos.w);\n"
 		"\t}\n",
-		XGPU_VERTEX_CONSTANT_BIAS - 38, XGPU_VERTEX_CONSTANT_BIAS - 37);
+		scale_register, offset_register);
 	/* display.reversed_depth: Direct3D's depth turned around, 1 - z / w.
 	With the rows found, the clip-space z above is a z + b w (a the depth
 	scale's c[-38].z / scale.z, b its offset's), so w - (a z + b w) is a times
@@ -689,11 +689,11 @@ char *nv2a_vertex_shader_to_glsl(const DWORD *instructions, unsigned long instru
 	{
 		xgpu_text_append(&text,
 			"\tif (clip_captured)\n"
-			"\t\tposition.z = (reversed_z * c[%d].z + (scale.z - c[%d].z - c[%d].z + viewport_offset.z) * clip_position.w)\n"
+			"\t\tposition.z = (reversed_z * %s.z + (scale.z - %s.z - %s.z + viewport_offset.z) * clip_position.w)\n"
 			"\t\t\t/ scale.z;\n"
 			"\telse\n"
 			"\t\tposition.z = position.w - position.z;\n",
-			XGPU_VERTEX_CONSTANT_BIAS - 38, XGPU_VERTEX_CONSTANT_BIAS - 38, XGPU_VERTEX_CONSTANT_BIAS - 37);
+			scale_register, scale_register, offset_register);
 	}
 	else if (xgpu_reversed_depth)
 	{

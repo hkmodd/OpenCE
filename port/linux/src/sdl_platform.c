@@ -1375,7 +1375,7 @@ BOOL platform_video_initialize(unsigned long width, unsigned long height)
 static void swap_interval_apply(void *unused)
 {
 	(void)unused;
-	SDL_GL_SetSwapInterval(config_boolean("display.vsync") ? 1 : 0);
+	platform_swap_interval(config_boolean("display.vsync") ? 1 : 0);
 }
 
 void platform_video_make_current(BOOL current)
@@ -1667,6 +1667,9 @@ void platform_video_swap(void)
 	int vsync;
 	Uint64 swap_start;
 	Uint64 stats_start = 0;
+	/* (display.render_thread's swap: the game's thread pumps the window's
+	events, and goes on mixing while the render thread shows the frame) */
+	BOOL drawing_thread = render_thread_running() && !render_thread_elsewhere();
 
 	/* display.even_frames: a finished frame waits for its time, then is
 	shown; otherwise it is shown at once and the next frame waits (below) */
@@ -1691,17 +1694,20 @@ void platform_video_swap(void)
 	win32_window_borderless_apply(platform_window);
 #endif
 #if !defined(HALO_ANDROID) && !defined(HALO_WEB)
-	SDL_PumpEvents();
+	if (!drawing_thread)
+		SDL_PumpEvents();
 	window_flags = platform_window ? SDL_GetWindowFlags(platform_window) : 0;
 	focused = platform_window && (window_flags & SDL_WINDOW_INPUT_FOCUS) != 0 &&
 		(window_flags & SDL_WINDOW_MINIMIZED) == 0;
 	vsync = config_boolean("display.vsync");
 	platform_swap_interval((vsync && focused) ? 1 : 0);
-	swap_sound_begin();
+	if (!drawing_thread)
+		swap_sound_begin();
 	swap_start = SDL_GetTicks();
 	SDL_GL_SwapWindow(platform_window);
 	swap_time = SDL_GetTicks() - swap_start;
-	swap_sound_end();
+	if (!drawing_thread)
+		swap_sound_end();
 	if (swap_time >= 2000)
 		platform_log("display: showing a frame took %.1f s in the graphics driver", (double)swap_time / 1000.0);
 #else
