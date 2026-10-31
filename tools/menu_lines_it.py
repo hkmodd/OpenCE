@@ -26,10 +26,13 @@ LINES = {
     "30 SECONDS": "30 SECONDI",
     "5 SECONDS": "5 SECONDI",
     ": under way": ": in corso",
+    "A SERVER NEEDS IT": "SE UN SERVER LO CHIEDE",
     "A campaign level, played co-op": "Un livello della campagna, in cooperativa",
     "A hundred and fifty kills to win. Only a crowded\\nserver gets there.":
         "Centocinquanta uccisioni per vincere. Ci arriva\\nsolo un server affollato.",
     "A hundred kills to win. Made for big games.": "Cento uccisioni per vincere. Per partite grandi.",
+    "A master server (masters.txt) and the account\\nlinked with it: a server it lists lets it in.":
+        "Un master server (masters.txt) e l'account\\ncollegato: un server che elenca lo fa entrare.",
     "A melee kill takes nothing from the victim.": "Corpo a corpo: la vittima non perde nulla.",
     "A melee kill takes the victim back a weapon.": "Corpo a corpo: la vittima torna all'arma precedente.",
     "A random primary weapon, of those the map has,\\neach time you spawn.":
@@ -44,10 +47,12 @@ LINES = {
     "ALLIES": "ALLEATI",
     "ALLOWED": "CONSENTITA",
     "ALLY FRIENDLY FIRE:": "FUOCO AMICO ALLEATI:",
+    "ALWAYS": "SEMPRE",
     "ANY": "QUALSIASI",
     "ANYONE NEAR": "CHIUNQUE VICINO",
     "ARM SHIELDS:": "SCUDI SULLE BRACCIA:",
     "ASSAULT RIFLE": "FUCILE D'ASSALTO",
+    "AUTO BUTTON DETECTION:": "RICONOSCIMENTO PULSANTI:",
     "AUTO-CENTER LOOK:": "CENTRA VISUALE:",
     "Adjust the mouse's sensitivity\\nand aiming.\\n\\nProfile:":
         "Regola la sensibilità del mouse\\ne la mira.\\n\\nProfilo:",
@@ -59,15 +64,18 @@ LINES = {
     "Asking the brokers for the host...": "Richiesta dell'host ai broker...",
     "BLOCK M+KB": "BLOCCA M+T",
     "BORDERLESS": "SENZA BORDI",
+    "BUMPER STYLE:": "STILE DORSALI:",
+    "BUTTON APPEARANCE": "ASPETTO PULSANTI",
     "BUTTON LAYOUT:": "DISPOSIZIONE PULSANTI:",
+    "BUTTON REMAPPING": "RIMAPPATURA PULSANTI",
     "BUTTON STYLE:": "STILE PULSANTI:",
     "BY SCORE": "PER PUNTEGGIO",
     "CATEGORY": "CATEGORIA",
     "CHECK FOR UPDATES:": "CERCA AGGIORNAMENTI:",
-    "CLASSIC": "CLASSICO",
     "CLOSED": "CHIUSA",
     "CO-OP CAMPAIGN": "CAMPAGNA CO-OP",
     "CO-OP OPTIONS:": "OPZIONI CO-OP:",
+    "COMBAT": "COMBATTIMENTO",
     "COUNTDOWN:": "CONTO ALLA ROVESCIA:",
     "CUSTOM MULTIPLAYER": "MULTIGIOCATORE PERSONALIZZATO",
     "CUSTOM SINGLEPLAYER": "CAMPAGNA PERSONALIZZATA",
@@ -78,16 +86,18 @@ LINES = {
     "Choose the rules of OpenCE's\\ngametypes: SWAT, Infection,\\nGun Game and Hardcore.\\nThis gametype:":
         "Scegli le regole delle\\nmodalità di OpenCE: SWAT,\\nInfezione, Gun Game e\\nHardcore. Questa modalità:",
     "Choose what to show, with left and right.": "Scegli cosa mostrare con sinistra e destra.",
-    "Classic: plain Xbox buttons. Gems: shaded Xbox\\nbuttons. Dark Gems: the menu's button artwork.":
-        "Classico: pulsanti Xbox piatti. Gemme: pulsanti\\nXbox sfumati. Gemme scure: la grafica dei menu.",
     "Connected: joining the game...": "Connesso: ingresso nella partita...",
+    "Controller artwork and bumper style.\\nRequires High-Res HUD in Graphics.":
+        "Grafica del controller e stile dei dorsali.\\nRichiede HUD alta risoluzione in Grafica.",
     "Copy an invite link and PASTE LINK, or accept a Discord invite":
         "Copia un link d'invito e INCOLLA LINK, o accetta un invito Discord",
     "Could not join the game.": "Impossibile unirsi alla partita.",
-    "DARK GEMS": "GEMME SCURE",
+    "Custom button layouts for P1-P4.\\nUse / Reload stays combined.":
+        "Disposizioni dei pulsanti per G1-G4.\\nUsa / Ricarica restano insieme.",
     "DEDICATED": "DEDICATI",
     "DEDICATED FIRST": "PRIMA I DEDICATI",
     "DIRECT LINK": "LINK DIRETTO",
+    "DISCORD ACCOUNT:": "ACCOUNT DISCORD:",
     "DISPLAY MODE:": "MODALITÀ SCHERMO:",
     "DOWNLOAD MAPS:": "SCARICA MAPPE:",
     "Damage from the other players will only reduce\\nshields. Health will be unaffected.":
@@ -110,10 +120,14 @@ LINES = {
         "Testi e titoli con caratteri ad alta risoluzione;\\nse disattivato, quelli del gioco.",
     "Draw the HUD from the high-res redraws; off\\ndraws the game's own pictures.":
         "L'HUD dai ridisegni ad alta risoluzione; se\\ndisattivato, le immagini del gioco.",
+    "Draw the frame rate at the bottom right of a game,\\ncounted over half a second.":
+        "Mostra i frame al secondo in basso a destra,\\ncontati su mezzo secondo.",
     "END GAME": "TERMINA PARTITA",
     "ENEMIES": "NEMICI",
+    "EXPIRED:": "SCADUTO:",
     "EXTRA EFFECTS:": "EFFETTI EXTRA:",
     "EXTRA ENEMIES:": "NEMICI AGGIUNTIVI:",
+    "EXTRA LARGE": "MOLTO GRANDE",
     "EXTRA PICKUPS:": "OGGETTI AGGIUNTIVI:",
     "EXTRA VEHICLES:": "VEICOLI AGGIUNTIVI:",
     "Each kill gives the next weapon; a kill with the\\nlast wins. Free for all Slayer only.":
@@ -198,8 +212,6 @@ LINES = {
         "Per tutti, il sovrascudo sale lungo il corpo e\\nresta acceso, nel suo colore.",
     "Free for all": "Tutti contro tutti",
     "Friendly fire and team balance, for this game.": "Fuoco amico e bilanciamento squadre, per questa partita.",
-    "Friendly fire, the enemies and player collisions,\\nfor this game.":
-        "Fuoco amico, nemici e collisioni tra giocatori,\\nper questa partita.",
     "From the pistol to the rocket launcher.": "Dalla pistola al lanciarazzi.",
     "From the rocket launcher to the pistol.": "Dal lanciarazzi alla pistola.",
     "Fullscreen takes the display; borderless covers it\\nwith a window. F11 switches to the window.":
@@ -207,13 +219,16 @@ LINES = {
     "GAME NAME:": "NOME PARTITA:",
     "GAME TYPE": "TIPO PARTITA",
     "GAME TYPE:": "TIPO PARTITA:",
-    "GEMS": "GEMME",
+    "GENERAL": "GENERALE",
     "GLOW": "BAGLIORE",
     "GLOW INTENSITY:": "INTENSITÀ BAGLIORE:",
     "GLOW+OVERSHIELD": "BAGLIORE+SOVRASCUDO",
     "GRAPHICS:": "GRAFICA:",
+    "GT7: bright light turns white, as on film. Neutral:\\nas drawn. ACES: more contrast. Reinhard: softer.":
+        "GT7: la luce forte sbianca, come su pellicola. Neutra:\\ncom'è. ACES: più contrasto. Reinhard: più morbida.",
     "Games on a newer version (update the game to join them):":
         "Partite su una versione più recente (aggiorna il gioco per entrare):",
+    "HDR CALIBRATION:": "CALIBRAZIONE HDR:",
     "HDR DISPLAY:": "SCHERMO HDR:",
     "HELP SEND MAPS:": "AIUTA A INVIARE:",
     "HIGH-RES HUD:": "HUD ALTA RISOLUZIONE:",
@@ -227,6 +242,8 @@ LINES = {
     "Host and join games over the internet by invite\\nlinks; off keeps to the local network.":
         "Ospita partite su Internet ed entra con i link\\nd'invito; se disattivato, solo la rete locale.",
     "Hosted by a player (anonymous listing)": "Ospitata da un giocatore (annuncio anonimo)",
+    "How bright white is (the menus, the HUD, the\\ngrey bars), in nits. Choose what looks right.":
+        "Quanto è luminoso il bianco (menu, HUD, bande\\ngrigie), in nit. Scegli ciò che sembra giusto.",
     "How fast the right stick turns the view.": "Velocità della visuale con la levetta destra.",
     "How fast the view turns side to side for the\\nmouse's movement.":
         "Velocità con cui la visuale gira di lato al\\nmovimento del mouse.",
@@ -281,14 +298,15 @@ LINES = {
     "KILLS SCORE:": "PUNTI UCCISIONI:",
     "Keep floors and walls sharp at a grazing angle,\\nwhich the Xbox did not. Off: as the Xbox.":
         "Pavimenti e muri nitidi anche di sbieco, come\\nsu Xbox non erano. Se disattivato, come su Xbox.",
-    "Keep the light of explosions, plasma and the sun\\npast white, and roll it off instead of clipping.":
-        "Tiene la luce di esplosioni, plasma e sole oltre\\nil bianco, e la attenua invece di tagliarla.",
+    "LARGE": "GRANDE",
     "LEAVE": "ESCI",
     "LEGACY": "CLASSICA",
     "LEGACY SOUTHPAW": "CLASSICA MANCINA",
     "LEGS:": "GAMBE:",
     "LIGHT SHOW": "SPETTACOLO DI LUCI",
     "LINEAR": "LINEARE",
+    "LINK:": "COLLEGA:",
+    "LINKED AS": "COLLEGATO COME",
     "LISTING:": "VISIBILITÀ:",
     "LISTS:": "ELENCA:",
     "LIVE": "IN CORSO",
@@ -296,6 +314,8 @@ LINES = {
     "LOBBY VOICE CHAT:": "CHAT VOCALE LOBBY:",
     "LOCKED FIRST": "PRIMA LE PROTETTE",
     "LOOK SENSITIVITY:": "SENSIBILITÀ VISUALE:",
+    "Let explosions, plasma and the sun shine brighter\\nthan white, then fit them to the screen.":
+        "Fa brillare esplosioni, plasma e sole oltre il\\nbianco, poi li adatta allo schermo.",
     "Let internet play ask the router to forward its\\nport, for networks that stop connections.":
         "Il gioco su Internet chiede al router di inoltrare\\nla porta, per le reti che bloccano le connessioni.",
     "Level the view while walking.": "Livella la visuale mentre cammini.",
@@ -303,6 +323,8 @@ LINES = {
         "Spettacolo di luci: tre volte più ampio, pieno da\\nun terzo del lampo. Online: lo sceglie l'host.",
     "Light models for each pixel, without the facets\\nof the Xbox's lighting for each vertex.":
         "Illumina i modelli per pixel, senza le sfaccettature\\ndell'illuminazione per vertice di Xbox.",
+    "Link a Discord account, which lets you join\\nservers that block VPNs while you use one.":
+        "Collega un account Discord, per entrare nei\\nserver che bloccano le VPN mentre ne usi una.",
     "List games no one is playing yet.": "Elenca le partite in cui non gioca ancora nessuno.",
     "List games on maps you do not have: IF\\nDOWNLOADABLE, those Map Sharing can download.":
         "Elenca le partite su mappe che non hai: SE\\nSCARICABILI, quelle che Condivisione mappe può scaricare.",
@@ -321,24 +343,33 @@ LINES = {
     "MASTER SERVERS:": "MASTER SERVER:",
     "MATCH TIMER:": "TIMER PARTITA:",
     "MAXIMUM PLAYERS:": "GIOCATORI MAX:",
+    "MEDIUM": "MEDIO",
     "MELEE DEMOTES:": "CORPO A CORPO RETROCEDE:",
+    "MENU CURSOR:": "CURSORE MENU:",
     "MODE:": "MODALITÀ:",
     "MODEL DETAIL:": "DETTAGLIO MODELLI:",
+    "MODERN XBOX": "XBOX MODERNO",
     "MOVE DOWN": "SPOSTA GIÙ",
     "MOVE UP": "SPOSTA SU",
     "MULTI-HILL:": "PIÙ COLLINE:",
     "MULTIPLIER:": "MOLTIPLICATORE:",
+    "Manual gameplay button artwork, kept when auto\\ndetection is on. Requires High-Res HUD.":
+        "Grafica dei pulsanti scelta a mano, tenuta col\\nriconoscimento. Richiede HUD alta risoluzione.",
     "Moving the mouse forward looks down.": "Spostando il mouse in avanti si guarda in basso.",
     "NAME": "NOME",
     "NATIVE": "NATIVA",
     "NEEDLER": "PISTOLA AD AGHI",
+    "NEUTRAL": "NEUTRA",
+    "NEVER": "MAI",
     "NEWER": "PIÙ NUOVA",
+    "NO CHANGE": "NESSUN CAMBIO",
     "NO GRENADES": "NIENTE GRANATE",
     "NONE LISTED": "NESSUNO IN ELENCO",
     "NONE: A LAN GAME": "NESSUNO: PARTITA IN LAN",
     "NOT ASKED YET": "NON ANCORA INTERROGATI",
-    "Native draws at the resolution; Original draws\\nthe Xbox's 640x480 and scales it up.":
-        "Nativa disegna alla risoluzione; Originale disegna\\na 640x480 come Xbox e ingrandisce.",
+    "NOT LINKED": "NON COLLEGATO",
+    "Native draws at the resolution, 75% to 25% that\\npart each way; Original, the Xbox's 480 lines.":
+        "Nativa: alla risoluzione, dal 75% tra i lati al\\n25% tra i lati; Originale: le 480 righe della Xbox.",
     "Needs the newer build: Settings > Network Setup > Check for updates":
         "Serve la build più recente: Impostazioni > Rete > Cerca aggiornamenti",
     "Neither the master servers\\nnor the brokers answer:\\ncheck the connection":
@@ -367,17 +398,24 @@ LINES = {
     "OPEN MIC": "MICROFONO APERTO",
     "OPENCE OPTIONS": "OPZIONI OPENCE",
     "ORIGINAL": "ORIGINALE",
+    "ORIGINAL XBOX": "XBOX ORIGINALE",
     "OUTPUT DEVICE:": "DISPOSITIVO DI USCITA:",
     "OVERSHIELD": "SOVRASCUDO",
     "OVERSHIELD:": "SOVRASCUDO:",
+    "On an HDR display (Windows HDR on), show that\\nlight truly brighter. From the next start.":
+        "Su schermo HDR (HDR di Windows attivo), mostra\\nquella luce davvero più brillante. Dal prossimo avvio.",
     "On foot, horizontal at 16:9, in degrees.\\nDefault keeps the stock view.":
         "A piedi, orizzontale in 16:9, in gradi.\\nPredefinito mantiene la visuale originale.",
     "Only flag captures score.": "Contano solo le catture della bandiera.",
     "Only players with your invite link can join.": "Solo chi ha il tuo link d'invito può entrare.",
+    "Original: black/white buttons. Modern: LB/RB.\\nKept when automatic detection is on.":
+        "Originale: pulsanti bianco/nero. Moderno: LB/RB.\\nTenuto col riconoscimento automatico.",
     "P2P GAMES": "PARTITE P2P",
+    "PAPER WHITE:": "BIANCO CARTA:",
     "PASSENGER THIRD PERSON:": "TERZA PERSONA PASSEGGERI:",
     "PASTE LINK": "INCOLLA LINK",
     "PAUSE MENU": "MENU PAUSA",
+    "PEAK BRIGHTNESS:": "LUMINOSITÀ MASSIMA:",
     "PER PLAYER": "PER GIOCATORE",
     "PER PLAYER:": "PER GIOCATORE:",
     "PER-PIXEL LIGHTING:": "ILLUMINAZIONE PER PIXEL:",
@@ -388,12 +426,17 @@ LINES = {
     "PLAYER NAME SIZE:": "DIMENSIONE NOMI:",
     "PLAYER NAMES:": "NOMI GIOCATORI:",
     "PLAYER OPTIONS:": "OPZIONI GIOCATORI:",
+    "PLAYER:": "GIOCATORE:",
     "PLAYERS": "GIOCATORI",
     "PLAYERS' OWN": "DI OGNUNO",
     "PRESS A KEY": "PREMI UN TASTO",
     "PRESS SPACE OR A TO VOTE TO SKIP   %d OF %d": "PREMI SPAZIO O A PER VOTARE IL SALTO   %d SU %d",
     "PRIMARY WEAPON:": "ARMA PRINCIPALE:",
     "PRIVATE": "PRIVATA",
+    "PS CLASSIC": "PS CLASSICO",
+    "PS DARK GEMS": "PS GEMME SCURE",
+    "PS GEMS": "PS GEMME",
+    "PS MODERN": "PS MODERNO",
     "PUBLIC": "PUBBLICA",
     "PUSH TO TALK": "PREMI E PARLA",
     "Password required": "Password richiesta",
@@ -454,14 +497,31 @@ LINES = {
         "I giocatori riappariranno solo nei punti di\\nriapparizione Cattura la bandiera della loro squadra.",
     "Players will spawn at any spawn point the\\ngametype allows.":
         "I giocatori riappariranno in qualsiasi punto\\nche il tipo di partita consente.",
-    "Press a key, a mouse button or turn the wheel...\\nEscape cancels, Delete clears it.":
-        "Premi un tasto, un pulsante del mouse o gira la\\nrotella... Esc annulla, Canc lo cancella.",
+    "Preferred PlayStation artwork for auto detection.\\nRequires High-Res HUD in Graphics.":
+        "Grafica PlayStation preferita col riconoscimento.\\nRichiede HUD alta risoluzione in Grafica.",
+    "Preferred Switch artwork for automatic detection.\\nRequires High-Res HUD in Graphics.":
+        "Grafica Switch preferita col riconoscimento.\\nRichiede HUD alta risoluzione in Grafica.",
+    "Preferred Xbox artwork for automatic detection.\\nRequires High-Res HUD in Graphics.":
+        "Grafica Xbox preferita col riconoscimento.\\nRichiede HUD alta risoluzione in Grafica.",
+    "Press a key, a mouse button or turn the wheel...\\nEscape or a controller's B cancels, Delete clears it.":
+        "Premi un tasto, un pulsante del mouse o gira la\\nrotella... Esc o B del controller annulla, Canc lo cancella.",
+    "Private games revert the checkpoint; public games\\nonly respawn. A changed team or missing save\\nalways uses respawn only.":
+        "Le partite private tornano al checkpoint; quelle\\npubbliche fanno solo riapparire. Squadra cambiata\\no salvataggio mancante: sempre solo riapparizione.",
     "Pushing the right stick up looks down.": "Spingendo in su la levetta destra si guarda in basso.",
     "RANDOM": "CASUALE",
     "RESAMPLER:": "RICAMPIONAMENTO:",
     "RESOLUTION SCALING:": "SCALA RISOLUZIONE:",
+    "RESPAWN ONLY": "SOLO RIAPPARIZIONE",
     "REVERB:": "RIVERBERO:",
+    "REVERT CHECKPOINT": "TORNA AL CHECKPOINT",
+    "REVOKED": "REVOCATO",
     "ROCKET LAUNCHER": "LANCIARAZZI",
+    "Raise it until the ring just disappears into\\nthe square: the brightest your display shows.":
+        "Alzala finché l'anello sparisce appena nel\\nquadrato: il massimo che il tuo schermo mostra.",
+    "Respawn at checkpoint positions after everyone dies.\\nThe world keeps its progress.":
+        "Riapparizione ai punti del checkpoint se muoiono\\ntutti. Il mondo mantiene i suoi progressi.",
+    "Revert the checkpoint after everyone dies. A changed\\nteam or missing save uses respawn only.":
+        "Torna al checkpoint se muoiono tutti. Squadra\\ncambiata o salvataggio mancante: solo riapparizione.",
     "Rumble the controller.": "Fa vibrare il controller.",
     "Runs an older build: it can be joined once it updates":
         "Usa una build più vecchia: potrai entrare quando si aggiorna",
@@ -479,12 +539,15 @@ LINES = {
     "SHIELD GLOW:": "BAGLIORE SCUDO:",
     "SHOTGUN": "FUCILE",
     "SHOW EMPTY SERVERS:": "MOSTRA SERVER VUOTI:",
+    "SHOW FRAMES:": "MOSTRA FPS:",
     "SHOW FULL SERVERS:": "MOSTRA SERVER PIENI:",
     "SHOW MISSING MAPS:": "MOSTRA MAPPE MANCANTI:",
+    "SHOW TO SERVERS:": "MOSTRA AI SERVER:",
     "SHOW+OVERSHIELD": "LUCI+SOVRASCUDO",
     "SHOW:": "MOSTRA:",
     "SINGLEPLAYER": "GIOCATORE SINGOLO",
     "SKULL DAMAGE:": "DANNO TESCHIO:",
+    "SMALL": "PICCOLO",
     "SMOOTH MOTION:": "MOVIMENTO FLUIDO:",
     "SNIPER RIFLE": "FUCILE DI PRECISIONE",
     "SORT BY:": "ORDINA PER:",
@@ -501,10 +564,15 @@ LINES = {
     "SWAP B, L TRIGGER": "SCAMBIA B, GRILLETTO SX",
     "SWAP B, R STICK": "SCAMBIA B, LEVETTA DX",
     "SWAP TRIGGERS": "SCAMBIA GRILLETTI",
+    "SWITCH CLASSIC": "SWITCH CLASSICO",
+    "SWITCH GEMS": "SWITCH GEMME",
+    "SWITCH MODERN": "SWITCH MODERNO",
     "SWITCH TEAM": "CAMBIA SQUADRA",
     "SYSTEM DEFAULT": "PREDEFINITO",
     "Sending players who join without the game's\\nCustom Edition map the map, and how fast.":
         "Inviare la mappa Custom Edition della partita\\na chi entra senza, e a che velocità.",
+    "Set Peak Brightness and Paper White by eye,\\nwith patterns brighter than white.":
+        "Imposta Luminosità massima e Bianco carta a occhio,\\ncon motivi più brillanti del bianco.",
     "Set this profile's controller\\nsensitivity and layouts.\\n\\nProfile:":
         "Imposta sensibilità e disposizione\\ndel controller di questo profilo.\\n\\nProfilo:",
     "Seventy-five kills to win. Settle in for a long\\nfight.":
@@ -513,6 +581,8 @@ LINES = {
         "Gli scudi illuminano ciò che li circonda quando\\nbrillano. Online: lo sceglie l'host.",
     "Show servers on maps you do not have if their\\nhost shares them: they download as you join.":
         "Mostra i server su mappe che non hai se il loro\\nhost le condivide: si scaricano mentre entri.",
+    "Show styles for your controller's family.\\nRequires High-Res HUD in Graphics.":
+        "Mostra gli stili della famiglia del tuo controller.\\nRichiede HUD alta risoluzione in Grafica.",
     "Show the game's hints about its controls.": "Mostra i suggerimenti del gioco sui controlli.",
     "Slow and drag the view along with a target while\\naiming with the mouse, as with a controller.":
         "Rallenta e trascina la visuale col bersaglio mentre\\nmiri col mouse, come con un controller.",
@@ -528,14 +598,20 @@ LINES = {
     "Strict NAT: turn on UPnP, or forward a port": "NAT rigido: attiva UPnP, o inoltra una porta",
     "TEAM": "SQUADRA",
     "TEAM NEAR": "SQUADRA VICINA",
+    "TEAM WIPE:": "SQUADRA ELIMINATA:",
     "TEAM, ENEMIES NEAR": "SQUADRA E NEMICI",
     "TEAMPLAY OPTIONS:": "OPZIONI SQUADRE:",
     "TEAMS": "SQUADRE",
     "TEXTURE FILTERING:": "FILTRO TEXTURE:",
+    "TONE CURVE:": "CURVA DEI TONI:",
     "Talk in network games: while PUSH TO TALK is held\\n(Controls), whenever you speak, or never.":
         "Parla nelle partite in rete: tenendo PREMI PER PARLARE\\n(Controlli), ogni volta che parli, o mai.",
+    "Team wipes, friendly fire, enemies and collisions,\\nfor this game.":
+        "Squadra eliminata, fuoco amico, nemici e collisioni,\\nper questa partita.",
     "Teams": "Squadre",
     "That is not the game's password. Try again.": "Non è la password della partita. Riprova.",
+    "The Discord account linked to this game, and with\\nhow many of the master servers.":
+        "L'account Discord collegato a questo gioco, e con\\nquanti master server.",
     "The HUD, text, anti-aliasing, shadows,\\nlighting and HDR.":
         "HUD, testo, anti-aliasing, ombre,\\nilluminazione e HDR.",
     "The damage of a zombie's skull's melee.": "Il danno in corpo a corpo del teschio degli zombie.",
@@ -548,14 +624,24 @@ LINES = {
     "The game type's own rules.": "Le regole proprie del tipo di gioco.",
     "The gametype and its rules, for this game.": "Il tipo di partita e le sue regole, per questa partita.",
     "The host answered: connecting (UDP hole punching)...": "L'host ha risposto: connessione (UDP hole punching)...",
+    "The host blocks VPNs: link Discord in Settings > Network Setup":
+        "L'host blocca le VPN: collega Discord in Impostazioni > Rete",
+    "The host blocks VPNs: link Discord with its master (Settings > Network Setup)":
+        "L'host blocca le VPN: collega Discord col suo master (Impostazioni > Rete)",
     "The host did not answer (offline, or its listing is stale)":
         "L'host non ha risposto (offline, o il suo annuncio è vecchio)",
+    "The host refused your Discord link: link it again": "L'host ha rifiutato il tuo collegamento Discord: ricollegalo",
     "The host refused: another version": "L'host ha rifiutato: altra versione",
     "The host refused: banned": "L'host ha rifiutato: sei bannato",
     "The host refused: closed": "L'host ha rifiutato: partita chiusa",
     "The host refused: full": "L'host ha rifiutato: partita piena",
+    "The host refused: it allows no VPNs": "L'host ha rifiutato: non ammette VPN",
     "The host refused: its invite changed": "L'host ha rifiutato: il suo invito è cambiato",
+    "The host refused: too many players from your address": "L'host ha rifiutato: troppi giocatori dal tuo indirizzo",
     "The host refused: wrong password": "L'host ha rifiutato: password errata",
+    "The host refused: your Discord account is in the game":
+        "L'host ha rifiutato: il tuo account Discord è già nella partita",
+    "The host refused: your Discord account is too new": "L'host ha rifiutato: il tuo account Discord è troppo recente",
     "The host refused: your player name": "L'host ha rifiutato: il tuo nome giocatore",
     "The list's order. Its column titles sort it too;\\nchoosing one again reverses it.":
         "L'ordine dell'elenco. Lo ordinano anche i titoli\\ndelle colonne; sceglierne di nuovo uno lo inverte.",
@@ -566,6 +652,8 @@ LINES = {
         "I master server (masters.txt) che hanno risposto\\nall'ultima richiesta dell'Elenco server.",
     "The master servers' dedicated servers, the games\\nplayers host (through the brokers), or all of them.":
         "I server dedicati dei master server, le partite\\nospitate dai giocatori (tramite i broker), o tutti.",
+    "The menus' blue arrow for the mouse, and its size;\\nOff shows the system's pointer.":
+        "La freccia blu dei menu per il mouse, e la sua\\ndimensione; se disattivata, il puntatore di sistema.",
     "The microphone voice chat listens to.": "Il microfono usato dalla chat vocale.",
     "The most players the game takes (up to 128).": "Il massimo di giocatori della partita (fino a 128).",
     "The most you send of maps to other players, so\\nthat the game keeps the rest of your upload.":
@@ -613,6 +701,7 @@ LINES = {
     "Two hundred and fifty kills to win.": "Duecentocinquanta uccisioni per vincere.",
     "Two hundred kills to win. Bring friends. Lots of\\nthem.":
         "Duecento uccisioni per vincere. Porta degli amici.\\nTanti amici.",
+    "UNLINK ALL": "SCOLLEGA TUTTO",
     "UPLOAD LIMIT:": "LIMITE DI UPLOAD:",
     "UPNP PORT FORWARDING:": "INOLTRO PORTE UPNP:",
     "VEHICLE OPTIONS:": "OPZIONI VEICOLO:",
@@ -624,7 +713,10 @@ LINES = {
     "VOICE NEAR DISTANCE:": "DISTANZA VOCE VICINA:",
     "VOICE QUALITY:": "QUALITÀ VOCE:",
     "VOICE VOLUME:": "VOLUME VOCE:",
+    "VOTE FOR THE NEXT GAME": "VOTA LA PROSSIMA PARTITA",
     "VOTE KICK:": "VOTO ESPULSIONE:",
+    "VOTE NO": "VOTA NO",
+    "VOTE YES": "VOTA SÌ",
     "VOTED TO SKIP   %d OF %d": "VOTATO IL SALTO   %d SU %d",
     "Vehicles are as the campaign has them.": "I veicoli sono quelli della campagna.",
     "Vehicles respawn after being driven a short distance,\\nwith extra copies equal to ('Multiplier' - 1) * 2/3,\\nrounded down, however many players there are.":
@@ -647,11 +739,19 @@ LINES = {
         "Voci a 64 kilobit al secondo, nella lobby\\ne in partita.",
     "Voices at 8 kilobits a second, in the lobby\\nand in the game.":
         "Voci a 8 kilobit al secondo, nella lobby\\ne in partita.",
+    "WAITING: CODE": "IN ATTESA: CODICE",
     "WEAKEST FIRST": "DALLA PIÙ DEBOLE",
     "WEAPON ORDER:": "ORDINE ARMI:",
     "WEAPONS": "ARMI",
+    "WHEN ASKED": "SU RICHIESTA",
     "WINDOW SIZE:": "DIMENSIONE FINESTRA:",
     "WINDOWED": "FINESTRA",
+    "WITH MASTER 1": "CON MASTER 1",
+    "WITH MASTER 2": "CON MASTER 2",
+    "WITH MASTER 3": "CON MASTER 3",
+    "WITH MASTER 4": "CON MASTER 4",
+    "WITH MASTER n opens that master's page in the\\nbrowser (on OK). UNLINK ALL forgets the account.":
+        "CON MASTER n apre la pagina di quel master nel\\nbrowser (con OK). SCOLLEGA TUTTO dimentica l'account.",
     "Wait for the display between frames, so that the\\npicture never tears.":
         "Attende lo schermo tra i fotogrammi, perché\\nl'immagine non si strappi mai.",
     "Waiting for players": "In attesa di giocatori",
@@ -664,9 +764,13 @@ LINES = {
     "Where the game's sound and the voices play.": "Dove si sentono l'audio del gioco e le voci.",
     "Which of the controller's buttons does what (not\\nthe keyboard's: Controls Setup sets those).":
         "Cosa fa ogni pulsante del controller (non quelli\\ndella tastiera: li imposta Impostazioni controlli).",
+    "Which servers see your Discord account: WHEN\\nASKED, those that block VPNs, joined from one.":
+        "Quali server vedono il tuo account Discord: SU\\nRICHIESTA, quelli che bloccano le VPN, se entri con una.",
     "Which stick moves and which looks.": "Quale levetta muove e quale guarda.",
-    "With HDR, on an HDR display, show that light\\nbrighter than white. From the next start.":
-        "Con l'HDR, su schermo HDR, mostra quella luce\\npiù brillante del bianco. Dal prossimo avvio.",
+    "With HDR Display, how bright white is, in nits.\\nAuto: Windows' SDR content brightness.":
+        "Con Schermo HDR, quanto è luminoso il bianco, in nit.\\nAuto: la luminosità dei contenuti SDR di Windows.",
+    "With HDR Display, your display's brightest, in\\nnits. Auto: Windows' HDR calibration.":
+        "Con Schermo HDR, il massimo del tuo schermo, in\\nnit. Auto: la calibrazione HDR di Windows.",
     "With Kills Score on, each flag capture is worth\\n10 points (a kill is worth 1).":
         "Con Punti uccisioni attivo, ogni cattura della\\nbandiera vale 10 punti (un'uccisione vale 1).",
     "With Kills Score on, each flag capture is worth\\n100 points (a kill is worth 1).":
@@ -689,6 +793,10 @@ LINES = {
         "Con Punti uccisioni attivo, ogni cattura della\\nbandiera vale 75 punti (un'uccisione vale 1).",
     "With V-Sync off, the most frames a second. Auto:\\ntwice the display's refresh rate.":
         "Senza V-Sync, il massimo di fotogrammi al secondo.\\nAuto: il doppio della frequenza dello schermo.",
+    "XBOX CLASSIC": "XBOX CLASSICO",
+    "XBOX DARK GEMS": "XBOX GEMME SCURE",
+    "XBOX GEMS": "XBOX GEMME",
+    "XBOX MODERN": "XBOX MODERNO",
     "You come back beside them once it is safe": "Tornerai al suo fianco appena sarà sicuro",
     "You join them when they're on foot": "Ti unirai quando sarà a piedi",
     "Your legs in first person, seen looking down,\\nmoving as you run. Your body as others see it.":
@@ -788,6 +896,7 @@ SAME = {
     "AUTO", "BUMPER JUMPER", "CO-OP", "FOV:", "FXAA", "HDR:", "MSAA 2X", "MSAA 4X", "MSAA 8X", "PASSWORD", "PASSWORD:",
     "SINC", "SMAA", "SSAA 2X", "V-SYNC:", "CHAT",
     "FISHSTICKS", "GUN GAME", "HARDCORE:", "KING", "OPENCE", "PC", "RECON", "SWAT", "master server",
+    "ACES", "DEBUG", "GT7", "LOBBY", "MASTER 1:", "MASTER 2:", "MASTER 3:", "MASTER 4:", "REINHARD",
 }
 
 # the PC version's strings the Italian edition's loc.map says wider than
