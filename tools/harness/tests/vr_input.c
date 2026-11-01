@@ -1510,7 +1510,7 @@ int main(int argc, char **argv)
         vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
         frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
         vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
-        for (step = 1, angle = 0.0f; step <= 3; step++)
+        for (step = 1, angle = 0.0f; step <= 6; step++)
         {
             angle = 0.1f * step;
             frame.hand[VR_HAND_LEFT].aim.orientation[0] = sinf(angle * 0.5f);
@@ -1557,6 +1557,102 @@ int main(int argc, char **argv)
         frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
         vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
         CHECK(!input.pull_armed[VR_HAND_LEFT], "no places: not armed");
+        /* the other hand's grip at the weapon in hand holds it with both: it arms nothing, however the wrists turn
+           (the rifle swung up, the weapon pointed at stays on the ground) */
+        memset(&input, 0, sizeof(input));
+        settings = settings_of(0, 0.5f, 1);
+        settings.physical = 1;
+        settings.drop = settings.dual = settings.places = 1;
+        frame_of(&frame);
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        vr_input_weapon_taken(&input);
+        settings.pull_target[VR_HAND_LEFT] = 1;
+        frame.hand[VR_HAND_LEFT].grip.position[0] = 0.1f;
+        frame.hand[VR_HAND_LEFT].aim = frame.hand[VR_HAND_LEFT].grip;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(input.supporting && !input.pull_armed[VR_HAND_LEFT], "both hands on the weapon: not armed (%d, %d)",
+            input.supporting, input.pull_armed[VR_HAND_LEFT]);
+        frame.hand[VR_HAND_LEFT].buttons = 0;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(input.off_at_weapon && !input.supporting, "where its grip would hold the weapon, not holding it");
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
+        for (step = 1; step <= 8; step++)
+        {
+            angle = 0.1f * step;
+            frame.hand[VR_HAND_LEFT].aim.orientation[0] = sinf(angle * 0.5f);
+            frame.hand[VR_HAND_LEFT].aim.orientation[3] = cosf(angle * 0.5f);
+            vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        }
+        CHECK(input.grab_requests == 0, "both hands on the weapon, swung up: nothing asked (%lu)", input.grab_requests);
+        /* armed, then the hand brought to the weapon in hand: disarmed */
+        frame_of(&frame);
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(input.pull_armed[VR_HAND_LEFT], "armed away from the weapon in hand");
+        frame.hand[VR_HAND_LEFT].grip.position[0] = 0.1f;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(input.supporting && !input.pull_armed[VR_HAND_LEFT], "brought to it: disarmed");
+        /* armed, one frame's jump of the wrist (a hitch, the tracking's): nothing asked */
+        frame_of(&frame);
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        frame.hand[VR_HAND_LEFT].aim.orientation[0] = sinf(0.25f);
+        frame.hand[VR_HAND_LEFT].aim.orientation[3] = cosf(0.25f);
+        for (step = 0; step < 20; step++)
+            vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(input.grab_requests == 0 && input.pull_armed[VR_HAND_LEFT], "one frame's jump: nothing asked (%lu)",
+            input.grab_requests);
+        /* armed, the whole body stepping back (hand and head together): nothing asked */
+        for (step = 0; step < 8; step++)
+        {
+            frame.head.position[2] += 0.03f;
+            frame.hand[VR_HAND_LEFT].grip.position[2] += 0.03f;
+            frame.hand[VR_HAND_LEFT].aim.position[2] += 0.03f;
+            vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        }
+        CHECK(input.grab_requests == 0 && input.pull_armed[VR_HAND_LEFT], "a step back: nothing asked (%lu)",
+            input.grab_requests);
+        /* armed, the hand lost to the tracking a frame: still armed, and it flicks */
+        frame.hand[VR_HAND_LEFT].tracked = 0;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(input.pull_armed[VR_HAND_LEFT], "a frame's tracking lost: still armed");
+        frame.hand[VR_HAND_LEFT].tracked = 1;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(input.grab_requests == 0, "tracked again in place: nothing asked");
+        /* armed, the weapon no longer pointed at or in sight (no target): disarmed */
+        settings.pull_target[VR_HAND_LEFT] = 0;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(!input.pull_armed[VR_HAND_LEFT], "no target: disarmed");
+        settings.pull_target[VR_HAND_LEFT] = 1;
+        frame.hand[VR_HAND_LEFT].buttons = 0;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(input.pull_armed[VR_HAND_LEFT], "armed again");
+        /* armed, the menus coming up: disarmed */
+        vr_input_update(&input, &frame, &settings, 1, SECONDS, &pad);
+        CHECK(!input.pull_armed[VR_HAND_LEFT], "the menus: disarmed");
+        /* the grip a toggle (vr.grip_toggle): pressed and let go it stays armed, and the flick pulls */
+        settings.grip_toggle = 1;
+        frame_of(&frame);
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        frame.hand[VR_HAND_LEFT].buttons = 0;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(input.pull_armed[VR_HAND_LEFT], "a toggled grip let go: still armed");
+        for (step = 0; step < 4; step++)
+        {
+            frame.hand[VR_HAND_LEFT].grip.position[1] += 0.02f;
+            frame.hand[VR_HAND_LEFT].grip.position[2] += 0.035f;
+            vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        }
+        CHECK(input.grab_requests == 1 && input.grab_request_pulled, "a toggled grip's flick pulls (%lu)",
+            input.grab_requests);
         return 0;
     }
     CASE("swap") {

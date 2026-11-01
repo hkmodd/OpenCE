@@ -263,6 +263,8 @@ int vr_render_pull_target(int hand);
 flying to it (the game's object where it lies until it is added): its
 nodes as drawn this frame, else `nodes` */
 struct real_matrix4x3 *vr_pull_node_matrices(long object_index, struct real_matrix4x3 *nodes, long frame);
+/* the weapon a hand's pull draws flying (NONE: none): drawn wherever it lies */
+long vr_pull_flying_weapon(void);
 /* vr_input.c: the shoulder (VR_HAND_*) keeps a weapon not in the hand */
 int vr_render_shoulder_full(int side);
 /* vr_input.c: the player is on foot, the weapon in the hand */
@@ -362,6 +364,7 @@ void vr_render_rumble_hands(float const body[2], float const weapon[2], float co
 #define vr_render_grab_reach(hand) 0
 #define vr_render_pull_target(hand) 0
 #define vr_pull_node_matrices(object_index, nodes, frame) ((void)(object_index), (void)(frame), (nodes))
+#define vr_pull_flying_weapon() NONE
 #define vr_render_shoulder_full(side) 0
 #define vr_render_on_foot() 0
 #define vr_render_seated() 0

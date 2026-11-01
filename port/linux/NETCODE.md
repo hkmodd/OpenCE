@@ -332,7 +332,7 @@ the hand, whether the weapon was pulled from afar, and the weapon), which
 takes it only for the machine's own player, on foot and alive, with a slot
 free, not within 6 ticks of their last, the hand empty by the pose and
 within 0.197 world units of the weapon along its length, or, pulled, the
-weapon within 1.15 world units of the posed eyes with no wall between them
+weapon within 1.9 world units of the posed eyes with no wall between them
 and a point above its middle, and adds the weapon to the inventory readying
 none; the player's machine puts it in that hand (a pulled one is drawn
 flying to the hand on that machine alone, before it asks). The player may let a weapon

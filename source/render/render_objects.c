@@ -112,6 +112,7 @@ symbols in this file:
 #include "saved games/game_state.h"
 #include "rasterizer/rasterizer_console_vars.h"
 #include "rasterizer/rasterizer_model_types.h"
+#include "halo_vr.h" /* port: display.vr, port/linux/game/vr_view.c */
 
 /* ---------- constants */
 
@@ -446,6 +447,19 @@ static void find_rendered_objects(
 		object_get_render_bounding_sphere,
 		object_unmarked_function,
 		object_mark_function);
+
+	/* port: a weapon pulled to a headset's hand flies there, drawn only: found
+	whatever the view sees of where it lies (vr_view.c) */
+	{
+		long flying = vr_pull_flying_weapon();
+
+		if (flying != NONE && object_unmarked_function(flying) &&
+			render_object_globals.rendered_object_count < MAXIMUM_RENDERED_OBJECTS)
+		{
+			render_object_globals.rendered_object_indices[render_object_globals.rendered_object_count++] = flying;
+			object_mark_function(flying);
+		}
+	}
 
 	object_marker_end();
 

@@ -61,10 +61,11 @@ NETWORK_VR_THROW_MOST of the game's */
 /* a weapon taken from the ground by a hand: no further than this from the
 posed hand along its length (world units: 0.6 m, the headset's 0.25 m with
 room for a pose's age), or pulled from no further than this from the eyes
-(1.15: 3.5 m, the headset's 3 m with room for a pose's age), and the ticks
-before a player's next */
+(1.9: 5.8 m, the 3.5 m a headset keeps one to with room for a player running
+off during its flight, 0.32 seconds, and a pose's age), and the ticks before
+a player's next */
 #define NETWORK_VR_GRAB_REACH 0.197f
-#define NETWORK_VR_PULL_REACH 1.15f
+#define NETWORK_VR_PULL_REACH 1.9f
 #define NETWORK_VR_GRAB_TICKS 6
 
 void network_vr_reset(void);

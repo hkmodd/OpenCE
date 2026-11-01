@@ -226,6 +226,7 @@ struct vr_input
 	int holding;
 	int gripped;
 	int supporting;
+	int off_at_weapon;
 	/* by a VR server's rules the other hand holds a weapon of its own,
 	drawn from a shoulder (dual_wield.c): which, its trigger (0 to 1), and
 	the times its weapon went to the main hand as the main one let go */
@@ -265,12 +266,16 @@ struct vr_input
 	int grab_request_pulled;
 	unsigned long weapon_switches;
 	/* the pull: each hand's grip pressed pointing at a weapon (armed), the
-	seconds since, where the hand was then and its pointing's last pitch
-	(radians, up positive) */
+	seconds since, the hand's distance from the head then and last and how
+	fast it falls (metres a second), its pointing's last pitch (radians, up
+	positive) and how fast that rises (radians a second) */
 	int pull_armed[VR_HAND_COUNT];
 	float pull_seconds[VR_HAND_COUNT];
-	float pull_start[VR_HAND_COUNT][3];
+	float pull_start[VR_HAND_COUNT];
+	float pull_distance[VR_HAND_COUNT];
+	float pull_speed[VR_HAND_COUNT];
 	float pull_pitch[VR_HAND_COUNT];
+	float pull_turn[VR_HAND_COUNT];
 	/* the grenade's throw (vr.throw_gesture): each hand's last position and
 	its speed of late (its fastest, falling by VR_THROW_FALL a second), the
 	throw's press in seconds, and the throws and the last hand to throw */
@@ -461,6 +466,9 @@ void vr_input_hands_bare(void);
 asked for, how many, and the last one's hand and whether it was pulled
 from afar */
 unsigned long vr_input_grab_request(int *hand, int *pulled);
+/* vr_view.c: the hand is the other, where its grip would hold the weapon in
+hand too (vr_two_handed), not take another */
+int vr_input_at_weapon(int hand);
 /* vr_view.c: the hand's grip is armed to pull the weapon it points at */
 int vr_input_pull_armed(int hand);
 /* vr_view.c, the weapons in their places: the times the other hand let

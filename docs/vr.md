@@ -458,7 +458,9 @@ hand pointed at it (within about 10 degrees, wider for a big weapon, the
 one pointed at kept until the hand turns further away) shows a ring at it
 and a light pulse; the grip arms the pull (the ring red), and within a
 second and a half the hand flicked toward the head or its wrist turned up
-fast pulls it (`vr_input.c`'s `vr_pulls`). It flies to the hand in a fifth
+fast pulls it (`vr_input.c`'s `vr_pulls`). A hand where its grip would hold
+the weapon in the other too (`vr_two_handed`) shows no ring and pulls nothing:
+its grip there is that hold. It flies to the hand in a fifth
 to a third of a second, on an arc, turning to point as the hand points,
 drawn on the player's machine alone (`vr_pull_node_matrices`: the game's
 object stays where it lies), and at its arrival the hand asks for it as a
