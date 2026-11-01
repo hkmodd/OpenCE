@@ -149,23 +149,30 @@ enum
 	units' cameras (a VR build's hand), to the host, unreliably, every tick
 	while they do (network_damage.c): its line of sight check's */
 	_distributed_message_fire_origins = 93,
+	/* a dedicated server's vote for the next game (network_map_vote.c), in
+	the lobby too, reliably: the host's choices and their votes, to every
+	client, once a second and as they change, and the one that won; a
+	client's choice, to the host, which takes it only from the machine's own
+	stream */
+	_distributed_message_map_vote = 94,
+	_distributed_message_map_vote_choice = 95,
 	/* a headset's player's head and hands in a VR server's game
 	(network_vr.c): from the player's machine to the host once a tick, and
 	from the host to each client machine that sees the player */
-	_distributed_message_vr_pose_up = 94,
-	_distributed_message_vr_pose_down = 95,
+	_distributed_message_vr_pose_up = 96,
+	_distributed_message_vr_pose_down = 97,
 	/* a headset's player's weapon let fall in a VR server's game, thrown
 	as the hand moved (network_vr.c): the player's machine's request to the
 	host, reliably, which checks it and drops the weapon as the game does */
-	_distributed_message_vr_drop = 96,
+	_distributed_message_vr_drop = 98,
 	/* a headset's player's grenade thrown with the arm in a VR server's
 	game (network_vr.c): the hand's velocity and place, from the player's
 	machine to the host, reliably, for the game's throw that follows */
-	_distributed_message_vr_throw = 97,
+	_distributed_message_vr_throw = 99,
 	/* a headset's player's hand takes a weapon from the ground in a VR
 	server's game (network_vr.c): the player's machine's request to the
 	host, reliably, which checks it and adds the weapon, readied by nothing */
-	_distributed_message_vr_grab = 98,
+	_distributed_message_vr_grab = 100,
 
 	NUMBER_OF_DISTRIBUTED_MESSAGES
 };
@@ -356,10 +363,16 @@ void distributed_send_notice_to_machine(long machine_index, char const *text);
 (seconds since 1970; 0: for ever), written in its bans.txt line */
 void network_distributed_ban_details(char const *reason, unsigned long until);
 /* (the host: a dedicated server's sv_ban_address) a ban's line in bans.txt
-for an address (its text; "none" for none) and a hardware id (empty for
-none), as the ban command writes one: TRUE if it was written */
-boolean network_distributed_ban_record(char const *address, char const *hardware_id, char const *names,
-	char const *reason, unsigned long until);
+for an address (its text; "none" for none), a hardware id and a verified
+Discord account's id (each empty for none), as the ban command writes one:
+TRUE if it was written */
+boolean network_distributed_ban_record(char const *address, char const *hardware_id, char const *discord_id,
+	char const *names, char const *reason, unsigned long until);
+/* (the host) a client machine's Discord account, its id and username: a
+verified one's (a pass that checked, network_link.c), else the one it told
+(empty for none); TRUE if it is verified */
+boolean network_distributed_machine_discord(long machine_index, char *discord_id, long discord_id_size,
+	char *discord_name, long discord_name_size);
 /* whether the next ban drops its machine and keeps it out without its line
 in bans.txt (network_distributed_ban_record wrote it) */
 void network_distributed_ban_unrecorded(boolean unrecorded);

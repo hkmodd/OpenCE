@@ -202,7 +202,7 @@ What sets the size the world is seen at, each measured or derived:
   pad's: the seat's secondary trigger). The throw keeps the hand's smoothed velocity
   at its fastest and where the hand let go; `vr_view.c` gives them, in
   the world's axes, to `network_vr_throw` (a VR server's client sends
-  them to the host, distributed message 97, reliably; the host, or a
+  them to the host, distributed message 99, reliably; the host, or a
   game with no network, keeps them a second), and when the game lets
   the grenade go (`unit_throw_grenade_release`) it leaves from the hand,
   unless a wall is between the hand and the eyes, the way the hand threw

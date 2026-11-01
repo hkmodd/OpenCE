@@ -65,8 +65,14 @@ with ideas from VALORANT's netcode articles, keeping the 30 Hz tick:
   outside the loaded BSP and falling for two seconds is brought back beside
   the host, else a teammate. A dead
   player watches a living teammate (`coop_spectate.c`) and comes back
-  beside one once it is safe. With everyone dead they come back where they
-  were at the last checkpoint, without a revert. A mission the scripts fail
+  beside one once it is safe. With everyone dead, TEAM WIPE in Co-op
+  Options (`network.coop_team_wipe`) defaults to AUTO: private games revert
+  the checkpoint; public games respawn at checkpoint positions without
+  reverting the world. REVERT CHECKPOINT and RESPAWN ONLY override the
+  visibility choice, including public games with passwords. Reverting
+  requires a saved checkpoint with the same players and machine
+  assignments; otherwise the host logs the fallback and respawns them.
+  A mission the scripts fail
   with players still alive reverts to the last checkpoint on the host, as a
   skipped cutscene does (below); a client never reverts on its own. A level
   won ends the round as in multiplayer, and the next round is the
@@ -298,6 +304,30 @@ the target can be: no more than 0.05 world units behind the eye along the
 line to the target, 0.2 to its side and 0.1 above it (a client cannot claim
 a hand far past a corner). Such hits are counted in the host's log, and the
 host's `network.fire_origins` (true by default) turns the hand off.
+Then version 40 adds to the join request (`message_client_join_game_request`,
+0x70 bytes before) a Discord account's pass, 170 bytes, and its proof, 64
+(`port/linux/src/player_link.c`; `docs/master_protocol.md`, "Player keys,
+links and passes"), all zero for none: a dedicated server refuses a machine
+from a VPN's, Tor exit's or datacenter's address with one of five new
+rejection codes (`_rejection_code_vpn_link_required` and the four after it,
+`port/linux/game/network_link.c`), and a client refused with the first joins
+again at once with its pass, bound to the tunnel's session. A build before
+them shows the codes as the game being closed.
+
+Then version 41 changes both vote messages' entries (`network_votekick.c`:
+the request's first byte, once the player's index, is the vote's kind; the
+status's first byte, once the player's index, is the kind, and it carries
+the no votes), adds `_rejection_code_address_full` (a host's
+`server.max_machines_per_address`), and a dedicated server's map vote
+(`network_map_vote.c`), in the lobby too, over the machines' streams as map
+sharing's: the host's choices (map and gametype, 8 at most), their votes,
+the time left and the winner (`_distributed_message_map_vote`, 94, to each
+client reliably every second and as it changes), and a client's choice
+(`_distributed_message_map_vote_choice`, 95), taken only from the machine's
+own stream, at most four a second, one counted per machine. A co-op
+game's flags also tell its clients whether the host is a dedicated server
+(`_network_game_cooperative_dedicated_bit`: its loading zones then ask for
+most of the living players).
 
 VR servers (the VR branch's builds, `network.vr_rules`) play version 39 too,
 and play a standard game with every build of it, their headsets' players
@@ -309,15 +339,14 @@ reserved byte, the listing stamp's second); a VR build joins it only at its
 own VR revision, and shows it as "VR" before the gametype. Its game's
 settings say so too (a bit of the game's port switches,
 `_network_game_port_vr_rules_bit`, which other builds leave alone): every
-machine plays its headsets' players by its rules. VR revision 4 (its
-messages numbered after the client's build and fire origins; a weapon
-pulled from afar), in a VR
+machine plays its headsets' players by its rules. VR revision 5 (its
+messages numbered after the map vote's; a weapon pulled from afar), in a VR
 server's game: each headset's player's machine sends its head and hands,
-from its unit, to the host once a tick (distributed message 94,
+from its unit, to the host once a tick (distributed message 96,
 `network_vr.c`, unreliably), which takes a pose only of the sending
 machine's own player, newer than the last, its head within 0.5 world units
 of the unit and its hands within 0.4 of the head, and sends it on to each
-client machine that sees the player (message 95); each machine keeps a
+client machine that sees the player (message 97); each machine keeps a
 player's latest for a second, to pose the player's body by. The pose also
 carries the slot of the weapon the player's other hand holds (or none) and
 that hand's trigger: every other machine's copy of the unit, the host's
@@ -327,7 +356,7 @@ held one in the last three seconds at twice the rate. A player whose pose
 says its weapons are in their places (a bit of the pose) carries four, each
 where the player put it (the hands, the shoulders): neither the game's
 action nor walking over one takes a weapon, the player's hand does. Its
-machine asks the host (distributed message 98, over its stream: the player,
+machine asks the host (distributed message 100, over its stream: the player,
 the hand, whether the weapon was pulled from afar, and the weapon), which
 takes it only for the machine's own player, on foot and alive, with a slot
 free, not within 6 ticks of their last, the hand empty by the pose and
@@ -337,13 +366,13 @@ and a point above its middle, and adds the weapon to the inventory readying
 none; the player's machine puts it in that hand (a pulled one is drawn
 flying to the hand on that machine alone, before it asks). The player may let a weapon
 fall, thrown as the hand moved: its machine asks the host (distributed
-message 96, over its stream: the player, 0 for the weapon in hand or 1 and
+message 98, over its stream: the player, 0 for the weapon in hand or 1 and
 the slot of the other hand's, and the velocity), which takes it only for
 the machine's own player, on foot and alive, not within half a second of
 their last, no faster than 0.3 world units a tick on top of the unit's own,
 and drops the weapon as the game drops one; the other machines get the
 weapon as any dropped one. A client tells the host how its player's arm
-threw a grenade (distributed message 97, over its stream: the hand's
+threw a grenade (distributed message 99, over its stream: the hand's
 velocity and its place from the eyes, no further than 0.4 world units,
 taken only for the machine's own player); the host's next throw of that
 player's grenade within a second leaves from the hand the way the hand
@@ -416,23 +445,32 @@ server's ban for a while (`ban <player> 30m`) is left to its `bans.txt`
 line, whose `until=` ends it, and its `unban` lets the machine in again by
 the line's address or hardware id (`network_game_server_port_forget_kicked_address`).
 
-The players' votes to kick a player (`network_votekick.c`): a client sends
-`_distributed_message_votekick` (the player's absolute index) reliably, and
-the host takes it only from the client's stream. The host alone counts:
+The players' votes to kick a player and to end the game
+(`network_votekick.c`): a client sends `_distributed_message_votekick` (the
+vote's kind, the player's absolute index for a kick, and yes or no)
+reliably, and the host takes it only from the client's stream. The host
+alone counts:
 one vote per real address (an internet play peer's endpoint, not its
 stand-in), and votes again deduplicated by hardware id, which only ever
 removes votes (the players who may vote are counted by address alone, so a
-copied hardware id cannot lower the votes needed). A vote needs more than
-half of the players who may vote, the target counted, and at least two;
+copied hardware id cannot lower the votes needed). A vote needs yes votes
+scaled with the players who may vote, the target counted (more than half
+up to 8, then 40% and at least 5 up to 32, then 30% and at least 13), or a
+fixed percentage of them (`network.votekick_threshold` `static`,
+`network.votekick_percent`), at least two, and more yes than no; one the no votes have made lost ends at
+once;
 starting one needs `network.votekick_minutes` played on this host in its
 own ticks, voting two minutes; one vote runs at a time, and a failed vote
 cools its starter down and protects its target. A vote that passes kicks as
 the `kick` command does, and the host refuses the address and hardware id
 for `network.votekick_ban_minutes`. The host sends each client
 `_distributed_message_votekick_status` every second while a vote runs (and
-as it changes), for the scoreboard, whose right click frees the mouse to
-pick a player; the host's own scoreboard adds Kick and Ban. Builds without
-votes drop both kinds as unknown, so the network version is unchanged.
+as it changes: its kind, yes, no and needed), for the vote's box at the
+left of the HUD (F1 votes yes, F2 no) and the scoreboard, whose right click
+frees the mouse to pick a player; the host's own scoreboard adds Kick and
+Ban. A vote to end the game ("!endgame" in the chat, `network.vote_end_game`)
+counts as a kick's with no target, from 30 seconds played and not in a
+game's first minute, and ends the game as `sv_end_game` does.
 
 The text chat (`network_chat.c`): a client sends its player's line to the
 host (`_distributed_message_chat_up`, reliably), which takes it only from
