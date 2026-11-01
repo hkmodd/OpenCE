@@ -618,11 +618,14 @@ real_matrix4x3 *render_interpolation_object_node_matrices(long object_index)
 
 	/* (a VR server's other headsets' players' bodies as their headsets pose
 	them, drawn only: network_vr_body.c; a weapon in this headset's other
-	hand at that hand: dual_wield.c) */
+	hand at that hand: dual_wield.c; a weapon pulled to this headset's
+	hand, flying to it: vr_view.c) */
 	if (interpolation_drawing && network_vr_bodies())
 		nodes = network_vr_body_node_matrices(object_index, nodes, interpolation_frame);
 	if (interpolation_drawing && dual_wield_any())
 		nodes = dual_wield_node_matrices(object_index, nodes, interpolation_frame);
+	if (interpolation_drawing)
+		nodes = vr_pull_node_matrices(object_index, nodes, interpolation_frame);
 	return nodes;
 }
 

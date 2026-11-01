@@ -40,6 +40,7 @@ static struct vr_input_settings settings_of(int left_handed, float snap_angle, i
     settings.drop = 0;
     settings.dual = 0;
     settings.places = 0;
+    settings.pull_target[VR_HAND_LEFT] = settings.pull_target[VR_HAND_RIGHT] = 0;
     vr_input_bindings_parse("", settings.bindings);
     return settings;
 }
@@ -1454,6 +1455,108 @@ int main(int argc, char **argv)
         vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
         CHECK(input.off_holding && input.off_gripped && input.off_releases == 1, "pressed: gripped, kept (%d, %d, %lu)",
             input.off_holding, input.off_gripped, input.off_releases);
+        return 0;
+    }
+    CASE("pull") {
+        int step;
+        float angle;
+
+        /* the weapons in their places, the right hand holding one; the left, empty, points at a weapon further
+           off than its reach (the settings' pull_target) */
+        memset(&input, 0, sizeof(input));
+        settings = settings_of(0, 0.5f, 1);
+        settings.physical = 1;
+        settings.drop = settings.dual = settings.places = 1;
+        frame_of(&frame);
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        vr_input_weapon_taken(&input);
+        settings.pull_target[VR_HAND_LEFT] = 1;
+        /* its grip arms the pull: nothing asked for while the hand is held still */
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(input.pull_armed[VR_HAND_LEFT] && input.grab_requests == 0, "armed, nothing asked (%d, %lu)",
+            input.pull_armed[VR_HAND_LEFT], input.grab_requests);
+        for (step = 0; step < 30; step++)
+            vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(input.grab_requests == 0 && input.pull_armed[VR_HAND_LEFT], "held still: nothing asked");
+        /* flicked toward the head (4 cm a frame): asked for, for the left hand, pulled; disarmed */
+        for (step = 0; step < 4; step++)
+        {
+            frame.hand[VR_HAND_LEFT].grip.position[1] += 0.02f;
+            frame.hand[VR_HAND_LEFT].grip.position[2] += 0.035f;
+            vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        }
+        CHECK(input.grab_requests == 1 && input.grab_request_hand == VR_HAND_LEFT && input.grab_request_pulled &&
+            !input.pull_armed[VR_HAND_LEFT], "the flick pulls (%lu, %d, %d)", input.grab_requests,
+            input.grab_request_hand, input.grab_request_pulled);
+        CHECK(input.holding && !input.left_handed && !input.off_holding, "the right keeps its weapon");
+        /* armed again, the grip let go: disarmed, a flick then asks nothing */
+        frame.hand[VR_HAND_LEFT].buttons = 0;
+        frame_of(&frame);
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        frame.hand[VR_HAND_LEFT].buttons = 0;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(!input.pull_armed[VR_HAND_LEFT], "let go: disarmed");
+        for (step = 0; step < 4; step++)
+        {
+            frame.hand[VR_HAND_LEFT].grip.position[2] += 0.04f;
+            vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        }
+        CHECK(input.grab_requests == 1, "a flick with the grip let go asks nothing");
+        /* armed, the wrist turned up fast (0.1 radians a frame): pulled */
+        frame_of(&frame);
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        for (step = 1, angle = 0.0f; step <= 3; step++)
+        {
+            angle = 0.1f * step;
+            frame.hand[VR_HAND_LEFT].aim.orientation[0] = sinf(angle * 0.5f);
+            frame.hand[VR_HAND_LEFT].aim.orientation[3] = cosf(angle * 0.5f);
+            vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        }
+        CHECK(input.grab_requests == 2 && input.grab_request_pulled, "the wrist turned up pulls (%lu)",
+            input.grab_requests);
+        /* armed too long (past VR_PULL_SECONDS): disarmed, a flick asks nothing */
+        frame.hand[VR_HAND_LEFT].buttons = 0;
+        frame_of(&frame);
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
+        for (step = 0; step < 150; step++)
+            vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(!input.pull_armed[VR_HAND_LEFT], "too long: disarmed");
+        for (step = 0; step < 4; step++)
+        {
+            frame.hand[VR_HAND_LEFT].grip.position[2] += 0.04f;
+            vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        }
+        CHECK(input.grab_requests == 2, "a flick after it asks nothing");
+        /* a weapon within the hand's reach is taken there, not pulled */
+        frame.hand[VR_HAND_LEFT].buttons = 0;
+        frame_of(&frame);
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        settings.grab_reach[VR_HAND_LEFT] = 1;
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(input.grab_requests == 3 && !input.grab_request_pulled && !input.pull_armed[VR_HAND_LEFT],
+            "within reach: taken, not pulled");
+        /* nothing pointed at: the grip arms nothing */
+        settings.grab_reach[VR_HAND_LEFT] = settings.pull_target[VR_HAND_LEFT] = 0;
+        frame.hand[VR_HAND_LEFT].buttons = 0;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(!input.pull_armed[VR_HAND_LEFT], "nothing pointed at: not armed");
+        /* not by a VR server's rules (no places): never armed */
+        settings.places = 0;
+        settings.pull_target[VR_HAND_LEFT] = 1;
+        frame.hand[VR_HAND_LEFT].buttons = 0;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(!input.pull_armed[VR_HAND_LEFT], "no places: not armed");
         return 0;
     }
     CASE("swap") {

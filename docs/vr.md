@@ -452,11 +452,25 @@ moves no weapon by itself. A weapon comes by a hand alone: an empty hand's
 grip pressed at a weapon on the ground within its reach takes it into that
 hand, whether or not the other grips its own; neither the game's action
 nor walking over one takes a weapon (`players.c`), and with both hands full
-one is thrown away first. A game with no network adds the weapon itself;
-in a network game the player's machine asks the host (VR revision 2),
-which checks the hand by the pose and adds it readying none
-(`network_vr_grab`, for a player whose pose says its weapons are in their
-places, `network_vr_carries_four`). A weapon let go at a shoulder that
+one is thrown away first. A weapon further off, up to 3 m from the eyes and
+in their sight, is pulled, as Half-Life: Alyx's gloves pull one: an empty
+hand pointed at it (within about 10 degrees, wider for a big weapon, the
+one pointed at kept until the hand turns further away) shows a ring at it
+and a light pulse; the grip arms the pull (the ring red), and within a
+second and a half the hand flicked toward the head or its wrist turned up
+fast pulls it (`vr_input.c`'s `vr_pulls`). It flies to the hand in a fifth
+to a third of a second, on an arc, turning to point as the hand points,
+drawn on the player's machine alone (`vr_pull_node_matrices`: the game's
+object stays where it lies), and at its arrival the hand asks for it as a
+hand within reach does; caught even if the grip was let go meanwhile (the
+game's object never moved: a miss would make it jump back). Taken by
+another first, or refused, it is drawn where it lies again. A game with
+no network adds the weapon itself; in a network game the player's machine
+asks the host (VR revision 4), which checks the hand by the pose, or for a
+pulled weapon the posed eyes' sight of it and its distance
+(`network_vr_pull_sight`, the same check the headset chooses by), and adds
+it readying none (`network_vr_grab`, for a player whose pose says its
+weapons are in their places, `network_vr_carries_four`). A weapon let go at a shoulder that
 keeps none is kept there; let go at a shoulder that keeps one, it is
 exchanged for that one, which the hand then holds (by its grip once that
 is pressed again); let go elsewhere, it falls. The switch button exchanges

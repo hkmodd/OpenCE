@@ -60,8 +60,11 @@ NETWORK_VR_THROW_MOST of the game's */
 #define NETWORK_VR_THROW_MOST 1.25f
 /* a weapon taken from the ground by a hand: no further than this from the
 posed hand along its length (world units: 0.6 m, the headset's 0.25 m with
-room for a pose's age), and the ticks before a player's next */
+room for a pose's age), or pulled from no further than this from the eyes
+(1.15: 3.5 m, the headset's 3 m with room for a pose's age), and the ticks
+before a player's next */
 #define NETWORK_VR_GRAB_REACH 0.197f
+#define NETWORK_VR_PULL_REACH 1.15f
 #define NETWORK_VR_GRAB_TICKS 6
 
 void network_vr_reset(void);
@@ -102,11 +105,14 @@ a VR server's rules (or in a game with no network) with the weapons in
 their places, or a VR server's player whose pose says so */
 boolean network_vr_carries_four(long unit_index);
 /* (a headset's player's machine, the weapons in their places) the weapon
-on the ground taken by the player's hand (0 the left, 1 the right),
-added as the game adds one, readied by nothing: by a game with no network
-itself, by a VR server's host when it asks, which checks it; nothing on
-another server */
-void network_vr_grab(long player, long weapon_index, short hand);
+on the ground taken by the player's hand (0 the left, 1 the right), within
+its reach or pulled from afar, added as the game adds one, readied by
+nothing: by a game with no network itself, by a VR server's host when it
+asks, which checks it; nothing on another server */
+void network_vr_grab(long player, long weapon_index, short hand, boolean pulled);
+/* the weapon may be pulled by a hand seen from `eyes`: within
+NETWORK_VR_PULL_REACH, no wall between (the unit's own body not one) */
+boolean network_vr_pull_sight(real_point3d const *eyes, long weapon_index, long unit_index);
 /* the request's entry size and its handler (the host: over the
 machine's stream alone) */
 word network_vr_grab_entry_size(void);

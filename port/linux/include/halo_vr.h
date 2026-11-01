@@ -150,9 +150,11 @@ void vr_resolve_scope(unsigned int texture, int width, int height, int x0, int y
 /* where the scope's image is held this frame (LOCAL space, facing +z) and
 its width in metres */
 void vr_scope_place(const struct vr_pose *pose, float width);
-/* the reticles: the weapon in hand's (0) and the other hand's weapon's (1:
-dual_wield.c) */
-#define VR_RETICLE_COUNT 2
+/* the reticles: the weapon in hand's (0), the other hand's weapon's (1:
+dual_wield.c), and the ring at a weapon a hand would pull (VR_RETICLE_PULL:
+vr_view.c) */
+#define VR_RETICLE_COUNT 3
+#define VR_RETICLE_PULL 2
 /* a weapon's crosshair, drawn alone at the HUD's middle: the back buffer's
 square (x0, y0 to x1, y1 in its pixels, rows from the top) is that
 reticle's picture this frame, in place of the ring */
@@ -254,6 +256,13 @@ int vr_render_empty_hands(struct animation_graph *graph, struct real_matrix4x3 *
 /* vr_input.c: a weapon lies on the ground within the hand's (VR_HAND_*)
 reach, for its grip to take */
 int vr_render_grab_reach(int hand);
+/* vr_input.c: the hand (VR_HAND_*), empty, points at a weapon on the ground
+further off, for its grip and a flick to pull */
+int vr_render_pull_target(int hand);
+/* render_interpolation.c: a weapon pulled to the headset's hand, drawn
+flying to it (the game's object where it lies until it is added): its
+nodes as drawn this frame, else `nodes` */
+struct real_matrix4x3 *vr_pull_node_matrices(long object_index, struct real_matrix4x3 *nodes, long frame);
 /* vr_input.c: the shoulder (VR_HAND_*) keeps a weapon not in the hand */
 int vr_render_shoulder_full(int side);
 /* vr_input.c: the player is on foot, the weapon in the hand */
@@ -351,6 +360,8 @@ void vr_render_rumble_hands(float const body[2], float const weapon[2], float co
 #define vr_render_bare_hands() 0
 #define vr_render_empty_hands(graph, matrices) ((void)(graph), (void)(matrices), 0)
 #define vr_render_grab_reach(hand) 0
+#define vr_render_pull_target(hand) 0
+#define vr_pull_node_matrices(object_index, nodes, frame) ((void)(object_index), (void)(frame), (nodes))
 #define vr_render_shoulder_full(side) 0
 #define vr_render_on_foot() 0
 #define vr_render_seated() 0

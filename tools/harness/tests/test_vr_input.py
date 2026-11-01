@@ -12,8 +12,21 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from harness import CHECK_FAILED, build, mutated, read, run
 
 CASES = ["gameplay", "move", "menus", "menu-button", "turn", "seat", "drive", "room", "gestures", "hands", "ray",
-         "bindings", "swap", "throw", "grab", "bare", "physical", "dual", "places", "layout", "seat-secondary", "handles", "seat-switch"]
+         "bindings", "swap", "throw", "grab", "bare", "physical", "dual", "places", "pull", "layout", "seat-secondary", "handles", "seat-switch"]
 CONTROLS = {
+    "pull-never-arms": (("\t\telse if (settings->places && settings->pull_target[hand])\n\t\t\tvr_pull_arm(input, frame, hand);\n",
+                         ""), "pull"),
+    "pull-no-flick-needed": (("if ((along >= VR_PULL_SPEED && nearer >= VR_PULL_LEAST) || turn >= VR_PULL_TURN)",
+                              "if (along > -1.0e9f || nearer > -1.0e9f || turn > -1.0e9f)"), "pull"),
+    "pull-grip-release-ignored": (("if (!input->places || !state->tracked || !(state->buttons & VR_BUTTON_GRIP) ||",
+                                   "if (!input->places || !state->tracked ||"), "pull"),
+    "pull-no-timeout": (("!(state->buttons & VR_BUTTON_GRIP) ||\n\t\t\tinput->pull_seconds[hand] > VR_PULL_SECONDS)",
+                         "!(state->buttons & VR_BUTTON_GRIP))"), "pull"),
+    "pull-not-marked": (("\t\t\tinput->grab_request_pulled = 1;", "\t\t\tinput->grab_request_pulled = 0;"), "pull"),
+    "pull-flick-away": (("to_head[axis] = frame->head.position[axis] - state->grip.position[axis];",
+                         "to_head[axis] = state->grip.position[axis] - frame->head.position[axis];"), "pull"),
+    "pull-wrist-down": (("turn = seconds > 0.0f ? (pitch - input->pull_pitch[hand]) / seconds : 0.0f;",
+                         "turn = seconds > 0.0f ? (input->pull_pitch[hand] - pitch) / seconds : 0.0f;"), "pull"),
     "places-grab-held": (("if (input->places)\n\t{\n\t\tinput->grab_requests++;",
                           "if (0)\n\t{\n\t\tinput->grab_requests++;"), "places"),
     "places-off-exchange-never": (("if (settings->places && side >= 0 && settings->shoulder_full[side])\n\t\t{\n"

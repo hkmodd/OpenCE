@@ -160,7 +160,8 @@ enum { _item_attached_to_unit_bit = 0 };
 #define _object_mask_weapon 0x4
 #define GROUND_WEAPONS 4
 struct item_datum { long definition_index; struct { long parent_object_index; unsigned long flags;
- real_point3d position; real_point3d bounding_sphere_center; } object; struct { unsigned long flags; } item; };
+ real_point3d position; real_point3d bounding_sphere_center; real bounding_sphere_radius; } object;
+ struct { unsigned long flags; } item; };
 static struct item_datum ground[GROUND_WEAPONS];
 static short weapon_count[MAXIMUM_TRACKED_PLAYERS];
 static int added;
@@ -619,20 +620,51 @@ int main(int argc,char **argv)
   local[0]=TRUE;headset_four=TRUE;player_data[0].local_player_index=0;
   unit_data[0].unit.player_index=distributed_player_from_byte(0);
   ground[3].object.position.x=50.0f;ground[3].object.bounding_sphere_center.x=50.1f;
-  network_vr_grab(distributed_player_from_byte(0),(0x55L<<16)|503,1);
+  network_vr_grab(distributed_player_from_byte(0),(0x55L<<16)|503,1,FALSE);
   CHECK(added==4 && added_unit==0 && told_pickups==3 && shown_pickups==4,
    "the host's own player: taken, shown, not told: %d %d %d",added,told_pickups,shown_pickups);
   /* a VR server's client asks, reliably; an ordinary server's asks nothing */
   connection=_game_connection_network_client;
-  network_vr_grab(distributed_player_from_byte(0),(0x55L<<16)|503,0);
+  network_vr_grab(distributed_player_from_byte(0),(0x55L<<16)|503,0,FALSE);
   CHECK(sent_grabs==1 && added==4,"a VR server's client asks the host");
   CHECK(((struct distributed_vr_grab_message *)last_message)->entry.player_index==0 &&
    ((struct distributed_vr_grab_message *)last_message)->entry.flags==FLAG(_network_vr_grab_left_hand_bit) &&
    ((struct distributed_vr_grab_message *)last_message)->entry.weapon_index==((0x55L<<16)|503),
    "for its player, the left hand, the weapon");
   game.cooperative_flags=0;
-  network_vr_grab(distributed_player_from_byte(0),(0x55L<<16)|503,0);
+  network_vr_grab(distributed_player_from_byte(0),(0x55L<<16)|503,0,FALSE);
   CHECK(sent_grabs==1,"an ordinary server's client asks nothing");
+  /* pulled: a client says so; the host takes a remote player's pulled
+  weapon within NETWORK_VR_PULL_REACH of the posed eyes (10.05 19.98 1.6)
+  and in their sight, and refuses it past that, behind a wall, or asked as
+  within the hand's reach from a metre off */
+  game.cooperative_flags=FLAG(_network_game_port_vr_rules_bit);
+  network_vr_grab(distributed_player_from_byte(0),(0x55L<<16)|503,1,TRUE);
+  CHECK(sent_grabs==2 &&
+   ((struct distributed_vr_grab_message *)last_message)->entry.flags==FLAG(_network_vr_grab_pulled_bit),
+   "a client's pulled grab says so");
+  connection=_game_connection_network_server;
+  now+=NETWORK_VR_GRAB_TICKS;
+  weapon_count[1]=2;
+  pose_entry=entry_of(1,&pose);
+  network_vr_handle_up(2,now,&pose_entry,1);
+  ground[3].object.position.x=11.0f;ground[3].object.bounding_sphere_center=ground[3].object.position;
+  ground[3].object.bounding_sphere_radius=0.05f;
+  entry.player_index=1;entry.weapon_index=(0x55L<<16)|503;entry.flags=0;
+  network_vr_handle_grab(2,&entry,1,TRUE);
+  CHECK(added==4,"a weapon a metre off, not pulled: refused");
+  entry.flags=FLAG(_network_vr_grab_pulled_bit);
+  wall_before_hand=TRUE;
+  network_vr_handle_grab(2,&entry,1,TRUE);
+  wall_before_hand=FALSE;
+  CHECK(added==4,"pulled through a wall: refused");
+  ground[3].object.position.x=10.05f+NETWORK_VR_PULL_REACH+0.05f;
+  ground[3].object.bounding_sphere_center=ground[3].object.position;
+  network_vr_handle_grab(2,&entry,1,TRUE);
+  CHECK(added==4,"pulled from past NETWORK_VR_PULL_REACH: refused");
+  ground[3].object.position.x=11.0f;ground[3].object.bounding_sphere_center=ground[3].object.position;
+  network_vr_handle_grab(2,&entry,1,TRUE);
+  CHECK(added==5 && added_unit==1 && added_weapon==((0x55L<<16)|503),"pulled from in sight and reach: taken");
  } else CASE("throw") {
   struct distributed_vr_throw entry;
   real_vector3d hand,offset,velocity,game_velocity;

@@ -121,6 +121,17 @@ the base of their neck) */
 /* a weapon on the ground within this of a hand's grip (along its length,
 metres) is in its reach, for the grip to take */
 #define VR_GRAB_REACH 0.25f
+/* the pull: a weapon on the ground no further than this from the eyes
+(metres), within this of the hand's pointing (its middle's offset from the
+ray over its distance along it, past its size: about 10 degrees), the one
+pointed at kept to this many times that, and the nearer to the pointing
+taken, a metre further off counting as this much more; the nodes of a
+weapon drawn flying, at most */
+#define VR_PULL_REACH 3.0f
+#define VR_PULL_CONE 0.18f
+#define VR_PULL_KEEP 1.6f
+#define VR_PULL_FARTHER 0.01f
+#define VR_PULL_NODES 32
 
 /* how far the head may lean the view from the game's camera, in metres
 (in a seat, or anywhere without room scale), and how far short of a wall
@@ -339,6 +350,23 @@ static struct
 	long held_weapon;
 	boolean grab_reach[VR_HAND_COUNT];
 	long grab_target[VR_HAND_COUNT];
+	/* the weapon on the ground each empty hand points at further off, to
+	pull (vr_pull_targets; NONE: none); a weapon pulled to a hand, flying
+	(NONE: none), the hand, where it left from (its world matrix), the
+	seconds flown and to fly, whether the hand's grab was asked for at its
+	arrival; its nodes as drawn flying, for the frame drawn
+	(vr_pull_node_matrices); the frame's seconds */
+	long pull_target[VR_HAND_COUNT];
+	long flight_weapon;
+	short flight_hand;
+	real_matrix4x3 flight_from;
+	real flight_seconds;
+	real flight_duration;
+	boolean flight_asked;
+	long flight_drawn_frame;
+	short flight_node_count;
+	real_matrix4x3 flight_nodes[VR_PULL_NODES];
+	real period;
 	/* the places' slots as last logged, and the slot readied then */
 	short places_logged[VR_PLACE_COUNT];
 	short places_logged_current;
@@ -1142,6 +1170,242 @@ static void vr_places_let_fall(
 	vr_view.weapon_places.weapon[place] = NONE;
 }
 
+/* the weapon on the ground, as it lies (its object's own world matrix) */
+static boolean vr_on_ground(
+	long weapon_index)
+{
+	struct item_datum *item = weapon_index == NONE ? NULL :
+		(struct item_datum *)object_try_and_get_and_verify_type(weapon_index, _object_mask_weapon);
+
+	return item && item->object.parent_object_index == NONE &&
+		TEST_FLAG(item->object.flags, _object_connected_to_map_bit) &&
+		!TEST_FLAG(item->item.flags, _item_attached_to_unit_bit);
+}
+
+/* a weapon pulled by the hand begins to fly to it (drawn only: the game's
+object stays where it lies until the host adds it, at its arrival): the
+farther, the longer, from 0.18 to 0.32 seconds */
+static void vr_flight_begin(
+	long weapon_index,
+	short hand)
+{
+	real metres;
+
+	if (!vr_on_ground(weapon_index) || !vr_view.grip_valid[hand])
+		return;
+	object_get_world_matrix(weapon_index, &vr_view.flight_from);
+	metres = distance3d(&vr_view.flight_from.position, &vr_view.grips[hand].position) / VR_UNITS_PER_METRE;
+	vr_view.flight_weapon = weapon_index;
+	vr_view.flight_hand = hand;
+	vr_view.flight_seconds = 0.0f;
+	vr_view.flight_duration = PIN(0.15f + 0.035f * metres, 0.18f, 0.32f);
+	vr_view.flight_asked = FALSE;
+	vr_view.flight_drawn_frame = NONE;
+	vr_haptic(hand, 0.25f, 0.03f);
+	platform_log("vr: the %s hand pulls weapon %08lx from %.1f m", hand == VR_HAND_LEFT ? "left" : "right",
+		weapon_index, metres);
+}
+
+/* the flying weapon's world matrix this frame: from where it lay to the
+hand's grip, pointing as the hand points, eased in and out, on an arc
+lifted a quarter of the way's length at its middle */
+static void vr_flight_matrix(
+	real_matrix4x3 *at)
+{
+	real_matrix4x3 const *from = &vr_view.flight_from;
+	struct render_camera const *grip = &vr_view.grips[vr_view.flight_hand];
+	struct render_camera const *pointing = &vr_view.pointings[vr_view.flight_hand];
+	real t = vr_view.flight_duration > 0.0f ? PIN(vr_view.flight_seconds / vr_view.flight_duration, 0.0f, 1.0f) : 1.0f;
+	real s = t * t * (3.0f - 2.0f * t);
+	real lift = 0.25f * distance3d(&from->position, &grip->position);
+	real_point3d middle;
+	real_vector3d forward, up, along_forward;
+	int axis;
+
+	for (axis = 0; axis < 3; axis++)
+	{
+		middle.n[axis] = 0.5f * (from->position.n[axis] + grip->position.n[axis]);
+		forward.n[axis] = from->forward.n[axis] + (pointing->forward.n[axis] - from->forward.n[axis]) * s;
+		up.n[axis] = from->up.n[axis] + (pointing->up.n[axis] - from->up.n[axis]) * s;
+	}
+	middle.z += lift;
+	for (axis = 0; axis < 3; axis++)
+	{
+		at->position.n[axis] = (1.0f - s) * (1.0f - s) * from->position.n[axis] +
+			2.0f * (1.0f - s) * s * middle.n[axis] + s * s * grip->position.n[axis];
+	}
+	/* (the forward and up between the two, square again; turned half round
+	the blend has none: the hand's) */
+	if (normalize3d(&forward) < 0.001f)
+		forward = pointing->forward;
+	scale_vector3d(&forward, dot_product3d(&up, &forward), &along_forward);
+	up.i -= along_forward.i;
+	up.j -= along_forward.j;
+	up.k -= along_forward.k;
+	if (normalize3d(&up) < 0.001f)
+		up = pointing->up;
+	at->scale = from->scale;
+	at->forward = forward;
+	at->up = up;
+	cross_product3d(&at->up, &at->forward, &at->left);
+}
+
+/* the pulled weapon in flight: at its arrival the hand's grab asked for
+(network_vr_grab, pulled: the host checks it) and the weapon held drawn at
+the hand until the places put it there or the asking ends unanswered (1.5
+seconds: vr_places_reconcile); taken by another, gone, or the hand full
+meanwhile: the flight ends, the weapon drawn where it lies */
+static void vr_flight(
+	struct vr_places *places,
+	struct unit_datum *unit,
+	long now)
+{
+	short hand = vr_view.flight_hand;
+
+	if (vr_view.flight_weapon == NONE)
+		return;
+	if (!vr_view.flight_asked)
+	{
+		if (!vr_on_ground(vr_view.flight_weapon) || places->slot[hand] != NONE || places->pending_hand != NONE ||
+			!vr_view.grip_valid[hand])
+		{
+			platform_log("vr: weapon %08lx's flight to the %s hand ended before it came", vr_view.flight_weapon,
+				hand == VR_HAND_LEFT ? "left" : "right");
+			vr_view.flight_weapon = NONE;
+			vr_haptic(hand, 0.3f, 0.02f);
+			return;
+		}
+		vr_view.flight_seconds += vr_view.period;
+		vr_haptic(hand, 0.08f + 0.12f * PIN(vr_view.flight_seconds / vr_view.flight_duration, 0.0f, 1.0f), 0.02f);
+		if (vr_view.flight_seconds >= vr_view.flight_duration)
+		{
+			vr_view.flight_asked = TRUE;
+			places->pending_hand = hand;
+			places->pending_weapon = vr_view.flight_weapon;
+			places->pending_time = now;
+			network_vr_grab(unit->unit.player_index, vr_view.flight_weapon, (short)(hand == VR_HAND_LEFT ? 0 : 1), TRUE);
+		}
+	}
+	else if (places->pending_hand == NONE)
+	{
+		boolean refused = vr_on_ground(vr_view.flight_weapon);
+
+		platform_log("vr: weapon %08lx pulled to the %s hand %s", vr_view.flight_weapon,
+			hand == VR_HAND_LEFT ? "left" : "right", refused ? "was refused" : "came");
+		vr_haptic(hand, refused ? 0.3f : 0.5f, refused ? 0.02f : 0.05f);
+		vr_view.flight_weapon = NONE;
+	}
+}
+
+/* the weapon on the ground each empty hand points at, further off than
+its reach and no further than VR_PULL_REACH from the eyes, to pull (none
+while one flies): its middle within VR_PULL_CONE of the hand's pointing
+ray, past its size (the one pointed at kept to VR_PULL_KEEP times that),
+the nearest to the ray, and in sight of the eyes as the host checks it
+(network_vr_pull_sight). The one a hand's grip is armed to pull, or has
+asked to pull, is kept wherever the hand then points (the flick turns it
+away) while it stays in sight and reach. A hand that comes to point at one
+feels it; a ring is shown at it (the pull's reticle), red while armed */
+static void vr_pull_targets(
+	struct vr_frame const *frame,
+	real_point3d const *anchor,
+	real heading,
+	float const head[3])
+{
+	struct unit_datum *unit = unit_try_and_get(vr_view.unit_index);
+	struct object_iterator iterator;
+	long chosen[VR_HAND_COUNT], kept[VR_HAND_COUNT];
+	real best[VR_HAND_COUNT];
+	real reach = VR_PULL_REACH * VR_UNITS_PER_METRE;
+	int hand, ring = -1, axis, asked_hand, asked_pulled;
+	boolean asked = vr_input_grab_request(&asked_hand, &asked_pulled) != vr_view.grab_requests && asked_pulled;
+
+	for (hand = 0; hand < VR_HAND_COUNT; hand++)
+	{
+		chosen[hand] = NONE;
+		best[hand] = 1.0e9f;
+		kept[hand] = vr_input_pull_armed(hand) || (asked && asked_hand == hand) ? vr_view.pull_target[hand] : NONE;
+	}
+	if (unit && vr_view.places && unit->object.parent_object_index == NONE && vr_view.hand_aiming &&
+		!vr_view.cinematic && vr_view.flight_weapon == NONE)
+	{
+		object_iterator_new(&iterator, _object_mask_weapon, 0);
+		while (object_iterator_next(&iterator))
+		{
+			struct item_datum *item = item_get(iterator.index);
+			real_vector3d to_weapon;
+
+			if (!vr_on_ground(iterator.index) || !unit_can_use_weapon(vr_view.unit_index, iterator.index))
+				continue;
+			vector_from_points3d(&vr_view.head_camera.position, &item->object.bounding_sphere_center, &to_weapon);
+			if (dot_product3d(&to_weapon, &to_weapon) > reach * reach)
+				continue;
+			for (hand = 0; hand < VR_HAND_COUNT; hand++)
+			{
+				struct render_camera const *pointing = &vr_view.pointings[hand];
+				real_vector3d to_middle, across;
+				real along, off, cone, score;
+
+				if (!vr_view.grip_valid[hand] || vr_view.grab_reach[hand] ||
+					vr_view.weapon_places.slot[hand] != NONE || kept[hand] != NONE)
+				{
+					continue;
+				}
+				vector_from_points3d(&pointing->position, &item->object.bounding_sphere_center, &to_middle);
+				along = dot_product3d(&to_middle, &pointing->forward);
+				if (along <= 0.0f)
+					continue;
+				across.i = to_middle.i - pointing->forward.i * along;
+				across.j = to_middle.j - pointing->forward.j * along;
+				across.k = to_middle.k - pointing->forward.k * along;
+				off = magnitude3d(&across);
+				cone = VR_PULL_CONE * (iterator.index == vr_view.pull_target[hand] ? VR_PULL_KEEP : 1.0f);
+				if (off > along * cone + item->object.bounding_sphere_radius)
+					continue;
+				score = off / along + VR_PULL_FARTHER * along / VR_UNITS_PER_METRE;
+				if (score < best[hand])
+				{
+					best[hand] = score;
+					chosen[hand] = iterator.index;
+				}
+			}
+		}
+		for (hand = 0; hand < VR_HAND_COUNT; hand++)
+		{
+			if (kept[hand] != NONE && vr_on_ground(kept[hand]) && vr_view.weapon_places.slot[hand] == NONE)
+				chosen[hand] = kept[hand];
+			if (chosen[hand] != NONE &&
+				!network_vr_pull_sight(&vr_view.head_camera.position, chosen[hand], vr_view.unit_index))
+			{
+				chosen[hand] = NONE;
+			}
+		}
+	}
+	for (hand = 0; hand < VR_HAND_COUNT; hand++)
+	{
+		if (chosen[hand] != NONE && chosen[hand] != vr_view.pull_target[hand])
+			vr_haptic(hand, 0.12f, 0.015f);
+		vr_view.pull_target[hand] = chosen[hand];
+		if (chosen[hand] != NONE && (ring < 0 || vr_input_pull_armed(hand)))
+			ring = hand;
+	}
+	/* (the ring at the weapon's middle, in LOCAL space as the aiming
+	reticles are: vr_reticle_along) */
+	if (ring >= 0)
+	{
+		struct object_datum *weapon = object_get(vr_view.pull_target[ring]);
+		float world[3], local[3], position[3];
+
+		for (axis = 0; axis < 3; axis++)
+			world[axis] = (weapon->object.bounding_sphere_center.n[axis] - anchor->n[axis]) / VR_UNITS_PER_METRE;
+		vr_world_to_local(world, heading, local);
+		for (axis = 0; axis < 3; axis++)
+			position[axis] = frame->head.position[axis] - head[axis] + local[axis];
+		vr_reticle_place(VR_RETICLE_PULL, position, vr_input_pull_armed(ring));
+		vr_view.reticle_placed[VR_RETICLE_PULL] = TRUE;
+	}
+}
+
 /* by a VR server's rules, with the hands as they hold: the weapons in
 their places (vr_places.c), "what you see is what you have". The input's
 doings change the places: a hand's grip at a shoulder draws its weapon, or,
@@ -1164,7 +1428,7 @@ static void vr_places_update(
 	struct vr_places_orders orders;
 	unsigned long grabs, releases, exchanges, switches, requests, transfers;
 	float trigger, velocity[3];
-	int side, kind, by, hand, off_side, main_hand, off;
+	int side, kind, by, hand, off_side, main_hand, off, pulled;
 	short slot, came;
 
 	if (!unit || !vr_view.hand_aiming || unit->unit.player_index == NONE)
@@ -1185,12 +1449,14 @@ static void vr_places_update(
 		vr_view.off_releases = vr_input_off_released(&side, velocity);
 		vr_view.off_exchanges = vr_input_off_exchanges(&side);
 		vr_view.weapon_switches = vr_input_weapon_switches();
-		vr_view.grab_requests = vr_input_grab_request(&hand);
+		vr_view.grab_requests = vr_input_grab_request(&hand, &pulled);
+		vr_view.flight_weapon = NONE;
 	}
 	if (unit->object.parent_object_index != NONE)
 	{
 		vr_view.places_rode = TRUE;
 		vr_view.bare = FALSE;
+		vr_view.flight_weapon = NONE;
 		return;
 	}
 	if (vr_view.places_rode)
@@ -1310,22 +1576,32 @@ static void vr_places_update(
 			vr_haptic(main_hand, 0.2f, 0.02f);
 		}
 	}
-	/* (an empty hand's grip by a weapon on the ground: asked for) */
-	requests = vr_input_grab_request(&hand);
+	/* (an empty hand's grip by a weapon on the ground: asked for; one
+	pulled from afar flies to the hand first) */
+	requests = vr_input_grab_request(&hand, &pulled);
 	if (requests != vr_view.grab_requests)
 	{
 		vr_view.grab_requests = requests;
 		if (hand >= 0 && hand < VR_HAND_COUNT && places->slot[hand] == NONE && places->pending_hand == NONE &&
-			vr_view.grab_target[hand] != NONE)
+			vr_view.flight_weapon == NONE)
 		{
-			places->pending_hand = (short)hand;
-			places->pending_weapon = vr_view.grab_target[hand];
-			places->pending_time = game.now;
-			platform_log("vr: the %s hand takes weapon %08lx", hand == VR_HAND_LEFT ? "left" : "right",
-				vr_view.grab_target[hand]);
-			network_vr_grab(unit->unit.player_index, vr_view.grab_target[hand], (short)(hand == VR_HAND_LEFT ? 0 : 1));
+			if (!pulled && vr_view.grab_target[hand] != NONE)
+			{
+				places->pending_hand = (short)hand;
+				places->pending_weapon = vr_view.grab_target[hand];
+				places->pending_time = game.now;
+				platform_log("vr: the %s hand takes weapon %08lx", hand == VR_HAND_LEFT ? "left" : "right",
+					vr_view.grab_target[hand]);
+				network_vr_grab(unit->unit.player_index, vr_view.grab_target[hand],
+					(short)(hand == VR_HAND_LEFT ? 0 : 1), FALSE);
+			}
+			else if (pulled && vr_view.pull_target[hand] != NONE)
+			{
+				vr_flight_begin(vr_view.pull_target[hand], (short)hand);
+			}
 		}
 	}
+	vr_flight(places, unit, game.now);
 	/* (the game reconciled with the places, their orders carried out; the
 	input's hands as the places hold) */
 	vr_places_game_read(&game, unit, local_player_index);
@@ -2237,12 +2513,19 @@ short vr_render_windows(
 		}
 	}
 	vr_view.places = vr_view.hands_physical && vr_render_dual_wield();
+	vr_view.period = frame->display_period > 0.0f ? frame->display_period : 1.0f / 90.0f;
 	vr_grab_reach();
+	vr_pull_targets(frame, &anchor, heading, head);
 	vr_shoulders();
 	if (vr_view.places)
+	{
 		vr_places_update(player.local_player_index);
+	}
 	else
+	{
 		vr_view.places_unit = NONE;
+		vr_view.flight_weapon = NONE;
+	}
 	vr_throw();
 	vr_pose_send(player.local_player_index);
 	/* (the other hand's grip, for the weapon it may hold) */
@@ -2777,7 +3060,8 @@ void vr_render_hud_begin(
 		return;
 	for (reticle = 0; reticle < VR_RETICLE_COUNT; reticle++)
 	{
-		if (!vr_view.reticle_placed[reticle])
+		/* (the pull's: the ring) */
+		if (!vr_view.reticle_placed[reticle] || reticle == VR_RETICLE_PULL)
 			continue;
 		vr_view.drawing_reticle = TRUE;
 		rasterizer_hud_begin();
@@ -3115,6 +3399,47 @@ int vr_render_grab_reach(
 	return vr_view.stereo && hand >= 0 && hand < VR_HAND_COUNT && vr_view.grab_reach[hand];
 }
 
+int vr_render_pull_target(
+	int hand)
+{
+	return vr_view.stereo && hand >= 0 && hand < VR_HAND_COUNT && vr_view.pull_target[hand] != NONE;
+}
+
+real_matrix4x3 *vr_pull_node_matrices(
+	long object_index,
+	real_matrix4x3 *nodes,
+	long frame)
+{
+	struct object_datum *object;
+	real_matrix4x3 world, inverse, at, moved;
+	long count;
+	short node_index;
+
+	if (object_index == NONE || object_index != vr_view.flight_weapon || !vr_view.stereo)
+		return nodes;
+	if (vr_view.flight_drawn_frame == frame)
+		return vr_view.flight_node_count ? vr_view.flight_nodes : nodes;
+	vr_view.flight_drawn_frame = frame;
+	vr_view.flight_node_count = 0;
+	if (!vr_on_ground(object_index) || !vr_view.grip_valid[vr_view.flight_hand])
+		return nodes;
+	object = object_get(object_index);
+	count = object->object.node_matrices.size / (long)sizeof(real_matrix4x3);
+	if (count <= 0 || count > VR_PULL_NODES)
+		return nodes;
+	if (!nodes)
+		nodes = (real_matrix4x3 *)object_header_block_get(object_index, &object->object.node_matrices);
+	/* (every node moved as the object's own frame moves to the flight's) */
+	vr_flight_matrix(&at);
+	object_get_world_matrix(object_index, &world);
+	matrix4x3_inverse(&world, &inverse);
+	matrix4x3_multiply(&at, &inverse, &moved);
+	for (node_index = 0; node_index < count; node_index++)
+		matrix4x3_multiply(&moved, &nodes[node_index], &vr_view.flight_nodes[node_index]);
+	vr_view.flight_node_count = (short)count;
+	return vr_view.flight_nodes;
+}
+
 int vr_rules_active(
 	void)
 {
@@ -3327,6 +3652,8 @@ void vr_view_reset(
 	vr_view.held_weapon = NONE;
 	vr_view.grab_reach[VR_HAND_LEFT] = vr_view.grab_reach[VR_HAND_RIGHT] = FALSE;
 	vr_view.grab_target[VR_HAND_LEFT] = vr_view.grab_target[VR_HAND_RIGHT] = NONE;
+	vr_view.pull_target[VR_HAND_LEFT] = vr_view.pull_target[VR_HAND_RIGHT] = NONE;
+	vr_view.flight_weapon = NONE;
 	vr_view.vignette_valid = FALSE;
 	vr_view.cinematic = FALSE;
 	vr_arms_reset();

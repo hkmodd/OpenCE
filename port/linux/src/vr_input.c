@@ -148,6 +148,13 @@ its frames' over this long (seconds) */
 /* a hand's grip takes a weapon within its reach by holding the action this
 long at most (seconds: long enough for the game's swap) */
 #define VR_GRAB_SECONDS 0.6f
+/* the pull: after the grip, within this long (seconds), the hand flicked
+toward the head this fast (metres a second) having come this much nearer
+(metres), or its wrist turned up this fast (radians a second) */
+#define VR_PULL_SECONDS 1.5f
+#define VR_PULL_SPEED 1.0f
+#define VR_PULL_LEAST 0.04f
+#define VR_PULL_TURN 5.0f
 /* the head this far below standing crouches, and back above this rises */
 #define VR_CROUCH_DEPTH 0.30f
 #define VR_CROUCH_RISE 0.25f
@@ -514,6 +521,7 @@ static void vr_swap_hands(struct vr_input *input)
 }
 
 static void vr_grab(struct vr_input *input, int hand);
+static void vr_pull_arm(struct vr_input *input, struct vr_frame const *frame, int hand);
 
 /* the hand holds the weapon that came to it, by its grip if that is held
 (a weapon that came otherwise is held until its grip is pressed and let
@@ -650,6 +658,8 @@ static void vr_physical_hands(struct vr_input *input, struct vr_frame const *fra
 			input->tap_seconds = VR_PRESS_SECONDS;
 		else if (settings->grab_reach[hand])
 			vr_grab(input, hand);
+		else if (settings->places && settings->pull_target[hand])
+			vr_pull_arm(input, frame, hand);
 	}
 }
 
@@ -663,12 +673,83 @@ static void vr_grab(struct vr_input *input, int hand)
 	{
 		input->grab_requests++;
 		input->grab_request_hand = hand;
+		input->grab_request_pulled = 0;
 		return;
 	}
 	input->grabbing[hand] = 1;
 	input->grab_seconds[hand] = 0.0f;
 	input->grab_hand = hand;
 	input->grab_pending = VR_GRAB_SECONDS + 0.5f;
+}
+
+/* the hand's pointing's pitch (radians, up positive) */
+static float vr_pitch(struct vr_hand const *hand)
+{
+	static float const local_forward[3] = { 0.0f, 0.0f, -1.0f };
+	float forward[3];
+
+	vr_rotate(hand->aim.orientation, local_forward, forward);
+	return asinf(forward[1] > 1.0f ? 1.0f : forward[1] < -1.0f ? -1.0f : forward[1]);
+}
+
+/* the hand's grip pressed pointing at a weapon further off than its reach
+(the settings' pull_target): the pull armed */
+static void vr_pull_arm(struct vr_input *input, struct vr_frame const *frame, int hand)
+{
+	input->pull_armed[hand] = 1;
+	input->pull_seconds[hand] = 0.0f;
+	memcpy(input->pull_start[hand], frame->hand[hand].grip.position, sizeof(input->pull_start[hand]));
+	input->pull_pitch[hand] = vr_pitch(&frame->hand[hand]);
+}
+
+/* an armed pull, the grip held, within VR_PULL_SECONDS: the hand flicked
+toward the head (VR_PULL_SPEED along the way to it, having come VR_PULL_LEAST
+nearer) or its wrist turned up fast (VR_PULL_TURN): the weapon it points at
+asked for, pulled; the grip let go, the hand lost or the weapons out of
+their places: disarmed */
+static void vr_pulls(struct vr_input *input, struct vr_frame const *frame, struct vr_input_settings const *settings,
+	float seconds)
+{
+	int hand, axis;
+
+	for (hand = 0; hand < VR_HAND_COUNT; hand++)
+	{
+		struct vr_hand const *state = &frame->hand[hand];
+		float to_head[3], length = 0.0f, along = 0.0f, nearer = 0.0f, pitch, turn;
+
+		if (!input->pull_armed[hand])
+			continue;
+		input->pull_seconds[hand] += seconds;
+		if (!input->places || !state->tracked || !(state->buttons & VR_BUTTON_GRIP) ||
+			input->pull_seconds[hand] > VR_PULL_SECONDS)
+		{
+			input->pull_armed[hand] = 0;
+			continue;
+		}
+		pitch = vr_pitch(state);
+		turn = seconds > 0.0f ? (pitch - input->pull_pitch[hand]) / seconds : 0.0f;
+		input->pull_pitch[hand] = pitch;
+		for (axis = 0; axis < 3; axis++)
+		{
+			to_head[axis] = frame->head.position[axis] - state->grip.position[axis];
+			length += to_head[axis] * to_head[axis];
+		}
+		length = sqrtf(length);
+		if (length < 0.05f)
+			continue;
+		for (axis = 0; axis < 3; axis++)
+		{
+			along += input->hand_velocity[hand][axis] * to_head[axis] / length;
+			nearer += (state->grip.position[axis] - input->pull_start[hand][axis]) * to_head[axis] / length;
+		}
+		if ((along >= VR_PULL_SPEED && nearer >= VR_PULL_LEAST) || turn >= VR_PULL_TURN)
+		{
+			input->pull_armed[hand] = 0;
+			input->grab_requests++;
+			input->grab_request_hand = hand;
+			input->grab_request_pulled = 1;
+		}
+	}
 }
 
 /* the head lowered from standing */
@@ -722,6 +803,7 @@ void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struc
 	vr_hand_velocities(input, frame, menus ? 0.0f : seconds);
 	if (input->physical && !menus)
 		vr_physical_hands(input, frame, settings);
+	vr_pulls(input, frame, settings, menus ? 0.0f : seconds);
 	if (!settings->dual)
 		input->off_holding = 0;
 	input->off_trigger = input->off_holding && !menus ?
@@ -1272,6 +1354,8 @@ static void vr_input_settings_read(struct vr_input_settings *settings)
 	settings->bare_hands = vr_render_bare_hands();
 	settings->grab_reach[VR_HAND_LEFT] = vr_render_grab_reach(VR_HAND_LEFT);
 	settings->grab_reach[VR_HAND_RIGHT] = vr_render_grab_reach(VR_HAND_RIGHT);
+	settings->pull_target[VR_HAND_LEFT] = vr_render_pull_target(VR_HAND_LEFT);
+	settings->pull_target[VR_HAND_RIGHT] = vr_render_pull_target(VR_HAND_RIGHT);
 	settings->physical = strcmp(config_string("vr.hands"), "game") != 0;
 	settings->grip_toggle = config_boolean("vr.grip_toggle");
 	settings->on_foot = vr_render_on_foot();
@@ -1393,9 +1477,15 @@ void vr_input_hands_bare(void)
 	vr_input_bare(&vr_input_state);
 }
 
-unsigned long vr_input_grab_request(int *hand)
+int vr_input_pull_armed(int hand)
+{
+	return hand >= 0 && hand < VR_HAND_COUNT && vr_input_state.pull_armed[hand];
+}
+
+unsigned long vr_input_grab_request(int *hand, int *pulled)
 {
 	*hand = vr_input_state.grab_request_hand;
+	*pulled = vr_input_state.grab_request_pulled;
 	return vr_input_state.grab_requests;
 }
 

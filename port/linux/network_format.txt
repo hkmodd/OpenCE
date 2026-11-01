@@ -210,7 +210,7 @@ fields server_switch_to_pregame 678699dea271
 layout HALO_PORT_NETWORK_GAME_LOCAL_DATA_OFFSET (HALO_PORT_NETWORK_GAME_PLAYERS_END + 0x36)
 layout HALO_PORT_NETWORK_GAME_SIZE (HALO_PORT_NETWORK_GAME_PLAYERS_END + 0x3A)
 layout HALO_PORT_NETWORK_GAME_VARIANT_OPTIONS_OFFSET (HALO_PORT_NETWORK_GAME_PLAYERS_END + 0xA)
-revision HALO_PORT_NETWORK_VR_REVISION 3
+revision HALO_PORT_NETWORK_VR_REVISION 4
 size message_client_add_player_request_ingame 0x20
 size message_client_add_player_request_pregame 0x20
 size message_client_broadcast_game_search 0x0C

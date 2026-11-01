@@ -144,6 +144,10 @@ struct vr_input_settings
 	/* a weapon lies within each hand's reach (vr_view.c): the hand's grip
 	pressed there takes it */
 	int grab_reach[VR_HAND_COUNT];
+	/* ... or, the weapons in their places, each empty hand points at one
+	further off (vr_view.c): its grip pressed then the hand flicked takes
+	it, pulled (vr_input_grab_request) */
+	int pull_target[VR_HAND_COUNT];
 	/* the hands hold as hands do (vr.hands "physical", with the gestures):
 	the weapon held by its grip, let go put back at its shoulder; and a
 	press of the grip holds, another lets go (vr.grip_toggle) */
@@ -258,7 +262,15 @@ struct vr_input
 	int places;
 	unsigned long grab_requests;
 	int grab_request_hand;
+	int grab_request_pulled;
 	unsigned long weapon_switches;
+	/* the pull: each hand's grip pressed pointing at a weapon (armed), the
+	seconds since, where the hand was then and its pointing's last pitch
+	(radians, up positive) */
+	int pull_armed[VR_HAND_COUNT];
+	float pull_seconds[VR_HAND_COUNT];
+	float pull_start[VR_HAND_COUNT][3];
+	float pull_pitch[VR_HAND_COUNT];
 	/* the grenade's throw (vr.throw_gesture): each hand's last position and
 	its speed of late (its fastest, falling by VR_THROW_FALL a second), the
 	throw's press in seconds, and the throws and the last hand to throw */
@@ -446,8 +458,11 @@ void vr_input_hand_takes(int hand);
 /* vr_view.c, the weapons in their places: the main hand holds no weapon */
 void vr_input_hands_bare(void);
 /* vr_view.c, the weapons in their places: the weapons the hands' grips
-asked for, how many, and the last one's hand */
-unsigned long vr_input_grab_request(int *hand);
+asked for, how many, and the last one's hand and whether it was pulled
+from afar */
+unsigned long vr_input_grab_request(int *hand, int *pulled);
+/* vr_view.c: the hand's grip is armed to pull the weapon it points at */
+int vr_input_pull_armed(int hand);
 /* vr_view.c, the weapons in their places: the times the other hand let
 go of its weapon at a shoulder that keeps another, and the last time's */
 unsigned long vr_input_off_exchanges(int *side);

@@ -643,10 +643,12 @@ for its client to show (network_distributed_player_picked_up) */
 void network_distributed_player_picked_up(long player_index, short kind, long definition_index, short count);
 
 /* a client's request to the host: its player's hand takes a weapon from
-the ground (its datum index: the same objects on every machine) */
+the ground (its datum index: the same objects on every machine), within
+its reach or pulled */
 enum
 {
 	_network_vr_grab_left_hand_bit,
+	_network_vr_grab_pulled_bit,
 	NUMBER_OF_NETWORK_VR_GRAB_BITS
 };
 
@@ -686,6 +688,27 @@ real network_vr_segment_distance_squared(real_point3d const *point, real_point3d
 	return distance_squared3d(point, &nearest);
 }
 
+boolean network_vr_pull_sight(real_point3d const *eyes, long weapon_index, long unit_index)
+{
+	struct item_datum *weapon = (struct item_datum *)object_try_and_get_and_verify_type(weapon_index,
+		_object_mask_weapon);
+	real_point3d seen;
+	real_vector3d to_seen;
+	struct collision_result collision;
+
+	if (!weapon)
+		return FALSE;
+	/* (above its middle by half its radius: a weapon lying on the ground has
+	its middle at the ground's face or under it) */
+	seen = weapon->object.bounding_sphere_center;
+	seen.z += 0.5f * weapon->object.bounding_sphere_radius;
+	vector_from_points3d(eyes, &seen, &to_seen);
+	if (dot_product3d(&to_seen, &to_seen) > NETWORK_VR_PULL_REACH * NETWORK_VR_PULL_REACH)
+		return FALSE;
+	return !collision_test_vector(FLAG(_collision_test_structure_bit) | FLAG(_collision_test_front_facing_surfaces_bit),
+		eyes, &to_seen, unit_index, &collision);
+}
+
 static void network_vr_grab_refused(short player_index, long weapon_index, char const *why)
 {
 	platform_log("network vr: player %d's hand did not take weapon %08lx: %s", player_index, weapon_index, why);
@@ -695,11 +718,13 @@ static void network_vr_grab_refused(short player_index, long weapon_index, char 
 carrying four with a slot free, not oftener than every
 NETWORK_VR_GRAB_TICKS; another machine's player by its pose, the hand
 empty (the main one bare, the other holding nothing) and within
-NETWORK_VR_GRAB_REACH of the weapon along its length (a player of this
-machine's has no pose here: its hand is its own). Added as the game adds
-one, readied by nothing (_unit_add_weapon_normal): the player's machine
-puts it in the hand (vr_view.c, vr_places.c) */
-static boolean network_vr_grab_weapon(short player_index, long weapon_index, short hand)
+NETWORK_VR_GRAB_REACH of the weapon along its length, or, pulled, the
+weapon in sight of the posed eyes within NETWORK_VR_PULL_REACH
+(network_vr_pull_sight; a player of this machine's has no pose here: its
+hand and eyes are its own). Added as the game adds one, readied by nothing
+(_unit_add_weapon_normal): the player's machine puts it in the hand
+(vr_view.c, vr_places.c) */
+static boolean network_vr_grab_weapon(short player_index, long weapon_index, short hand, boolean pulled)
 {
 	struct player_datum *player = player_index >= 0 && player_index < MAXIMUM_TRACKED_PLAYERS ?
 		distributed_player((byte)player_index) : NULL;
@@ -732,7 +757,7 @@ static boolean network_vr_grab_weapon(short player_index, long weapon_index, sho
 	}
 	if (!distributed_player_is_local(unit->unit.player_index))
 	{
-		real_point3d grip, far_end;
+		real_point3d grip, far_end, eyes;
 		short main_hand;
 
 		pose = network_vr_pose_get(unit->unit.player_index);
@@ -747,15 +772,27 @@ static boolean network_vr_grab_weapon(short player_index, long weapon_index, sho
 			network_vr_grab_refused(player_index, weapon_index, "the hand holds one");
 			return FALSE;
 		}
-		point_from_line3d(&unit->object.position, &pose->hands[hand], 1.0f, &grip);
-		far_end.x = 2.0f * item->object.bounding_sphere_center.x - item->object.position.x;
-		far_end.y = 2.0f * item->object.bounding_sphere_center.y - item->object.position.y;
-		far_end.z = 2.0f * item->object.bounding_sphere_center.z - item->object.position.z;
-		if (network_vr_segment_distance_squared(&grip, &item->object.position, &far_end) >
-			NETWORK_VR_GRAB_REACH * NETWORK_VR_GRAB_REACH)
+		if (pulled)
 		{
-			network_vr_grab_refused(player_index, weapon_index, "out of the hand's reach");
-			return FALSE;
+			point_from_line3d(&unit->object.position, &pose->head, 1.0f, &eyes);
+			if (!network_vr_pull_sight(&eyes, weapon_index, player->unit_index))
+			{
+				network_vr_grab_refused(player_index, weapon_index, "pulled from out of sight or reach");
+				return FALSE;
+			}
+		}
+		else
+		{
+			point_from_line3d(&unit->object.position, &pose->hands[hand], 1.0f, &grip);
+			far_end.x = 2.0f * item->object.bounding_sphere_center.x - item->object.position.x;
+			far_end.y = 2.0f * item->object.bounding_sphere_center.y - item->object.position.y;
+			far_end.z = 2.0f * item->object.bounding_sphere_center.z - item->object.position.z;
+			if (network_vr_segment_distance_squared(&grip, &item->object.position, &far_end) >
+				NETWORK_VR_GRAB_REACH * NETWORK_VR_GRAB_REACH)
+			{
+				network_vr_grab_refused(player_index, weapon_index, "out of the hand's reach");
+				return FALSE;
+			}
 		}
 	}
 	if (!unit_add_weapon_to_inventory(player->unit_index, weapon_index, _unit_add_weapon_normal))
@@ -770,7 +807,7 @@ static boolean network_vr_grab_weapon(short player_index, long weapon_index, sho
 	return TRUE;
 }
 
-void network_vr_grab(long player, long weapon_index, short hand)
+void network_vr_grab(long player, long weapon_index, short hand, boolean pulled)
 {
 	struct distributed_vr_grab_message message;
 	short player_index = (short)DATUM_INDEX_TO_ABSOLUTE_INDEX(player);
@@ -782,13 +819,14 @@ void network_vr_grab(long player, long weapon_index, short hand)
 	if (game_connection() == _game_connection_local ||
 		(game_connection() == _game_connection_network_server && (network_vr_server() || vr_rules_active())))
 	{
-		network_vr_grab_weapon(player_index, weapon_index, hand);
+		network_vr_grab_weapon(player_index, weapon_index, hand, pulled);
 	}
 	else if (game_connection() == _game_connection_network_client && network_vr_server())
 	{
 		csmemset(&message, 0, sizeof(message));
 		message.entry.player_index = (byte)player_index;
-		message.entry.flags = (byte)(hand == 0 ? FLAG(_network_vr_grab_left_hand_bit) : 0);
+		message.entry.flags = (byte)((hand == 0 ? FLAG(_network_vr_grab_left_hand_bit) : 0) |
+			(pulled ? FLAG(_network_vr_grab_pulled_bit) : 0));
 		message.entry.weapon_index = weapon_index;
 		distributed_send(&message, _distributed_message_vr_grab, 1, sizeof(message), _distributed_to_host_reliably);
 	}
@@ -798,6 +836,7 @@ void network_vr_handle_grab(long machine_index, void const *entries, short count
 {
 	struct distributed_vr_grab entry;
 	short hand;
+	boolean pulled;
 
 	if (count != 1 || !stream || !network_vr_server())
 		return;
@@ -809,9 +848,10 @@ void network_vr_handle_grab(long machine_index, void const *entries, short count
 		return;
 	}
 	hand = TEST_FLAG(entry.flags, _network_vr_grab_left_hand_bit) ? 0 : 1;
-	if (network_vr_grab_weapon(entry.player_index, entry.weapon_index, hand))
+	pulled = TEST_FLAG(entry.flags, _network_vr_grab_pulled_bit);
+	if (network_vr_grab_weapon(entry.player_index, entry.weapon_index, hand, pulled))
 	{
-		platform_log("network vr: player %d took weapon %08lx with the %s hand", entry.player_index,
-			entry.weapon_index, hand ? "right" : "left");
+		platform_log("network vr: player %d %s weapon %08lx with the %s hand", entry.player_index,
+			pulled ? "pulled" : "took", entry.weapon_index, hand ? "right" : "left");
 	}
 }
