@@ -521,6 +521,11 @@ SCREENS["network_setup/in_game"] = {
 _vr_help = "The headset: aiming, the weapon's hand, the room\nand vehicles."
 _vr_body_category = ("HANDS AND BODY:", "gamepad_setup/vr_body",
                      "The height, the arms, the aim's angle, gestures\nand grenades.", "vr")
+_vr_buttons_category = ("BUTTONS:", "gamepad_setup/vr_buttons",
+                        "What the controllers' face buttons and the\nsticks pressed do.", "vr")
+_vr_actions = [("JUMP", "jump"), ("ACTION", "action"), ("MELEE", "melee"), ("NEXT WEAPON", "switch_weapon"),
+               ("NEXT GRENADE", "switch_grenade"), ("FLASHLIGHT", "flashlight"), ("CROUCH", "crouch"),
+               ("ZOOM", "zoom"), ("SCORES", "scoreboard"), ("TALK", "talk"), ("NOTHING", "none")]
 _vr_view_category = ("VIEW AND COMFORT:", "gamepad_setup/vr_view",
                      "Turning, the vignette, cinematics, and the size\nand distance of the HUD and the menus.", "vr")
 SCREENS["gamepad_setup/vr"] = {
@@ -554,6 +559,7 @@ SCREENS["gamepad_setup/vr"] = {
 }
 SCREENS["gamepad_setup/vr_body"] = {
     "screen": "vr_body_settings_screen", "header": SCREENS["gamepad_setup"]["header"], "spacing": 30,
+    "categories": [_vr_buttons_category],
     "rows": [
         ("EYE HEIGHT:", "vr.eye_height", [("CHIEF", "chief"), ("PLAYER", "player")],
          "CHIEF: the Master Chief's eyes, 1.89 m, as high\nas the head stands. PLAYER: the player's own.", None),
@@ -571,6 +577,23 @@ SCREENS["gamepad_setup/vr_body"] = {
          "HOLD: the grip held holds the weapon. TOGGLE:\na press holds it, another lets go.", None),
         ("GRENADES:", "vr.throw_gesture", [("THROWN", "true"), ("BUTTON", "false")],
          "THROWN: hold the trigger, throw with the arm.\nBUTTON: the trigger throws at once.", None),
+    ],
+}
+SCREENS["gamepad_setup/vr_buttons"] = {
+    "screen": "vr_buttons_settings_screen", "header": SCREENS["gamepad_setup"]["header"], "spacing": 30,
+    "rows": [
+        ("AIM HAND LOWER:", "vr.main_lower", _vr_actions,
+         "The lower face button of the controller whose\nstick turns: A, for the right-handed.", None),
+        ("AIM HAND UPPER:", "vr.main_upper", _vr_actions,
+         "The upper face button of the controller whose\nstick turns: B, for the right-handed.", None),
+        ("AIM HAND STICK:", "vr.main_click", _vr_actions,
+         "The stick that turns, pressed.", None),
+        ("MOVE HAND LOWER:", "vr.off_lower", _vr_actions,
+         "The lower face button of the controller whose\nstick moves: X, for the right-handed.", None),
+        ("MOVE HAND UPPER:", "vr.off_upper", _vr_actions,
+         "The upper face button of the controller whose\nstick moves: Y, for the right-handed.", None),
+        ("MOVE HAND STICK:", "vr.off_click", _vr_actions,
+         "The stick that moves, pressed.", None),
     ],
 }
 SCREENS["gamepad_setup/vr_view"] = {

@@ -449,12 +449,30 @@ static const struct config_setting config_settings[] =
 		"controller's aim pose, its pointing ray), in degrees up (-45 to 45):\n"
 		"raise it if shots go lower than the hand seems to point, lower it if\n"
 		"they go higher." },
+	{ "vr.main_lower", _config_string, "\"jump\"", "HALO_VR_MAIN_LOWER", _environment_value, _platform_desktop,
+		"With display.vr, what the aiming controller's lower face button (A) does: an action of\n"
+		"vr.bindings's." },
+	{ "vr.main_upper", _config_string, "\"action\"", "HALO_VR_MAIN_UPPER", _environment_value, _platform_desktop,
+		"With display.vr, what the aiming controller's upper face button (B) does: an action of\n"
+		"vr.bindings's." },
+	{ "vr.main_click", _config_string, "\"zoom\"", "HALO_VR_MAIN_CLICK", _environment_value, _platform_desktop,
+		"With display.vr, what the aiming controller's stick pressed does: an action of\n"
+		"vr.bindings's." },
+	{ "vr.off_lower", _config_string, "\"switch_grenade\"", "HALO_VR_OFF_LOWER", _environment_value, _platform_desktop,
+		"With display.vr, what the other controller's lower face button (X) does: an action of\n"
+		"vr.bindings's." },
+	{ "vr.off_upper", _config_string, "\"switch_weapon\"", "HALO_VR_OFF_UPPER", _environment_value, _platform_desktop,
+		"With display.vr, what the other controller's upper face button (Y) does: an action of\n"
+		"vr.bindings's." },
+	{ "vr.off_click", _config_string, "\"crouch\"", "HALO_VR_OFF_CLICK", _environment_value, _platform_desktop,
+		"With display.vr, what the other controller's stick pressed does: an action of\n"
+		"vr.bindings's." },
 	{ "vr.bindings", _config_string, "\"\"", "HALO_VR_BINDINGS", _environment_value, _platform_desktop,
-		"With display.vr, controller buttons bound to other actions than their\n"
-		"own, as \"main.lower=action off.click=none\": the hand (main, the one\n"
+		"With display.vr, controller buttons bound to other actions than the\n"
+		"settings above have, as \"main.trigger=fire off.click=none\": the hand (main, the one\n"
 		"that aims, or off), the button (trigger, grip, lower, upper, click) and\n"
 		"the action (fire, throw_grenade, jump, action, melee, switch_weapon,\n"
-		"switch_grenade, flashlight, crouch, zoom, scoreboard, none)." },
+		"switch_grenade, flashlight, crouch, zoom, scoreboard, talk, none)." },
 #endif
 
 	{ "audio.enabled", _config_boolean, "true", "HALO_NO_AUDIO", _environment_set_is_false, _platform_all,

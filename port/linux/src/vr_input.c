@@ -5,7 +5,8 @@ The headset's controllers as the game's controller (display.vr,
 port/linux/include/vr_input.h).
 
 The buttons. In the game, for the right-handed (vr.left_handed swaps the
-controllers' layouts), unless vr.bindings binds them otherwise:
+controllers' layouts), unless their settings (vr.main_lower and so on) or
+vr.bindings bind them otherwise:
 	right trigger    fire                left trigger     grenade
 	right A          jump                left X           switch grenades
 	right B          action, reload      left Y           switch weapons
@@ -80,6 +81,7 @@ pad's right stick stays still, so the game's own look speed does not apply.
 #include "vr_input.h"
 
 #include <math.h>
+#include <stdio.h>
 #include <string.h>
 
 #ifndef VR_INPUT_HARNESS
@@ -1393,6 +1395,24 @@ static struct vr_input vr_input_state;
 static float vr_input_move_turn;
 /* a menu is up, with controllers or without */
 static int vr_input_menus_up;
+/* the buttons' settings as vr_input_bindings_parse reads them, and then
+vr.bindings, which comes after them and so has the last word */
+static void vr_input_bindings_text(char *text, size_t size)
+{
+	static char const *const settings[][2] =
+	{
+		{ "main.lower", "vr.main_lower" }, { "main.upper", "vr.main_upper" }, { "main.click", "vr.main_click" },
+		{ "off.lower", "vr.off_lower" }, { "off.upper", "vr.off_upper" }, { "off.click", "vr.off_click" }
+	};
+	size_t used = 0;
+	int index;
+
+	for (index = 0; index < (int)(sizeof(settings) / sizeof(settings[0])) && used < size; index++)
+		used += (size_t)snprintf(text + used, size - used, "%s=%s ", settings[index][0], config_string(settings[index][1]));
+	if (used < size)
+		snprintf(text + used, size - used, "%s", config_string("vr.bindings"));
+}
+
 /* vr.bindings, as it was last read */
 static unsigned char vr_input_bindings[VR_ROLE_COUNT][VR_CONTROL_COUNT];
 static unsigned long vr_input_bindings_read_at;
@@ -1410,8 +1430,11 @@ static void vr_input_settings_read(struct vr_input_settings *settings)
 
 	if (!vr_input_bindings_valid || vr_input_bindings_read_at != config_changes())
 	{
-		int bad = vr_input_bindings_parse(config_string("vr.bindings"), vr_input_bindings);
+		char text[1024];
+		int bad;
 
+		vr_input_bindings_text(text, sizeof(text));
+		bad = vr_input_bindings_parse(text, vr_input_bindings);
 		if (bad)
 			platform_log("vr: vr.bindings: %d items not understood, left out", bad);
 		vr_input_bindings_read_at = config_changes();
@@ -1471,9 +1494,12 @@ int vr_input_gamepad(struct vr_pad *pad, int menus)
 		int talked = vr_input_state.talking;
 
 		vr_input_update(&vr_input_state, frame, &settings, menus != 0, elapsed < 0.1 ? (float)elapsed : 0.1f, pad);
-		/* (the microphone opens: felt in the hand that talks) */
+		/* (the microphone opens: felt in the hand that talks, and told) */
 		if (vr_input_state.talking && !talked)
+		{
 			vr_haptic(vr_input_state.left_handed ? VR_HAND_RIGHT : VR_HAND_LEFT, 0.2f, 0.03f);
+			platform_log("vr: the microphone's button is held");
+		}
 		/* (both hands take hold of a pistol: felt in both, and told) */
 		if (vr_support_kept && !supported)
 		{
