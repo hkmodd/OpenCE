@@ -361,10 +361,10 @@ static const struct config_setting config_settings[] =
 		"degrees about the eyes' middle at a run." },
 	{ "vr.hud_distance", _config_real, "15.0", "HALO_VR_HUD_DISTANCE", _environment_value, _platform_desktop,
 		"How far ahead of the head the HUD's panel is held, in metres (0.5 to\n"
-		"100)." },
+		"100). It fills as much of the view at any distance." },
 	{ "vr.hud_width", _config_real, "10.0", "HALO_VR_HUD_WIDTH", _environment_value, _platform_desktop,
-		"The HUD panel's width in metres (0.2 to 100): 10 at 15 m is about 37\n"
-		"degrees across." },
+		"The HUD panel's width as it would be at 15 m, in metres (0.2 to 100):\n"
+		"10 is about 37 degrees across." },
 	{ "vr.screen_distance", _config_real, "2.0", "HALO_VR_SCREEN_DISTANCE", _environment_value, _platform_desktop,
 		"How far ahead the panel of the menus, loading screens and cutscenes is\n"
 		"held, in metres (0.5 to 100), from where the headset faced when the\n"

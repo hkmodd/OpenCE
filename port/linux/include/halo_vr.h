@@ -233,6 +233,11 @@ int vr_render_drive(void);
 /* first_person_weapons.c: a driver's or a gunner's own weapon is not
 shown in the seat seen from it (the hands are on the controls) */
 int vr_render_seat_weapon_hidden(void);
+/* first_person_legs.c: in an eye's pass, the headset's unit seated in a
+driver's or a gunner's seat seen from it, not a seat the game hides its
+occupant in: its body is drawn as the game seats it, the hands on the
+vehicle's controls, the head and the neck folded */
+int vr_render_seat_body(long unit_index);
 /* vr_input.c: the player's seat has a view of the game's own behind it,
 which the move stick's click switches to and from (vr.vehicle_view
 written: vr_view.c) */
@@ -358,6 +363,7 @@ void vr_render_rumble_hands(float const body[2], float const weapon[2], float co
 #define vr_render_chase_level(local_player_index) 0
 #define vr_render_drive() 0
 #define vr_render_seat_weapon_hidden() 0
+#define vr_render_seat_body(unit_index) 0
 #define vr_render_seat_switch() 0
 #define vr_render_room(offset) 0
 #define vr_render_hand_holds(unit_index) 0

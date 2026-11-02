@@ -40,6 +40,7 @@ static struct vr_input_settings settings_of(int left_handed, float snap_angle, i
     settings.drop = 0;
     settings.dual = 0;
     settings.places = 0;
+    settings.talk_gesture = 0;
     settings.pull_target[VR_HAND_LEFT] = settings.pull_target[VR_HAND_RIGHT] = 0;
     vr_input_bindings_parse("", settings.bindings);
     return settings;
@@ -754,6 +755,61 @@ int main(int argc, char **argv)
         frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
         vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
         CHECK((pad.buttons & VR_PAD_RIGHT_THUMB) && pad.analog[VR_PAD_WHITE] == 0, "at the visor it zooms");
+        return 0;
+    }
+    CASE("talk") {
+        memset(&input, 0, sizeof(input));
+        settings = settings_of(0, 0.5f, 1);
+        settings.talk_gesture = 1;
+        frame_of(&frame);
+        /* the off trigger pressed away from the helmet: the grenade, no microphone */
+        frame.hand[VR_HAND_LEFT].trigger = 1.0f;
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_TRIGGER;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(pad.analog[VR_PAD_LEFT_TRIGGER] != 0 && !input.talking, "away from the helmet, the grenade");
+        /* brought to the helmet still held: a wind-up, still the grenade */
+        memcpy(frame.hand[VR_HAND_LEFT].grip.position, frame.head.position, sizeof(frame.head.position));
+        frame.hand[VR_HAND_LEFT].grip.position[1] -= 0.1f;
+        frame.hand[VR_HAND_LEFT].grip.position[2] -= 0.15f;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(pad.analog[VR_PAD_LEFT_TRIGGER] != 0 && !input.talking, "a wind-up stays the grenade");
+        /* let go and pressed there: the microphone, no grenade, for as long as it is held, wherever the hand */
+        frame.hand[VR_HAND_LEFT].trigger = 0.0f;
+        frame.hand[VR_HAND_LEFT].buttons = 0;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        frame.hand[VR_HAND_LEFT].trigger = 1.0f;
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_TRIGGER;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(input.talking && pad.analog[VR_PAD_LEFT_TRIGGER] == 0, "at the helmet, the microphone");
+        frame.hand[VR_HAND_LEFT].grip.position[1] -= 0.5f;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(input.talking && pad.analog[VR_PAD_LEFT_TRIGGER] == 0, "held on, wherever the hand goes");
+        frame.hand[VR_HAND_LEFT].trigger = 0.0f;
+        frame.hand[VR_HAND_LEFT].buttons = 0;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(!input.talking && pad.analog[VR_PAD_LEFT_TRIGGER] == 0, "let go, silent");
+        /* without the setting (open mic, or no voice) the helmet is nothing */
+        settings.talk_gesture = 0;
+        memcpy(frame.hand[VR_HAND_LEFT].grip.position, frame.head.position, sizeof(frame.head.position));
+        frame.hand[VR_HAND_LEFT].grip.position[2] -= 0.15f;
+        frame.hand[VR_HAND_LEFT].trigger = 1.0f;
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_TRIGGER;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(!input.talking && pad.analog[VR_PAD_LEFT_TRIGGER] != 0, "without the setting, the grenade");
+        /* a button bound to it: held, the microphone, and it presses no pad button */
+        memset(&input, 0, sizeof(input));
+        settings = settings_of(0, 0.5f, 1);
+        vr_input_bindings_parse("off.upper=talk", settings.bindings);
+        frame_of(&frame);
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_UPPER;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(input.talking, "the bound button talks");
+        for (index = 0; index < VR_PAD_ANALOG_COUNT; index++)
+            CHECK(pad.analog[index] == 0, "no pad button (%d)", index);
+        CHECK(pad.buttons == 0, "no digital button");
+        /* the menus close it */
+        vr_input_update(&input, &frame, &settings, 1, SECONDS, &pad);
+        CHECK(!input.talking, "not in the menus");
         return 0;
     }
     CASE("throw") {

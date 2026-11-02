@@ -172,10 +172,12 @@ more than twice it: one frame's jump is no flick */
 static char const *const vr_binding_names[VR_BIND_COUNT] =
 {
 	"none", "fire", "throw_grenade", "jump", "action", "melee", "switch_weapon", "switch_grenade", "flashlight",
-	"crouch", "zoom", "scoreboard"
+	"crouch", "zoom", "scoreboard", "talk"
 };
 static char const *const vr_control_names[VR_CONTROL_COUNT] = { "trigger", "grip", "lower", "upper", "click" };
 static char const *const vr_role_names[VR_ROLE_COUNT] = { "main", "off" };
+static unsigned long const vr_control_buttons[VR_CONTROL_COUNT] =
+	{ VR_BUTTON_TRIGGER, VR_BUTTON_GRIP, VR_BUTTON_LOWER, VR_BUTTON_UPPER, VR_BUTTON_STICK };
 static unsigned char const vr_default_bindings[VR_ROLE_COUNT][VR_CONTROL_COUNT] =
 {
 	{ VR_BIND_FIRE, VR_BIND_MELEE, VR_BIND_JUMP, VR_BIND_ACTION, VR_BIND_ZOOM },
@@ -248,7 +250,7 @@ static void vr_bind(struct vr_pad *pad, int action, float value)
 	unsigned short target;
 	unsigned char amount;
 
-	if (action <= VR_BIND_NONE || action >= VR_BIND_COUNT || !(value > 0.0f))
+	if (action <= VR_BIND_NONE || action >= VR_BIND_TALK || !(value > 0.0f))
 		return;
 	target = vr_binding_pad[action];
 	if (target & VR_PAD_DIGITAL)
@@ -406,8 +408,6 @@ leave it, its speed of late stands */
 static int vr_thrown(struct vr_input *input, struct vr_hand const *hand, int index,
 	unsigned char const bindings[VR_CONTROL_COUNT], float seconds)
 {
-	static unsigned long const control_buttons[VR_CONTROL_COUNT] =
-		{ VR_BUTTON_TRIGGER, VR_BUTTON_GRIP, VR_BUTTON_LOWER, VR_BUTTON_UPPER, VR_BUTTON_STICK };
 	float speed = 0.0f;
 	int held = 0, was_held = 0, control, axis;
 
@@ -415,8 +415,8 @@ static int vr_thrown(struct vr_input *input, struct vr_hand const *hand, int ind
 	{
 		if (bindings[control] == VR_BIND_THROW_GRENADE)
 		{
-			held |= (hand->buttons & control_buttons[control]) != 0;
-			was_held |= (input->held[index] & control_buttons[control]) != 0;
+			held |= (hand->buttons & vr_control_buttons[control]) != 0;
+			was_held |= (input->held[index] & vr_control_buttons[control]) != 0;
 		}
 	}
 	if (hand->tracked && input->throw_position_valid[index] && seconds > 0.0f)
@@ -858,6 +858,7 @@ void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struc
 	main_pressed = main_hand->buttons & ~input->held[main_index];
 	memset(pad, 0, sizeof(*pad));
 	input->turn = 0.0f;
+	input->talking = 0;
 	if (!(seconds > 0.0f && seconds < 1.0f))
 		seconds = 0.0f;
 	if (input->melee_wait > 0.0f)
@@ -919,6 +920,7 @@ void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struc
 		input->melee_seconds = input->tap_seconds = input->throw_seconds = 0.0f;
 		input->room_walking = 0;
 		input->grabbing[VR_HAND_LEFT] = input->grabbing[VR_HAND_RIGHT] = 0;
+		input->talk_at_helmet = 0;
 		/* (the hands' speeds start again after the menus, from where the
 		hands are then) */
 		input->main_position_valid = 0;
@@ -1003,6 +1005,30 @@ void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struc
 			hand_bindings[hand][VR_CONTROL_GRIP] = bindings[weapon][VR_CONTROL_GRIP];
 			hand_gestures[hand][VR_CONTROL_TRIGGER] = gesture_bindings[weapon][VR_CONTROL_TRIGGER];
 			hand_gestures[hand][VR_CONTROL_GRIP] = gesture_bindings[weapon][VR_CONTROL_GRIP];
+		}
+		/* (the off hand's trigger pressed at the helmet talks and does nothing
+		else while it is held; pressed away from it and brought there, as a
+		grenade's wind-up is, it stays the grenade's) */
+		if (!(off_hand->buttons & VR_BUTTON_TRIGGER) || !settings->talk_gesture)
+			input->talk_at_helmet = 0;
+		else if ((off_pressed & VR_BUTTON_TRIGGER) && !input->off_holding && vr_at_head(frame, off_hand))
+			input->talk_at_helmet = 1;
+		if (input->talk_at_helmet)
+		{
+			hand_bindings[off_index][VR_CONTROL_TRIGGER] = VR_BIND_NONE;
+			hand_gestures[off_index][VR_CONTROL_TRIGGER] = VR_BIND_NONE;
+			input->talking = 1;
+		}
+		for (hand = 0; hand < VR_HAND_COUNT; hand++)
+		{
+			for (control = 0; control < VR_CONTROL_COUNT; control++)
+			{
+				if (hand_bindings[hand][control] == VR_BIND_TALK &&
+					(frame->hand[hand].buttons & vr_control_buttons[control]))
+				{
+					input->talking = 1;
+				}
+			}
 		}
 		/* (in a seat with a view behind it the move hand's click switches the
 		view, vr_view.c, and presses nothing: a seated player's crouch only
@@ -1396,6 +1422,7 @@ static void vr_input_settings_read(struct vr_input_settings *settings)
 	settings->snap_angle = snap > 0.0 && snap <= 180.0 ? (float)(snap * 0.017453292519943) : 0.0f;
 	settings->turn_rate = (float)((rate > 0.0 && rate <= 720.0 ? rate : 120.0) * 0.017453292519943);
 	settings->gestures = config_boolean("vr.gestures");
+	settings->talk_gesture = settings->gestures && !strcmp(config_string("audio.voice_chat"), "push_to_talk");
 	settings->move_turn = vr_input_move_turn;
 	settings->seat_stick = vr_render_seat_stick();
 	settings->drive = vr_render_drive();
@@ -1441,8 +1468,12 @@ int vr_input_gamepad(struct vr_pad *pad, int menus)
 		elapsed = frame->display_period > 0.0f ? frame->display_period : 1.0f / 90.0f;
 	{
 		int supported = vr_support_kept;
+		int talked = vr_input_state.talking;
 
 		vr_input_update(&vr_input_state, frame, &settings, menus != 0, elapsed < 0.1 ? (float)elapsed : 0.1f, pad);
+		/* (the microphone opens: felt in the hand that talks) */
+		if (vr_input_state.talking && !talked)
+			vr_haptic(vr_input_state.left_handed ? VR_HAND_RIGHT : VR_HAND_LEFT, 0.2f, 0.03f);
 		/* (both hands take hold of a pistol: felt in both, and told) */
 		if (vr_support_kept && !supported)
 		{
@@ -1466,6 +1497,11 @@ int vr_input_gamepad(struct vr_pad *pad, int menus)
 		vr_haptic(vr_input_state.throw_hand, 0.3f, 0.04f);
 	}
 	return 1;
+}
+
+int vr_input_talking(void)
+{
+	return vr_active() && vr_input_state.talking;
 }
 
 int vr_input_left_handed(void)

@@ -548,8 +548,8 @@ the setting for one start of the game. It has priority over the file.
 | `vr.eye_height` | `"chief"` | `HALO_VR_EYE_HEIGHT` | With `display.vr`, on foot: `"chief"` puts the eyes at the Master Chief's, 1.89 m, while the head is as high as it has been since the runtime last recentred (standing, or sitting for a seated player), and as much lower as the head goes lower: the player's eyes are the cyborg's, over its legs and shoulders. `"player"` puts them as high over the ground as the player's are over the floor (where the runtime knows it: its STAGE space). A crouch of the button and a real one do not add up. The game's view and shots are unchanged. |
 | `vr.vignette` | `0.0` | `HALO_VR_VIGNETTE` | With `display.vr`, a comfort vignette: the eyes' field darkens from its edges while the view moves or turns by itself (the stick, a vehicle, a fall, smooth turning), not as the head moves, nor at a snap turn. From `0`, none, to `1`: at a run (3 m/s) or a turn of 86 degrees a second, the clear field closes from 85 degrees about the eyes' middle to 35, the dark 20 degrees past it, in a tenth of a second, and opens again in 0.3 s. |
 | `vr.image_rows` | `"auto"` | `HALO_VR_IMAGE_ROWS` | With `display.vr`, how the OpenXR runtime takes the rows of the game's images: `"bottom"` first (OpenGL's and OpenXR's way), `"top"` first, or `"auto"`: from the top for SteamVR, which otherwise shows the game upside down, from the bottom for any other runtime. Read at start. |
-| `vr.hud_distance` | `15.0` | `HALO_VR_HUD_DISTANCE` | With `display.vr`, how far before the head the HUD's panel is held, in metres, from `0.5` to `100`. |
-| `vr.hud_width` | `10.0` | `HALO_VR_HUD_WIDTH` | With `display.vr`, the HUD panel's width in metres, from `0.2` to `100`. |
+| `vr.hud_distance` | `15.0` | `HALO_VR_HUD_DISTANCE` | With `display.vr`, how far before the head the HUD's panel is held, in metres, from `0.5` to `100`. It fills as much of the view at any distance. |
+| `vr.hud_width` | `10.0` | `HALO_VR_HUD_WIDTH` | With `display.vr`, the HUD panel's width as it would be at 15 m, in metres, from `0.2` to `100`: `10` is about 37 degrees across. |
 | `vr.screen_distance` | `2.0` | `HALO_VR_SCREEN_DISTANCE` | With `display.vr`, how far the panel of the menus, loading screens and cinematics is, in metres, from `0.5` to `100`, before where the headset faced when the runtime last recentred it. |
 | `vr.screen_width` | `2.4` | `HALO_VR_SCREEN_WIDTH` | With `display.vr`, that panel's width in metres, from `0.2` to `100`. |
 | `vr.aim` | `"hand"` | `HALO_VR_AIM` | With `display.vr`, what aims on foot: `"hand"`, the aiming controller (the weapon held in it, the crosshair where its shot lands), or `"head"`. In a vehicle's seat, `vr.vehicle_aim`. |
@@ -566,7 +566,7 @@ the setting for one start of the game. It has priority over the file.
 | `vr.grip_toggle` | `false` | `HALO_VR_GRIP_TOGGLE` | With `vr.hands` `"physical"`, a press of the grip holds the weapon and another lets go; `false`, the grip held holds it. |
 | `vr.throw_gesture` | `true` | `HALO_VR_THROW_GESTURE` | With `display.vr`, a grenade is thrown with the arm: its button (the other hand's trigger) held takes one, let go with the hand moving faster than 1.5 m/s throws it from the hand the way the hand threw it, a firm throw (7.5 m/s) as far as the game's own and a softer or harder one shorter or further, let go slower keeps it. `false`: the button throws as a gamepad's does, where the aim points. In a vehicle's seat the button is the seat's secondary trigger (the Scorpion's machine gun, the Banshee's fuel rod), held as a gamepad's. |
 | `vr.aim_pitch` | `0.0` | `HALO_VR_AIM_PITCH` | With `display.vr`, the weapon's barrel from where the hand points, in degrees up, from `-45` to `45`. The hand points along its controller's aim pose, the pointing ray the runtime gives it. Raise it if shots go lower than the hand seems to point, lower it if they go higher. |
-| `vr.bindings` | `""` | `HALO_VR_BINDINGS` | With `display.vr`, controller buttons bound to other actions than those in "VR": items such as `"main.lower=action off.click=none"`, each a hand (`main`, the one that aims, or `off`), a button (`trigger`, `grip`, `lower`, `upper`, `click`) and an action (`fire`, `throw_grenade`, `jump`, `action`, `melee`, `switch_weapon`, `switch_grenade`, `flashlight`, `crouch`, `zoom`, `scoreboard`, `none`), separated by spaces or commas. An item not understood is left out (and logged). |
+| `vr.bindings` | `""` | `HALO_VR_BINDINGS` | With `display.vr`, controller buttons bound to other actions than those in "VR": items such as `"main.lower=action off.click=none"`, each a hand (`main`, the one that aims, or `off`), a button (`trigger`, `grip`, `lower`, `upper`, `click`) and an action (`fire`, `throw_grenade`, `jump`, `action`, `melee`, `switch_weapon`, `switch_grenade`, `flashlight`, `crouch`, `zoom`, `scoreboard`, `talk`, `none`), separated by spaces or commas. An item not understood is left out (and logged). |
 | `audio.enabled` | `true` | `HALO_NO_AUDIO=1` sets `false` | `false`: no audio device. The sound continues without output. |
 | `audio.volume` | `1.0` | `HALO_VOLUME` | The master volume. |
 | `audio.music_volume` | `1.0` | `HALO_MUSIC_VOLUME` | The music's volume, of the master volume. |
@@ -942,7 +942,10 @@ screen, with the cause in the log.
 
   They press the gamepad's buttons for those actions in the standard
   preset, so a player's own preset applies to them too; `vr.bindings` binds
-  them to other actions. The other hand's grip at the aiming hand takes
+  them to other actions. With `audio.voice_chat` `"push_to_talk"`, the
+  other hand's trigger pressed at the helmet and held is the microphone
+  (`vr.gestures`), with a light pulse; `talk` binds it to a button too. The
+  other hand's grip at the aiming hand takes
   the weapon; if the aiming hand then pulls away, the weapon is handed
   over to the other hand (`vr.gestures`); held together, both hold it.
   The weapon is never mirrored, and the buttons stay: the sticks and the

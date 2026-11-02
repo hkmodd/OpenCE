@@ -518,9 +518,11 @@ SCREENS["network_setup/in_game"] = {
 # alone, and of the pause menu's SETTINGS (in the headset, the menus a hand
 # points at), the headset's alone. Without the headset the screen has its
 # switch alone ("vr": menu_files.c), and the body's screen is not there
-_vr_help = "The headset: aiming, the weapon's hand, turning,\nthe room and vehicles."
+_vr_help = "The headset: aiming, the weapon's hand, the room\nand vehicles."
 _vr_body_category = ("HANDS AND BODY:", "gamepad_setup/vr_body",
-                     "The height, the arms, the aim's angle, gestures,\ngrenades, comfort and cinematics.", "vr")
+                     "The height, the arms, the aim's angle, gestures\nand grenades.", "vr")
+_vr_view_category = ("VIEW AND COMFORT:", "gamepad_setup/vr_view",
+                     "Turning, the vignette, cinematics, and the size\nand distance of the HUD and the menus.", "vr")
 SCREENS["gamepad_setup/vr"] = {
     "screen": "vr_settings_screen", "header": SCREENS["gamepad_setup"]["header"], "spacing": 27,
     # (every row above the help, its two lines lower)
@@ -535,8 +537,6 @@ SCREENS["gamepad_setup/vr"] = {
          "On foot: the controller, the weapon held in it,\nor the head.", "vr"),
         ("WEAPON HAND:", "vr.left_handed", [("RIGHT", "false"), ("LEFT", "true")],
          "The hand the weapon starts in, the other stick\nmoves. Pass it hand to hand: the buttons stay.", "vr"),
-        ("TURNING:", "vr.snap_turn", [("SMOOTH", "0"), ("15", "15"), ("30", "30"), ("45", "45"), ("90", "90")],
-         "The aiming stick turns by snaps of so many\ndegrees, or smoothly.", "vr"),
         ("ROOM SCALE:", "vr.roomscale", ON_OFF,
          "Step in the room and the player follows; off,\nthe head leans 35 cm at most.", "vr"),
         ("VEHICLE VIEW:", "vr.vehicle_view", [("SEAT", "first_person"), ("CHASE", "chase")],
@@ -550,7 +550,7 @@ SCREENS["gamepad_setup/vr"] = {
          "Games you host are VR servers: the browser shows\nVR, and headsets play there by the hands' rules.",
          "vr"),
     ],
-    "categories": [_vr_body_category],
+    "categories": [_vr_body_category, _vr_view_category],
 }
 SCREENS["gamepad_setup/vr_body"] = {
     "screen": "vr_body_settings_screen", "header": SCREENS["gamepad_setup"]["header"], "spacing": 30,
@@ -571,10 +571,27 @@ SCREENS["gamepad_setup/vr_body"] = {
          "HOLD: the grip held holds the weapon. TOGGLE:\na press holds it, another lets go.", None),
         ("GRENADES:", "vr.throw_gesture", [("THROWN", "true"), ("BUTTON", "false")],
          "THROWN: hold the trigger, throw with the arm.\nBUTTON: the trigger throws at once.", None),
+    ],
+}
+SCREENS["gamepad_setup/vr_view"] = {
+    "screen": "vr_view_settings_screen", "header": SCREENS["gamepad_setup"]["header"], "spacing": 30,
+    "rows": [
+        ("TURNING:", "vr.snap_turn", [("SMOOTH", "0"), ("15", "15"), ("30", "30"), ("45", "45"), ("90", "90")],
+         "The aiming stick turns by snaps of so many\ndegrees, or smoothly.", None),
+        ("TURN SPEED:", "vr.smooth_turn_speed", [(f"{value}", f"{value}") for value in (60, 90, 120, 150, 180, 240)],
+         "Degrees a second the aiming stick turns at, when\nit turns smoothly.", None),
         ("VIGNETTE:", "vr.vignette", [("OFF", "0"), ("LOW", "0.35"), ("MEDIUM", "0.65"), ("HIGH", "1")],
          "The view's edges darken while it moves or\nturns by itself, not with the head.", None),
         ("CINEMATICS:", "vr.cinematics", [("AROUND", "immersive"), ("SCREEN", "screen")],
          "Cinematics around the head, a blink at each cut,\nor on a screen ahead.", None),
+        ("HUD SIZE:", "vr.hud_width", [("60%", "6"), ("80%", "8"), ("100%", "10"), ("120%", "12"), ("140%", "14")],
+         "How much of the view the HUD fills, at any\ndistance: 100% is 37 degrees across.", None),
+        ("HUD DISTANCE:", "vr.hud_distance", [("2 M", "2"), ("5 M", "5"), ("10 M", "10"), ("15 M", "15"), ("30 M", "30")],
+         "How far ahead the HUD seems to float. Nearer\nthan what you look at, it doubles.", None),
+        ("MENU SIZE:", "vr.screen_width", [("1.8 M", "1.8"), ("2.4 M", "2.4"), ("3.0 M", "3"), ("3.6 M", "3.6")],
+         "The width of the panel of the menus, loading\nscreens and cutscenes on a screen.", None),
+        ("MENU DISTANCE:", "vr.screen_distance", [("1.5 M", "1.5"), ("2 M", "2"), ("3 M", "3"), ("4 M", "4")],
+         "How far ahead that panel is held, from where\nthe headset faces when it was last recentred.", None),
     ],
 }
 SCREENS["gamepad_setup"]["categories"] += [("VR HEADSET:", "gamepad_setup/vr", _vr_help, "desktop")]

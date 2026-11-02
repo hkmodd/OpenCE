@@ -12,8 +12,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from harness import CHECK_FAILED, build, mutated, read, run
 
 CASES = ["gameplay", "move", "menus", "menu-button", "turn", "seat", "drive", "room", "gestures", "hands", "ray",
-         "bindings", "swap", "throw", "grab", "bare", "physical", "dual", "places", "pull", "layout", "seat-secondary", "handles", "seat-switch"]
+         "bindings", "swap", "throw", "grab", "bare", "physical", "dual", "places", "pull", "layout", "seat-secondary", "handles", "seat-switch", "talk"]
 CONTROLS = {
+    "talk-wind-up": (("(off_pressed & VR_BUTTON_TRIGGER) && !input->off_holding && vr_at_head(frame, off_hand)",
+                      "(off_hand->buttons & VR_BUTTON_TRIGGER) && !input->off_holding && vr_at_head(frame, off_hand)"), "talk"),
+    "talk-grenade-too": (("\t\t\thand_bindings[off_index][VR_CONTROL_TRIGGER] = VR_BIND_NONE;\n", ""), "talk"),
+    "talk-presses-a-button": (("action >= VR_BIND_TALK", "action >= VR_BIND_COUNT"), "talk"),
+    "talk-stays-open": (("\tinput->turn = 0.0f;\n\tinput->talking = 0;\n", "\tinput->turn = 0.0f;\n"), "talk"),
+    "talk-unbound": (("hand_bindings[hand][control] == VR_BIND_TALK &&", "0 &&"), "talk"),
     "pull-never-arms": (("\t\telse if (settings->places && settings->pull_target[hand])\n\t\t\tvr_pull_arm(input, frame, hand);\n",
                          ""), "pull"),
     "pull-no-flick-needed": (("if ((input->pull_speed[hand] >= VR_PULL_SPEED && input->pull_start[hand] - distance >= VR_PULL_LEAST) ||\n\t\t\tinput->pull_turn[hand] >= VR_PULL_TURN)",

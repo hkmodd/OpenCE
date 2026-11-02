@@ -22,6 +22,11 @@ the neck goes under the head, behind and below the eyes, the body grown or
 shrunk from the feet to put it there (the eyes never inside the chest at
 any height of the head, the feet on the ground), and the body faces as the
 shoulders' body that follows the head does (vr_view.c).
+
+Seated in a headset's driver's or gunner's seat seen from it the same body
+is drawn, as the game seats it, under the head and turned with the vehicle
+(vr_render_seat_body): seen from the head it sat with, a body is looked into
+from above, through the hollow of its neck, its shoulders at the eyes.
 */
 
 #include "cseries.h"
@@ -85,14 +90,15 @@ static boolean first_person_legs_enabled(
 }
 
 /* the player's own unit, seen from inside it: its legs drawn (on foot,
-alive, not hidden) */
+alive, not hidden), or seated in a headset's driver's or gunner's seat seen
+from it (vr_render_seat_body) */
 boolean first_person_legs_wanted(
 	long object_index)
 {
 	struct object_datum *object = object_try_and_get(object_index);
 
 	return first_person_legs_enabled() && object && object->object.type == _object_type_biped &&
-		object->object.parent_object_index == NONE &&
+		(object->object.parent_object_index == NONE || vr_render_seat_body(object_index)) &&
 		!TEST_FLAG(object->object.damage_flags, _object_dead_bit) &&
 		!TEST_FLAG(object->object.flags, _object_invisible_bit);
 }

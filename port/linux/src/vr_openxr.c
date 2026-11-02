@@ -2755,6 +2755,9 @@ static void vr_panel_layer(XrCompositionLayerQuad *quad, int stereo)
 		distance = hud ? 15.0f : 2.0f;
 	if (!(width >= 0.2f && width <= 100.0f))
 		width = hud ? 10.0f : 2.4f;
+	/* (vr.hud_width is the width at 15 m: nearer, as much of the view) */
+	if (hud)
+		width *= distance / 15.0f;
 	memset(quad, 0, sizeof(*quad));
 	quad->type = XR_TYPE_COMPOSITION_LAYER_QUAD;
 	quad->layerFlags = stereo ? XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT : 0;

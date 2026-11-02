@@ -90,6 +90,7 @@ cutscenes are drawn as always, onto the flat screen held in the room.
 #include "passenger_camera.h"
 #include "vr_places.h"
 
+#include "models/model_definitions.h"
 #include <math.h>
 
 double config_real(const char *name);
@@ -120,6 +121,14 @@ look past it at the feet), and this far below them (a person's eyes over
 the base of their neck) */
 #define VR_LEGS_BACK 0.25f
 #define VR_LEGS_NECK_DROP 0.22f
+/* a hand this near where the game seats it on a vehicle's controls takes
+hold there, and lets go this far from it (metres), its way there taking
+this long (seconds) */
+#define VR_SEAT_HOLD_REACH 0.25f
+#define VR_SEAT_HOLD_KEEP 0.35f
+#define VR_SEAT_HOLD_SECONDS 0.15f
+/* the palm ahead of a model's hand's node, its wrist (metres) */
+#define VR_SEAT_PALM 0.09f
 /* a weapon on the ground within this of a hand's grip (along its length,
 metres) is in its reach, for the grip to take */
 #define VR_GRAB_REACH 0.25f
@@ -318,6 +327,13 @@ static struct
 	in the world, and the unit holding it */
 	struct render_camera weapon_camera;
 	boolean weapon_in_hand;
+	/* seen from a driver's or a gunner's seat: the arms from the shoulders,
+	at the controllers, each hand as far on the vehicle's controls as
+	seat_hold says, seat_shift from its controller */
+	boolean seat_hands;
+	boolean seat_held[VR_HAND_COUNT];
+	real seat_hold[VR_HAND_COUNT];
+	real_vector3d seat_shift[VR_HAND_COUNT];
 	real_point3d muzzle;
 	/* where the shot starts: the muzzle, short of a wall (vr_shot_origin) */
 	real_point3d shot_origin;
@@ -2206,24 +2222,22 @@ static real vr_chase_heading(
 		vr_wrap_angle(vr_view.heading - vr_view.set_yaw));
 }
 
-/* the HUD panel's field (vr.hud_distance and vr.hud_width, as vr_openxr.c
-places it): x and y each half the width over the distance, in the bounds'
-units for the HUD window's aspect */
+/* the HUD panel's field (vr.hud_width, as vr_openxr.c places it): x and y
+each half the width at 15 m over 15 m, in the bounds' units for the HUD
+window's aspect */
 static void vr_hud_bounds(
 	struct render_camera const *camera,
 	real_rectangle2d *bounds)
 {
-	real distance = (real)config_real("vr.hud_distance");
 	real width = (real)config_real("vr.hud_width");
 	real aspect = (real)(camera->viewport_bounds.x1 - camera->viewport_bounds.x0) /
 		(real)(camera->viewport_bounds.y1 - camera->viewport_bounds.y0);
 	real tangent;
 
-	if (!(distance >= 0.5f && distance <= 100.0f))
-		distance = 15.0f;
 	if (!(width >= 0.2f && width <= 100.0f))
 		width = 10.0f;
-	tangent = width * 0.5f / distance;
+	/* (vr.hud_width is the width at 15 m, whatever the distance) */
+	tangent = width * 0.5f / 15.0f;
 	bounds->x0 = -tangent / aspect;
 	bounds->x1 = tangent / aspect;
 	/* (the panel is 4:3: its height is three quarters of its width) */
@@ -2232,6 +2246,96 @@ static void vr_hud_bounds(
 }
 
 static void vr_shot_origin(real_point3d const *muzzle, real_point3d *origin);
+
+/* how far a hand is on a vehicle's control, from `hold`, `seconds` on, with
+its controller `distance` metres from it: `held` as it takes hold and lets
+go */
+static real vr_seat_hold_eased(
+	real hold,
+	boolean *held,
+	real distance,
+	real seconds)
+{
+	*held = distance < (*held ? VR_SEAT_HOLD_KEEP : VR_SEAT_HOLD_REACH);
+	hold += (*held ? seconds : -seconds) / VR_SEAT_HOLD_SECONDS;
+	return hold < 0.0f ? 0.0f : hold > 1.0f ? 1.0f : hold;
+}
+
+/* where the game seats a hand on the vehicle's controls: the palm of its
+node ("bip01 l hand"), the model's own left the player's; FALSE: a model
+without it */
+static boolean vr_seat_hand_place(
+	long unit_index,
+	short hand,
+	real_point3d *place)
+{
+	struct object_datum *object = object_try_and_get(unit_index);
+	struct object_definition *definition = object ? object_definition_get(object->definition_index) : NULL;
+	struct model const *model = definition && definition->object.model.index != NONE ?
+		model_definition_get(definition->object.model.index) : NULL;
+	char const *name = hand == VR_HAND_LEFT ? " l hand" : " r hand";
+	long count = model ? object->object.node_matrices.size / (long)sizeof(real_matrix4x3) : 0;
+	short index;
+
+	for (index = 0; model && index < count && index < model->nodes.count; index++)
+	{
+		if (strstr(TAG_BLOCK_GET_ELEMENT(&model->nodes, index, struct model_node)->name, name))
+		{
+			real_matrix4x3 const *node = &object_get_node_matrices(unit_index)[index];
+
+			point_from_line3d(&node->position, &node->forward, VR_SEAT_PALM * VR_UNITS_PER_METRE, place);
+			return TRUE;
+		}
+	}
+	return FALSE;
+}
+
+/* seen from a driver's or a gunner's seat the arms are the player's, the
+weapon put away: each hand at its controller, and near where the game seats
+it (not in a seat the game hides its occupant in) it takes hold there, on
+the wheel, the bars or the gun's handles. The shoulders face as the vehicle
+does */
+static void vr_seat_hands_update(
+	void)
+{
+	struct vr_frame const *frame = vr_frame_get();
+	long vehicle_index;
+	struct unit_seat const *seat = NULL;
+	short hand;
+
+	vr_view.seat_hands = vr_view.seat_view && vr_view.arms_free && !vr_view.cinematic && !cinematic_in_progress() &&
+		vr_seat_of(vr_view.unit_index, &vehicle_index, &seat) &&
+		(TEST_FLAG(seat->flags, _unit_seat_driver_bit) || TEST_FLAG(seat->flags, _unit_seat_gunner_bit));
+	if (vr_view.seat_hands)
+	{
+		vr_view.body_forward.i = (real)cos(vr_view.frame_heading);
+		vr_view.body_forward.j = (real)sin(vr_view.frame_heading);
+		vr_view.body_forward.k = 0.0f;
+	}
+	for (hand = 0; hand < VR_HAND_COUNT; hand++)
+	{
+		real_point3d place;
+		real_vector3d to = *global_zero_vector3d;
+		real distance = VR_SEAT_HOLD_KEEP;
+		boolean held = vr_view.seat_held[hand];
+
+		if (vr_view.seat_hands && vr_view.grip_valid[hand] && !TEST_FLAG(seat->flags, _unit_seat_invisible_bit) &&
+			vr_seat_hand_place(vr_view.unit_index, hand, &place))
+		{
+			vector_from_points3d(&vr_view.grips[hand].position, &place, &to);
+			distance = (real)magnitude3d(&to) / VR_UNITS_PER_METRE;
+		}
+		vr_view.seat_hold[hand] = vr_seat_hold_eased(vr_view.seat_hold[hand], &vr_view.seat_held[hand], distance,
+			frame->display_period);
+		scale_vector3d(&to, vr_view.seat_hold[hand], &vr_view.seat_shift[hand]);
+		/* (felt, and told) */
+		if (vr_view.seat_held[hand] && !held)
+		{
+			vr_haptic(hand, 0.25f, 0.03f);
+			platform_log("vr: the %s hand takes hold of the vehicle's controls", hand == VR_HAND_LEFT ? "left" : "right");
+		}
+	}
+}
 
 /* a reticle where a shot from `origin` along `forward` meets the world, in
 LOCAL space (the eyes' mapping of it reversed) */
@@ -2643,6 +2747,7 @@ short vr_render_windows(
 	/* the weapon's camera, behind the aiming hand: the grip's place less
 	its fit's grip along the axes of the aim, turned so that the model's
 	barrel lies along it (vr_weapon_in_hand) */
+	vr_seat_hands_update();
 	vr_view.weapon_in_hand = vr_view.hand_aiming && !vr_view.cinematic;
 	vr_view.pistol_grip = vr_view.weapon_in_hand && vr_pistol_grip();
 	/* (the rules the headset plays by, logged as they change) */
@@ -2698,7 +2803,7 @@ short vr_render_windows(
 			dual_wield_weapon(vr_view.unit_index) == NONE &&
 			vr_two_handed(frame, vr_view.main_hand == VR_HAND_LEFT, vr_view.pistol_grip, vr_view.aim_pitch, both));
 	}
-	if (vr_view.weapon_in_hand)
+	if (vr_view.weapon_in_hand || vr_view.seat_hands)
 	{
 		struct vr_hand const *hand = &frame->hand[vr_view.main_hand];
 		struct vr_pose aim = hand->aim, model;
@@ -2714,13 +2819,16 @@ short vr_render_windows(
 			offset[axis] = head[axis] + hand->grip.position[axis] - grip[axis] - frame->head.position[axis];
 		vr_view.weapon_camera = player.rasterizer_camera;
 		vr_camera_from_pose(&vr_view.weapon_camera, &model, offset, &anchor, heading);
+		point_from_line3d(&vr_view.weapon_camera.position, &vr_view.seat_shift[vr_view.main_hand], 1.0f,
+			&vr_view.weapon_camera.position);
 		/* (the muzzle's place: a camera there, its position) */
 		for (axis = 0; axis < 3; axis++)
 			offset[axis] = head[axis] + hand->grip.position[axis] + along[axis] - frame->head.position[axis];
 		vr_camera_from_pose(&muzzle, &aim, offset, &anchor, heading);
 		vr_view.muzzle = muzzle.position;
 		vr_view.barrel = muzzle.forward;
-		vr_shot_origin(&vr_view.muzzle, &vr_view.shot_origin);
+		if (vr_view.weapon_in_hand)
+			vr_shot_origin(&vr_view.muzzle, &vr_view.shot_origin);
 	}
 	/* (the other hand's weapon, behind that hand as the weapon in hand is
 	behind its own, along where that hand points) */
@@ -2798,7 +2906,8 @@ void vr_render_frustum_bounds(
 void vr_render_weapon_camera(
 	struct render_camera *camera)
 {
-	struct render_camera const *pose = vr_view.weapon_in_hand ? &vr_view.weapon_camera : &vr_view.head_camera;
+	struct render_camera const *pose = vr_view.weapon_in_hand || vr_view.seat_hands ? &vr_view.weapon_camera :
+		&vr_view.head_camera;
 
 	if (!vr_view.stereo)
 		return;
@@ -2998,8 +3107,8 @@ static void vr_arms_update(
 	struct vr_frame const *frame = vr_frame_get();
 	struct vr_arms_pose pose;
 	short main_hand = vr_view.main_hand, off_hand = main_hand == VR_HAND_LEFT ? VR_HAND_RIGHT : VR_HAND_LEFT;
-	boolean other_drawn = other ||
-		first_person_weapon_get_animation_graph(render.local_player_index + FIRST_PERSON_WEAPON_OTHER_HAND) != NULL;
+	boolean other_drawn = other || (!vr_view.seat_hands &&
+		first_person_weapon_get_animation_graph(render.local_player_index + FIRST_PERSON_WEAPON_OTHER_HAND) != NULL);
 	float orientation[4];
 
 	if (!graph)
@@ -3041,10 +3150,12 @@ static void vr_arms_update(
 	pose.off_on_weapon = !empty && !other_drawn && ((!vr_view.bare && !vr_view.pistol_grip &&
 		vr_two_handed(frame, pose.main_left, vr_view.pistol_grip, vr_view.aim_pitch, orientation)) ||
 		first_person_weapon_off_hand_busy(render.local_player_index));
-	pose.off_squeeze = frame->hand[off_hand].squeeze;
+	point_from_line3d(&pose.main_grip, &vr_view.seat_shift[main_hand], 1.0f, &pose.main_grip);
+	point_from_line3d(&pose.off_grip, &vr_view.seat_shift[off_hand], 1.0f, &pose.off_grip);
+	pose.off_squeeze = MAX(frame->hand[off_hand].squeeze, vr_view.seat_hold[off_hand]);
 	pose.off_trigger = frame->hand[off_hand].trigger;
 	pose.main_bare = !other && (vr_view.bare || empty);
-	pose.main_squeeze = frame->hand[main_hand].squeeze;
+	pose.main_squeeze = MAX(frame->hand[main_hand].squeeze, vr_view.seat_hold[main_hand]);
 	pose.main_trigger = frame->hand[main_hand].trigger;
 	pose.seconds = frame->display_period;
 	vr_arms_pose(matrices, count, graph, &pose);
@@ -3070,7 +3181,8 @@ static void vr_carried(
 		out->n[axis] = to->forward.n[axis] * forward + to_left->n[axis] * left + to->up.n[axis] * up;
 }
 
-/* on foot with no weapon at all: the hands as the last weapon's animations
+/* on foot with no weapon at all, or seen from a seat where it is put away:
+the hands as the last weapon's animations
 posed them, carried from the camera they were posed from to this frame's
 behind the hand (vr_render_empty_hands) */
 static boolean vr_empty_hands_pose(
@@ -3081,8 +3193,8 @@ static boolean vr_empty_hands_pose(
 	real_vector3d from_left, to_left;
 	short index;
 
-	if (!vr_view.empty_valid || !unit || unit->object.parent_object_index != NONE ||
-		unit_get_weapon_count(vr_view.unit_index) != 0)
+	if (!vr_view.empty_valid || !unit || (!vr_view.seat_hands && (unit->object.parent_object_index != NONE ||
+		unit_get_weapon_count(vr_view.unit_index) != 0)))
 	{
 		return FALSE;
 	}
@@ -3102,6 +3214,22 @@ static boolean vr_empty_hands_pose(
 		vr_carried(&in->left, from, &from_left, to, &to_left, &out->left);
 		vr_carried(&in->up, from, &from_left, to, &to_left, &out->up);
 	}
+	return TRUE;
+}
+
+/* the empty hands posed, if they are to be */
+static boolean vr_empty_hands_update(
+	void)
+{
+	if (!vr_empty_hands_pose())
+		return FALSE;
+	if (vr_view.main_hand == VR_HAND_LEFT)
+	{
+		vr_view.arms_mirrored = vr_arms_mirror(vr_view.empty_pose, vr_view.empty_count, TRUE,
+			render.local_player_index, &vr_view.weapon_camera, NONE);
+	}
+	vr_arms_update(vr_view.empty_graph, vr_view.empty_pose, vr_view.empty_count, TRUE, FALSE);
+	vr_view.empty_posed = TRUE;
 	return TRUE;
 }
 
@@ -3140,8 +3268,13 @@ void vr_render_weapon_posed(
 
 	vr_view.empty_posed = FALSE;
 	vr_view.arms_mirrored = FALSE;
-	if (!vr_view.stereo || !vr_view.weapon_in_hand || render.local_player_index == NONE)
+	if (!vr_view.stereo || (!vr_view.weapon_in_hand && !vr_view.seat_hands) || render.local_player_index == NONE)
 		return;
+	if (vr_view.seat_hands)
+	{
+		vr_empty_hands_update();
+		return;
+	}
 	graph = first_person_weapon_get_animation_graph(render.local_player_index);
 	matrices = first_person_weapon_get_node_matrices(render.local_player_index, &count);
 	if (graph && count > 0 && count <= MAXIMUM_NODES_PER_ANIMATION)
@@ -3153,15 +3286,8 @@ void vr_render_weapon_posed(
 		vr_view.empty_camera = vr_view.weapon_camera;
 		vr_view.empty_valid = TRUE;
 	}
-	else if (vr_empty_hands_pose())
+	else if (vr_empty_hands_update())
 	{
-		if (vr_view.main_hand == VR_HAND_LEFT)
-		{
-			vr_view.arms_mirrored = vr_arms_mirror(vr_view.empty_pose, vr_view.empty_count, TRUE,
-				render.local_player_index, &vr_view.weapon_camera, NONE);
-		}
-		vr_arms_update(vr_view.empty_graph, vr_view.empty_pose, vr_view.empty_count, TRUE, FALSE);
-		vr_view.empty_posed = TRUE;
 		return;
 	}
 	vr_weapon_learn(render.local_player_index, &vr_view.weapon_camera, vr_held_weapon());
@@ -3191,8 +3317,8 @@ void vr_render_weapon_drawing(
 	/* (the arms posed from the player's shoulders show sides of them the
 	stock view never shows, which the model has no faces for: their backs
 	are drawn too) */
-	boolean two_sided = drawing && VR_RENDER_WORLD() && vr_view.stereo && vr_view.weapon_in_hand &&
-		vr_view.arms_free;
+	boolean two_sided = drawing && VR_RENDER_WORLD() && vr_view.stereo &&
+		(vr_view.weapon_in_hand || vr_view.seat_hands) && vr_view.arms_free;
 
 	if (two_sided != both_faces)
 	{
@@ -3569,6 +3695,17 @@ int vr_render_seat_weapon_hidden(
 		(TEST_FLAG(seat->flags, _unit_seat_driver_bit) || TEST_FLAG(seat->flags, _unit_seat_gunner_bit));
 }
 
+int vr_render_seat_body(
+	long unit_index)
+{
+	long vehicle_index;
+	struct unit_seat const *seat;
+
+	return VR_RENDER_EYE() && vr_view.stereo && vr_view.seat_hands && unit_index != NONE &&
+		unit_index == vr_view.unit_index && vr_seat_of(unit_index, &vehicle_index, &seat) &&
+		!TEST_FLAG(seat->flags, _unit_seat_invisible_bit);
+}
+
 int vr_render_room(
 	float offset[2])
 {
@@ -3585,7 +3722,7 @@ int vr_render_legs(
 	float under[3],
 	float forward[3])
 {
-	if (!VR_RENDER_WORLD() || !vr_view.stereo || vr_view.seat_view || vr_view.cinematic)
+	if (!VR_RENDER_WORLD() || !vr_view.stereo || (vr_view.seat_view && !vr_view.seat_hands) || vr_view.cinematic)
 		return FALSE;
 	forward[0] = (float)vr_view.body_forward.i;
 	forward[1] = (float)vr_view.body_forward.j;

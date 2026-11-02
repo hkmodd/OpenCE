@@ -155,14 +155,17 @@ What sets the size the world is seen at, each measured or derived:
   game, the menus and the player's button preset take them as a pad's: a
   layout of the VR conversions' (the table in the README), each button of
   the aiming (main) hand and the other (off) bound to an action
-  (`vr.bindings` binds them otherwise), the action pressing the standard
-  preset's button for it. The sticks and the face buttons are each
+  (`vr.bindings` binds them otherwise, to `talk` too, the microphone), the
+  action pressing the standard preset's button for it. The sticks and the
+  face buttons are each
   controller's, by `vr.left_handed`'s layout; the trigger and the grip are
   the weapon's hand's or the other's, so a weapon passed to the other
   hand fires from it and nothing else moves. With the gestures (a punch,
   none while a grenade is held or for half a second after; the off grip
   at the visor's front; the head lowered) as presses of the same
-  buttons. The main grip pressed at a shoulder (along the head's yaw, 8
+  buttons. The off trigger pressed at the helmet and held is push to talk
+  (`audio.voice_chat`), no grenade; pressed away from the helmet and
+  carried there, it stays the grenade's. The main grip pressed at a shoulder (along the head's yaw, 8
   to 50 cm to its side, 30 cm under to 30 cm over the eyes, 12 cm before
   to 50 cm behind them: by the ear and back over the shoulder, where a
   player's hand let go putting a weapon over the shoulder in a headset;
@@ -328,7 +331,15 @@ What sets the size the world is seen at, each measured or derived:
   seat view): `director_choose_game_perspective` takes the first person's
   camera there for the local view only (`director_camera_deterministic`,
   which aims the shots, is unchanged), so the eyes are at the unit's and
-  its body is not drawn. The heading is the vehicle's yaw, blended between
+  a passenger's body is not drawn. A driver's or a gunner's is, as the game
+  seats it, under the head as on foot and turned with the vehicle
+  (`first_person_legs.c`, `vr_render_seat_body`), but not in a seat the game
+  hides its occupant in. Seen from such a seat the weapon is put away and
+  the arms are the player's, from the shoulders to the controllers; a hand
+  within 25 cm of where the game seats it takes hold there, on the wheel,
+  the bars or the gun's handles, with a light pulse, and lets go beyond
+  35 cm (`vr_seat_hands_update`). This is what is seen: the stick steers.
+  The heading is the vehicle's yaw, blended between
   the ticks as the vehicle is drawn, and the seat's own turn: level, the
   vehicle's pitch and roll not tilting the horizon. Getting in, the seat's
   forward is put ahead of the head; getting out, the heading on foot goes

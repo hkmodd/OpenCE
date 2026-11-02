@@ -851,6 +851,10 @@ int halo_push_to_talk_held(void)
 		if (input_held(&input, bindings[HALO_KEYBOARD_PUSH_TO_TALK][slot]))
 			return 1;
 	}
+#ifndef HALO_GLES
+	if (vr_input_talking())
+		return 1;
+#endif
 	return controller_remap_talk();
 }
 

@@ -69,6 +69,8 @@ enum
 	VR_BIND_CROUCH,
 	VR_BIND_ZOOM,
 	VR_BIND_SCOREBOARD,
+	/* (no pad button: the microphone, vr_input_talking) */
+	VR_BIND_TALK,
 	VR_BIND_COUNT
 };
 
@@ -99,6 +101,9 @@ struct vr_input_settings
 	int left_handed;
 	/* each hand's buttons' actions (vr_input_bindings_parse) */
 	unsigned char bindings[VR_ROLE_COUNT][VR_CONTROL_COUNT];
+	/* the off hand's trigger pressed at the helmet talks (audio.voice_chat
+	push to talk, with the gestures) */
+	int talk_gesture;
 	/* the main hand's stick turns by this a push (radians), or, at 0,
 	smoothly at turn_rate (radians a second) */
 	float snap_angle;
@@ -323,6 +328,10 @@ struct vr_input
 	int room_walking;
 	/* the off stick is pushed (past VR_ROOM_STILL) on foot */
 	int stick_moving;
+	/* the microphone's button held (VR_BIND_TALK), or the trigger pressed at
+	the helmet still held (which then does nothing else) */
+	int talking;
+	int talk_at_helmet;
 	/* the move hand's clicks that switched a seat's view (the settings'
 	seat_switch), for vr_view.c to take */
 	unsigned long view_switches;
@@ -410,6 +419,8 @@ int vr_ray_panel(struct vr_pose const *aim, struct vr_pose const *panel, float w
 frame; 0 (pad untouched) while the session is not running or has no
 controllers */
 int vr_input_gamepad(struct vr_pad *pad, int menus);
+/* xinput_sdl.c's halo_push_to_talk_held: the controllers' talk held */
+int vr_input_talking(void);
 /* xinput_sdl.c's XInputSetState: the first controller's rumble, each
 motor's speed 0 to 1, felt in the hand on its side (the game's motors as
 vr_input_rumble_hands made them) */
