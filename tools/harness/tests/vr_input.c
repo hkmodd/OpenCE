@@ -46,6 +46,12 @@ static struct vr_input_settings settings_of(int left_handed, float snap_angle, i
 }
 
 /* a frame with the head at the origin, looking ahead, and both hands tracked before it */
+/* a thumb's value as the game reads it (input_xbox.c's fix_dead_zone) */
+static int game_reads(int thumb)
+{
+    return thumb > 9000 ? (thumb - 9000) * 32767 / (32767 - 9000) : thumb < -9000 ? (thumb + 9000) * 32767 / (32767 - 9000) : 0;
+}
+
 static void frame_of(struct vr_frame *frame)
 {
     int hand;
@@ -223,28 +229,29 @@ int main(int argc, char **argv)
         settings.room_offset[0] = 0.05f;
         vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
         CHECK(!input.room_walking && pad.thumb[0] == 0 && pad.thumb[1] == 0, "a lean of 5 cm: still");
+        CHECK(!input.stick_moving, "the stick still");
         settings.room_offset[0] = 0.3f;
         vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
-        CHECK(input.room_walking && pad.thumb[0] > 15000 && abs(pad.thumb[1]) < 100,
+        CHECK(input.room_walking && game_reads(pad.thumb[0]) > 15000 && abs(game_reads(pad.thumb[1])) < 100,
             "a step of 30 cm to the right: walks right (%d %d)", pad.thumb[0], pad.thumb[1]);
         settings.room_offset[0] = 0.05f;
         vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
-        CHECK(input.room_walking && pad.thumb[0] > 0 && pad.thumb[0] < 8000,
-            "walking, 5 cm away: slower, not stopped (%d)", pad.thumb[0]);
+        CHECK(input.room_walking && game_reads(pad.thumb[0]) > 0 && game_reads(pad.thumb[0]) < 8000,
+            "walking, 5 cm away: slower, not stopped, the game reads it (%d)", pad.thumb[0]);
         settings.room_offset[0] = 0.02f;
         vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
         CHECK(!input.room_walking && pad.thumb[0] == 0, "2 cm away: stops");
         settings.room_offset[0] = 0;
         settings.room_offset[1] = -0.6f;
         vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
-        CHECK(pad.thumb[1] == 32767 && abs(pad.thumb[0]) < 100, "60 cm ahead: walks ahead, at full (%d %d)",
+        CHECK(pad.thumb[1] == 32767 && abs(game_reads(pad.thumb[0])) < 100, "60 cm ahead: walks ahead, at full (%d %d)",
             pad.thumb[0], pad.thumb[1]);
         /* the head turned a quarter to the left: a step to the room's left is ahead of it */
         yawed(1.5707963f, frame.head.orientation);
         settings.room_offset[0] = -0.6f;
         settings.room_offset[1] = 0;
         vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
-        CHECK(pad.thumb[1] > 32000 && abs(pad.thumb[0]) < 200, "turned left, a step left is ahead (%d %d)",
+        CHECK(pad.thumb[1] > 32000 && abs(game_reads(pad.thumb[0])) < 200, "turned left, a step left is ahead (%d %d)",
             pad.thumb[0], pad.thumb[1]);
         /* the off stick pushed: it moves, the step waits */
         frame.hand[VR_HAND_LEFT].stick[0] = 1.0f;
@@ -559,13 +566,40 @@ int main(int argc, char **argv)
         CHECK(close_to(forward[0], -sinf(0.3f), 1e-4f) && close_to(forward[2], -cosf(0.3f), 1e-4f),
             "pointing as the main hand (%f, %f, %f)", (double)forward[0], (double)forward[1], (double)forward[2]);
         CHECK(vr_two_handed(&frame, 0, 1, 0.0f, orientation) == VR_HELD_SUPPORT, "a pistol's too");
-        /* a pistol is not held from ahead of the main hand, a rifle is */
+        /* a pistol is not held from far ahead of the main hand, a rifle is */
         frame_of(&frame);
         frame.hand[VR_HAND_LEFT].grip.position[0] = 0.2f;
-        frame.hand[VR_HAND_LEFT].grip.position[2] = -0.65f;
+        frame.hand[VR_HAND_LEFT].grip.position[2] = -0.8f;
         frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
         CHECK(vr_two_handed(&frame, 0, 1, 0.0f, orientation) == VR_HELD_ONE, "a pistol: the off hand ahead holds nothing");
         CHECK(vr_two_handed(&frame, 0, 0, 0.0f, orientation) == VR_HELD_BOTH, "a rifle: it holds it");
+        /* a pistol in both hands as two controllers are held: rings touching, 25 cm apart, the other hand
+           beside it, ahead of it or past it; taken within 30 cm, kept to 38 */
+        frame_of(&frame);
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
+        frame.hand[VR_HAND_LEFT].grip.position[0] = frame.hand[VR_HAND_RIGHT].grip.position[0] - 0.25f;
+        frame.hand[VR_HAND_LEFT].grip.position[1] = frame.hand[VR_HAND_RIGHT].grip.position[1];
+        frame.hand[VR_HAND_LEFT].grip.position[2] = frame.hand[VR_HAND_RIGHT].grip.position[2];
+        CHECK(vr_two_handed(&frame, 0, 1, 0.0f, orientation) == VR_HELD_SUPPORT, "a pistol: beside it, 25 cm");
+        CHECK(vr_two_handed(&frame, 0, 0, 0.0f, orientation) == VR_HELD_ONE, "a rifle: beside it holds nothing");
+        frame.hand[VR_HAND_LEFT].grip.position[0] = frame.hand[VR_HAND_RIGHT].grip.position[0] + 0.25f;
+        CHECK(vr_two_handed(&frame, 0, 1, 0.0f, orientation) == VR_HELD_SUPPORT, "a pistol: the hands crossed");
+        frame.hand[VR_HAND_LEFT].grip.position[0] = frame.hand[VR_HAND_RIGHT].grip.position[0] - 0.34f;
+        CHECK(vr_two_handed(&frame, 0, 1, 0.0f, orientation) == VR_HELD_ONE, "a pistol: 34 cm is not taken");
+        settings.pistol_grip = 1;
+        frame.hand[VR_HAND_LEFT].grip.position[0] = frame.hand[VR_HAND_RIGHT].grip.position[0] - 0.25f;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        frame.hand[VR_HAND_LEFT].grip.position[0] = frame.hand[VR_HAND_RIGHT].grip.position[0] - 0.34f;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(vr_two_handed(&frame, 0, 1, 0.0f, orientation) == VR_HELD_SUPPORT, "taken, it is kept at 34 cm");
+        frame.hand[VR_HAND_LEFT].grip.position[0] = frame.hand[VR_HAND_RIGHT].grip.position[0] - 0.40f;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(vr_two_handed(&frame, 0, 1, 0.0f, orientation) == VR_HELD_ONE, "lost at 40 cm");
+        frame.hand[VR_HAND_LEFT].grip.position[0] = frame.hand[VR_HAND_RIGHT].grip.position[0] - 0.34f;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(vr_two_handed(&frame, 0, 1, 0.0f, orientation) == VR_HELD_ONE, "and not taken again at 34 cm");
+        settings.pistol_grip = 0;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
 
         /* the hand points along its aim pose (not its grip pose, along the handle), its barrel turned up by
            the pitch */

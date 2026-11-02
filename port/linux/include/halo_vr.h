@@ -147,6 +147,9 @@ int vr_present(unsigned int texture, int width, int height);
 /* the scope's window has ended: the picture in the back buffer's rectangle
 (x0, y0 to x1, y1 in its pixels, rows from the top) into the scope's image */
 void vr_resolve_scope(unsigned int texture, int width, int height, int x0, int y0, int x1, int y1);
+/* ... and the picture in another rectangle over it, drawn over a clear ground
+(the game's zoomed view: its crosshair, ticks and numbers) */
+void vr_resolve_scope_view(unsigned int texture, int width, int height, int x0, int y0, int x1, int y1);
 /* where the scope's image is held this frame (LOCAL space, facing +z) and
 its width in metres */
 void vr_scope_place(const struct vr_pose *pose, float width);
@@ -280,11 +283,12 @@ goes (the world's, under the head, behind and below the eyes) and the way
 it faces (the body's, level, as the arms' shoulders: vr_arms_body); 0
 elsewhere */
 int vr_render_legs(float under[3], float forward[3]);
-/* unit_adjust_projectile_ray: with no other machine in the game, the shot
-of the unit the hand aims for starts at the weapon in the hand (its
-muzzle), unless a wall stands between it and the unit's eye; 0 to fire as
-always */
-int vr_render_shot_origin(long unit_index, float origin[3]);
+/* unit_adjust_projectile_ray: the shot of the unit the hand aims for starts
+at the weapon in the hand (its muzzle, or short of what is between the eyes
+and it) and goes along its barrel, the ray the reticle is held on (a network
+game's other machines see it from the unit's own: it hits by this machine's
+report, the host told where from: network_damage.c); 0 to fire as always */
+int vr_render_shot_ray(long unit_index, float origin[3], float forward[3]);
 /* weapons.c: that unit's shots start at the hand: the first-person
 weapon's offset from the eye is not added to them */
 int vr_render_shot_from_hand(long unit_index);
@@ -370,7 +374,7 @@ void vr_render_rumble_hands(float const body[2], float const weapon[2], float co
 #define vr_render_seated() 0
 #define vr_rules_active() 0
 #define vr_render_legs(under, forward) 0
-#define vr_render_shot_origin(unit_index, origin) 0
+#define vr_render_shot_ray(unit_index, origin, forward) 0
 #define vr_render_shot_from_hand(unit_index) 0
 #define vr_render_off_hand_grip(unit_index, grip) 0
 #define vr_render_other_hand_muzzle(unit_index, origin, forward) 0

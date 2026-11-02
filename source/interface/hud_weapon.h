@@ -38,5 +38,8 @@ void hud_weapon_port_draw_crosshairs(
 	struct player_datum *player,
 	long weapon_index,
 	short aimed);
+/* port: the weapon in hand's zoomed view alone, for a headset's scope */
+void hud_weapon_port_draw_zoomed(
+	struct player_datum *player);
 
 #endif // __HUD_WEAPON_H

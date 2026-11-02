@@ -55,10 +55,14 @@ from the weapon's camera): each arm from its shoulder, the weapon's hand
 where the game holds the weapon, the other at its controller */
 void vr_arms_pose(real_matrix4x3 *matrices, short count, struct animation_graph *graph,
 	struct vr_arms_pose const *pose);
+/* where the game holds the weapon's hand: its wrist, as those matrices have
+it before vr_arms_pose; FALSE with no such arm in the graph */
+boolean vr_arms_weapon_wrist(real_matrix4x3 const *matrices, short count, struct animation_graph *graph,
+	real_point3d *position);
 /* the body's forward (the world's, level) this frame, for the head's: it
 follows the head once that has turned more than VR_ARMS_BODY_TURN from it
 (vr_view.c, once a frame: the arms and the legs face it) */
-void vr_arms_body(real_vector3d const *head_forward, real heading, float forward[3]);
+void vr_arms_body(real_vector3d const *head_forward, real heading, real seconds, float forward[3]);
 /* a new map, a new view: the body faces the head again */
 void vr_arms_reset(void);
 /* the first-person weapon's other arm (the one not holding the weapon) not

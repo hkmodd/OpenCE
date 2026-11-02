@@ -543,7 +543,7 @@ the setting for one start of the game. It has priority over the file.
 | `display.hdr_paper_white` | `0` | `HALO_HDR_PAPER_WHITE` | Not on Android or in a browser. With `display.hdr_output` on an HDR display, how bright white is in nits, 80 to 1000: the HUD, the menus and the 3D view's white (scRGB's 1.0 is 80 nits). `203` is HDR television's reference white for SDR content (ITU-R BT.2408). `0`: Windows' "SDR content brightness", as SDL reports it. Video Setup's GRAPHICS screen sets it (PAPER WHITE), and its HDR CALIBRATION screen by eye, beside a grey scale ("HDR" in "What operates"). |
 | `display.hdr_peak_brightness` | `0` | `HALO_HDR_PEAK_BRIGHTNESS` | Not on Android or in a browser. With `display.hdr_output` on an HDR display, the brightest the display shows in nits, 250 to 10000, which `display.hdr_tone_mapping` fits the brightest light to. `0`: what Windows reports, which its HDR Calibration app sets. Video Setup's GRAPHICS screen sets it (PEAK BRIGHTNESS), and its HDR CALIBRATION screen by eye: raised until a ring at 10000 nits disappears into a square at the value ("HDR" in "What operates"). |
 | `display.vr` | `false` | `HALO_VR` | Not on Android or in a browser. `true`: play in a VR headset through its OpenXR runtime. `false`: nothing of OpenXR is loaded. Read at start. Refer to "VR". |
-| `vr.resolution_scale` | `1.0` | `HALO_VR_RESOLUTION_SCALE` | With `display.vr`, the eyes' resolution as a multiple of the runtime's recommended one, from `0.5` to `2.0`. Read at start. |
+| `vr.resolution_scale` | `1.0` | `HALO_VR_RESOLUTION_SCALE` | With `display.vr`, the eyes' resolution each way as a multiple of the runtime's recommended one, from `0.5` to `2.0` (RESOLUTION on the VR HEADSET screen; Meta's runtime has no such setting of its own), up to the most the runtime allows, which the log's `vr: eyes` line tells. Read at start. |
 | `vr.arms` | `"free"` | `HALO_VR_ARMS` | With `display.vr` and the weapon in the hand: `"free"`, each arm its own, from the shoulder: the weapon's hand holds the weapon, the other its controller, until it holds the weapon too (grip near it) or the weapon is reloaded, readied or a grenade thrown; `"weapon"`, both arms on the weapon as the game animates them, moved with the hand. |
 | `vr.eye_height` | `"chief"` | `HALO_VR_EYE_HEIGHT` | With `display.vr`, on foot: `"chief"` puts the eyes at the Master Chief's, 1.89 m, while the head is as high as it has been since the runtime last recentred (standing, or sitting for a seated player), and as much lower as the head goes lower: the player's eyes are the cyborg's, over its legs and shoulders. `"player"` puts them as high over the ground as the player's are over the floor (where the runtime knows it: its STAGE space). A crouch of the button and a real one do not add up. The game's view and shots are unchanged. |
 | `vr.vignette` | `0.0` | `HALO_VR_VIGNETTE` | With `display.vr`, a comfort vignette: the eyes' field darkens from its edges while the view moves or turns by itself (the stick, a vehicle, a fall, smooth turning), not as the head moves, nor at a snap turn. From `0`, none, to `1`: at a run (3 m/s) or a turn of 86 degrees a second, the clear field closes from 85 degrees about the eyes' middle to 35, the dark 20 degrees past it, in a tenth of a second, and opens again in 0.3 s. |
@@ -890,11 +890,11 @@ screen, with the cause in the log.
   headset's.
 - The aiming controller aims (`vr.aim`): the weapon is held in it, along
   where it points (its aim pose; `vr.aim_pitch` turns it), and shots
-  go where it points, starting at the weapon (from the eye, as always,
-  when other machines are in the game). A reticle is held where the shot
-  lands, red when the game's crosshair would be; the HUD draws no
-  crosshair. A zoomed weapon shows its zoom in a scope held on it, not in
-  the eyes. With `vr.aim = "head"` the head aims. The off stick moves
+  go where it points, starting at the weapon's muzzle (or short of a wall
+  the barrel is through), in network games too. A reticle is held where the
+  shot lands, red when the game's crosshair would be; the HUD draws no
+  crosshair. A zoomed weapon shows its zoom in a scope held on its sight,
+  with the game's own zoomed crosshair in it, not in the eyes. With `vr.aim = "head"` the head aims. The off stick moves
   where the head faces.
 - Each arm is its own (`vr.arms`): from the player's shoulders, the
   weapon's hand holds the weapon and the other hand its controller; it

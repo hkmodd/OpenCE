@@ -76,6 +76,10 @@ flashlight) are the weapon's hand's, which keeps its place.
 /* the head turns this far from the body before the body follows (radians,
 35 degrees) */
 #define VR_ARMS_BODY_TURN 0.61f
+/* ... and within that follows it in about this long (seconds), below this
+much of the head's forward up or down */
+#define VR_ARMS_BODY_EASE 2.0f
+#define VR_ARMS_BODY_STEEP 0.75f
 /* the other hand goes to the weapon, or back to its controller, in this
 long (seconds) */
 #define VR_ARMS_BLEND 0.15f
@@ -602,6 +606,7 @@ static void vr_arms_fingers(
 void vr_arms_body(
 	real_vector3d const *head_forward,
 	real heading,
+	real seconds,
 	float forward[3])
 {
 	real head_yaw = vr_yaw_of(head_forward->n, vr_arms.body_valid ? vr_arms.body_yaw + heading : heading);
@@ -617,6 +622,11 @@ void vr_arms_body(
 		vr_arms.body_yaw = vr_wrap_angle(vr_arms.body_yaw + turned - VR_ARMS_BODY_TURN);
 	else if (turned < -VR_ARMS_BODY_TURN)
 		vr_arms.body_yaw = vr_wrap_angle(vr_arms.body_yaw + turned + VR_ARMS_BODY_TURN);
+	/* (within that it comes round after the head slowly, as a body does; not
+	to a head looking steeply down or up, whose yaw says little: a player
+	looking at the feet has the body as it was) */
+	else if (fabs(head_forward->k) < VR_ARMS_BODY_STEEP && seconds > 0.0f)
+		vr_arms.body_yaw = vr_wrap_angle(vr_arms.body_yaw + turned * MIN(seconds / VR_ARMS_BODY_EASE, 1.0f));
 	forward[0] = (float)cos(vr_arms.body_yaw + heading);
 	forward[1] = (float)sin(vr_arms.body_yaw + heading);
 	forward[2] = 0.0f;
@@ -688,6 +698,27 @@ void vr_arms_reset(
 	vr_arms.body_valid = FALSE;
 	vr_arms.off_on_weapon = 1.0f;
 	vr_arms.off_support = 0.0f;
+}
+
+boolean vr_arms_weapon_wrist(
+	real_matrix4x3 const *matrices,
+	short count,
+	struct animation_graph *graph,
+	real_point3d *position)
+{
+	short wrist;
+
+	if (!graph || count <= 0 || count > MAXIMUM_NODES_PER_ANIMATION || count > graph->nodes.count)
+		return FALSE;
+	if (graph != vr_arms.graph)
+		vr_arms_find_bones(graph, count);
+	if (!vr_arms.found)
+		return FALSE;
+	wrist = vr_arms.bones[_vr_arm_weapon][_vr_arm_wrist];
+	if (wrist >= count)
+		return FALSE;
+	*position = matrices[wrist].position;
+	return TRUE;
 }
 
 void vr_arms_pose(

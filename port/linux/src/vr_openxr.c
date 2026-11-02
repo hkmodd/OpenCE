@@ -244,6 +244,10 @@ static struct
 	float reticle_position[VR_RETICLE_COUNT][3];
 	/* the scope's image is drawn this frame, where it is held, its width */
 	int scope_drawn;
+	/* its image is held from the world's picture to the zoomed view's over
+	it (vr_scope_finish), and the picture of that view */
+	int scope_held;
+	GLuint scope_view;
 	struct vr_pose scope_pose;
 	float scope_width;
 	/* the panel shown last, in LOCAL space, and its size (vr_panel_pose) */
@@ -923,9 +927,9 @@ static int vr_create_session(void)
 		if (!vr_create_swapchain(&vr.reticle[index], VR_CROSSHAIR_SIZE, VR_CROSSHAIR_SIZE))
 			return 0;
 	}
-	platform_log("vr: eyes %ldx%ld (recommended %ux%u, vr.resolution_scale %.2f), %u images", width, height,
-		views[0].recommendedImageRectWidth, views[0].recommendedImageRectHeight, scale,
-		(unsigned)vr.eyes[0].image_count);
+	platform_log("vr: eyes %ldx%ld (recommended %ux%u, at most %ldx%ld, vr.resolution_scale %.2f), %u images", width,
+		height, views[0].recommendedImageRectWidth, views[0].recommendedImageRectHeight, maximum_width, maximum_height,
+		scale, (unsigned)vr.eyes[0].image_count);
 	return vr_create_drawing(width, height);
 }
 
@@ -1016,6 +1020,9 @@ static int vr_create_drawing(long width, long height)
 	glGenFramebuffers(2, vr.framebuffers);
 	vr_reticle_pictures();
 	vr_beam_picture();
+	glGenTextures(1, &vr.scope_view);
+	glBindTexture(GL_TEXTURE_2D, vr.scope_view);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, VR_SCOPE_SIZE, VR_SCOPE_SIZE, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 	glGenTextures(VR_RETICLE_COUNT, vr.crosshair);
 	for (index = 0; index < VR_RETICLE_COUNT; index++)
 	{
@@ -1890,6 +1897,8 @@ void vr_dispose(void)
 		glDeleteTextures(2, vr.reticle_pictures);
 	if (vr.beam_picture)
 		glDeleteTextures(1, &vr.beam_picture);
+	if (vr.scope_view)
+		glDeleteTextures(1, &vr.scope_view);
 	if (vr.crosshair[0])
 		glDeleteTextures(VR_RETICLE_COUNT, vr.crosshair);
 	if (vr.framebuffers[0])
@@ -2011,8 +2020,12 @@ static void vr_pose_of(const XrPosef *pose, struct vr_pose *out)
 	out->orientation[3] = pose->orientation.w;
 }
 
+static void vr_scope_finish(void);
+
 static void vr_end_frame(const XrCompositionLayerBaseHeader *const *layers, uint32_t layer_count)
 {
+	/* (held from a frame that ends with no picture) */
+	vr_scope_finish();
 	XrFrameEndInfo end;
 
 	if (vr.blink > 0.0f)
@@ -2370,16 +2383,7 @@ void vr_resolve_eye(int eye, unsigned int texture, int width, int height)
 
 void vr_resolve_scope(unsigned int texture, int width, int height, int x0, int y0, int x1, int y1)
 {
-	static const struct
-	{
-		int x, y, width, height;
-	} reticle[] =
-	{
-		/* (a thin cross, gapped at the middle, and a dot) */
-		{ 0, 255, 236, 2 }, { 276, 255, 236, 2 }, { 255, 0, 2, 236 }, { 255, 276, 2, 236 }, { 254, 254, 4, 4 },
-	};
 	GLuint image;
-	int index;
 
 	(void)width;
 	(void)height;
@@ -2398,22 +2402,23 @@ void vr_resolve_scope(unsigned int texture, int width, int height, int x0, int y
 	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 	glBlitFramebuffer(x0, y0, x1, y1, 0, vr.rows_from_top ? 0 : VR_SCOPE_SIZE, VR_SCOPE_SIZE,
 		vr.rows_from_top ? VR_SCOPE_SIZE : 0, GL_COLOR_BUFFER_BIT, GL_LINEAR);
-	glEnable(GL_SCISSOR_TEST);
-	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-	for (index = 0; index < (int)VR_COUNT(reticle); index++)
-	{
-		glScissor(reticle[index].x, reticle[index].y, reticle[index].width, reticle[index].height);
-		glClear(GL_COLOR_BUFFER_BIT);
-	}
-	glDisable(GL_SCISSOR_TEST);
-	if (vr.dumping)
-		vr_dump_texture(image, VR_SCOPE_SIZE, VR_SCOPE_SIZE, "scope", 0, 0);
 	glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
 	glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
 	glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-	vr_release(&vr.scope);
+	vr.scope_held = 1;
 	vr.scope_drawn = 1;
+}
+
+/* the scope's image is finished: given to the runtime */
+static void vr_scope_finish(void)
+{
+	if (!vr.scope_held)
+		return;
+	if (vr.dumping)
+		vr_dump_texture(vr.scope.images[vr.scope.index], VR_SCOPE_SIZE, VR_SCOPE_SIZE, "scope", 0, 0);
+	vr_release(&vr.scope);
+	vr.scope_held = 0;
 }
 
 void vr_blink(float seconds)
@@ -2602,6 +2607,29 @@ void vr_resolve_reticle(int reticle, unsigned int texture, int width, int height
 	vr.crosshair_drawn[reticle] = 1;
 }
 
+static void vr_draw_picture_blended(GLuint source, GLuint destination, GLsizei width, GLsizei height, int blended);
+
+void vr_resolve_scope_view(unsigned int texture, int width, int height, int x0, int y0, int x1, int y1)
+{
+	if (!vr.scope_held || !vr.scope_view || x1 <= x0 || y1 <= y0 || x0 < 0 || y0 < 0 || x1 > width || y1 > height)
+		return;
+	/* (the rows as they are: vr_draw_picture takes the back buffer's) */
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, vr.framebuffers[0]);
+	glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, 0);
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, vr.framebuffers[1]);
+	glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, vr.scope_view, 0);
+	glDisable(GL_SCISSOR_TEST);
+	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+	glBlitFramebuffer(x0, y0, x1, y1, 0, 0, VR_SCOPE_SIZE, VR_SCOPE_SIZE, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+	glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
+	glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+	vr_draw_picture_blended(vr.scope_view, vr.scope.images[vr.scope.index], VR_SCOPE_SIZE, VR_SCOPE_SIZE, 1);
+	glDisable(GL_BLEND);
+	vr_scope_finish();
+}
+
 void vr_scope_place(const struct vr_pose *pose, float width)
 {
 	vr.scope_pose = *pose;
@@ -2611,13 +2639,23 @@ void vr_scope_place(const struct vr_pose *pose, float width)
 /* a picture of the HUD's (the panel's, the reticle's) over a clear ground:
 `source`, rows from the top as the back buffer's, into the runtime's image
 `destination`, width by height */
-static void vr_draw_picture(GLuint source, GLuint destination, GLsizei width, GLsizei height)
+static void vr_draw_picture_blended(GLuint source, GLuint destination, GLsizei width, GLsizei height, int blended)
 {
 	glBindFramebuffer(GL_FRAMEBUFFER, vr.framebuffers[1]);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, destination, 0);
 	glViewport(0, 0, width, height);
 	glDisable(GL_SCISSOR_TEST);
-	glDisable(GL_BLEND);
+	if (blended)
+	{
+		/* (its colours are already as much of themselves as its alpha says) */
+		glEnable(GL_BLEND);
+		glBlendEquation(GL_FUNC_ADD);
+		glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+	}
+	else
+	{
+		glDisable(GL_BLEND);
+	}
 	glDisable(GL_DEPTH_TEST);
 	glDisable(GL_STENCIL_TEST);
 	glDisable(GL_CULL_FACE);
@@ -2632,6 +2670,11 @@ static void vr_draw_picture(GLuint source, GLuint destination, GLsizei width, GL
 	glDrawArrays(GL_TRIANGLES, 0, 3);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+static void vr_draw_picture(GLuint source, GLuint destination, GLsizei width, GLsizei height)
+{
+	vr_draw_picture_blended(source, destination, width, height, 0);
 }
 
 /* the mirror (the left eye) over the whole window, cut to its shape */
@@ -2885,7 +2928,9 @@ int vr_present(unsigned int texture, int width, int height)
 		if (stereo && vr.frame_state.shouldRender && vr_reticle_layer(reticle, &reticles[reticle]))
 			layers[layer_count++] = (const XrCompositionLayerBaseHeader *)&reticles[reticle];
 	}
-	/* the scope's picture, over the HUD: it is nearer */
+	/* the scope's picture, over the HUD: it is nearer (no zoomed view drawn
+	over it, a HUD hidden by a script: as it is) */
+	vr_scope_finish();
 	if (stereo && vr.scope_drawn && vr.frame_state.shouldRender)
 	{
 		memset(&scope, 0, sizeof(scope));

@@ -321,6 +321,8 @@ struct vr_input
 	int menus;
 	/* the body walks after the head this frame (room scale) */
 	int room_walking;
+	/* the off stick is pushed (past VR_ROOM_STILL) on foot */
+	int stick_moving;
 	/* the move hand's clicks that switched a seat's view (the settings'
 	seat_switch), for vr_view.c to take */
 	unsigned long view_switches;
@@ -487,6 +489,8 @@ taken */
 float vr_input_turn(void);
 /* vr_view.c: the body walked after the head this frame (room scale) */
 int vr_input_room_walking(void);
+/* the off stick moves the unit, on foot */
+int vr_input_stick_moving(void);
 /* vr_view.c: the clicks that switched a seat's view, how many */
 unsigned long vr_input_view_switches(void);
 /* vr_view.c: the head's yaw from the aiming hand's (radians to the left), 0

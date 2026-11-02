@@ -522,10 +522,15 @@ _vr_help = "The headset: aiming, the weapon's hand, turning,\nthe room and vehic
 _vr_body_category = ("HANDS AND BODY:", "gamepad_setup/vr_body",
                      "The height, the arms, the aim's angle, gestures,\ngrenades, comfort and cinematics.", "vr")
 SCREENS["gamepad_setup/vr"] = {
-    "screen": "vr_settings_screen", "header": SCREENS["gamepad_setup"]["header"], "spacing": 30,
+    "screen": "vr_settings_screen", "header": SCREENS["gamepad_setup"]["header"], "spacing": 27,
+    # (every row above the help, its two lines lower)
+    "help_top": 372, "help_height": 40,
     "rows": [
         ("VR HEADSET:", "display.vr", ON_OFF,
          "Play in an OpenXR headset (Oculus, SteamVR,\nMonado). From the next start.", None),
+        ("RESOLUTION:", "vr.resolution_scale",
+         [("75%", "0.75"), ("100%", "1.0"), ("125%", "1.25"), ("150%", "1.5"), ("175%", "1.75"), ("200%", "2.0")],
+         "The eyes' pixels each way, against what the\nheadset's runtime asks. From the next start.", "vr"),
         ("AIM WITH:", "vr.aim", [("HAND", "hand"), ("HEAD", "head")],
          "On foot: the controller, the weapon held in it,\nor the head.", "vr"),
         ("WEAPON HAND:", "vr.left_handed", [("RIGHT", "false"), ("LEFT", "true")],

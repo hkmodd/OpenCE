@@ -418,6 +418,8 @@ static boolean weapon_hud_state_index_valid(
 /* port: the crosshairs drawn are aimed (red, TRUE) or not, whatever the
 player's aim's state (hud_weapon_port_draw_crosshairs; NONE: as that is) */
 static short crosshairs_port_aimed = NONE;
+/* port: only the zoomed view's elements are drawn (hud_weapon_port_draw_zoomed) */
+static boolean render_weapon_hud_port_zoomed_only = FALSE;
 
 static struct weapon_hud_globals *weapon_hud_globals = NULL;
 /* port: a crosshair's bad sequence or bitmap was reported (once) */
@@ -1784,7 +1786,7 @@ static void render_weapon_hud(
 
 			/* port: in a headset's scope the zoomed view's elements are not
 			the HUD's (port/linux/game/vr_view.c) */
-			if (zoomed_layout && vr_render_zoom_hidden())
+			if ((zoomed_layout && vr_render_zoom_hidden()) || (!zoomed_layout && render_weapon_hud_port_zoomed_only))
 				continue;
 			if (zoomed_layout)
 				hud_zoomed_layout_begin(&window_bounds);
@@ -1819,7 +1821,7 @@ static void render_weapon_hud(
 
 			/* port: in a headset's scope the zoomed view's elements are not
 			the HUD's (port/linux/game/vr_view.c) */
-			if (zoomed_layout && vr_render_zoom_hidden())
+			if ((zoomed_layout && vr_render_zoom_hidden()) || (!zoomed_layout && render_weapon_hud_port_zoomed_only))
 				continue;
 			if (zoomed_layout)
 				hud_zoomed_layout_begin(&window_bounds);
@@ -1861,7 +1863,7 @@ static void render_weapon_hud(
 
 			/* port: in a headset's scope the zoomed view's elements are not
 			the HUD's (port/linux/game/vr_view.c) */
-			if (zoomed_layout && vr_render_zoom_hidden())
+			if ((zoomed_layout && vr_render_zoom_hidden()) || (!zoomed_layout && render_weapon_hud_port_zoomed_only))
 				continue;
 			if (TEST_FLAG(
 				element->weapon_flags,
@@ -1923,7 +1925,7 @@ static void render_weapon_hud(
 	}
 
 	for (element_index = 0;
-		element_index < definition->overlays.count;
+		element_index < definition->overlays.count && !render_weapon_hud_port_zoomed_only;
 		element_index++)
 	{
 		struct weapon_hud_overlays_element *element = TAG_BLOCK_GET_ELEMENT(
@@ -2213,6 +2215,48 @@ void hud_weapon_port_draw_crosshairs(
 			hud_index,
 			&weapon_state);
 		crosshairs_port_aimed = NONE;
+	}
+}
+
+/* port: the weapon in hand's zoomed view alone: its crosshairs at their zoom,
+and the elements that follow the zoom, for a headset's scope
+(port/linux/game/vr_view.c) */
+void hud_weapon_port_draw_zoomed(
+	struct player_datum *player)
+{
+	long weapon_index = unit_inventory_get_weapon(
+		player->unit_index,
+		unit_get(player->unit_index)->unit.current_weapon_index);
+	struct weapon_definition *definition;
+	struct weapon_interface_state weapon_state;
+	long hud_index;
+
+	if (weapon_index == NONE)
+	{
+		return;
+	}
+	definition = weapon_definition_get(weapon_get(weapon_index)->definition_index);
+	hud_index = definition->weapon.interface_definition.hud_interface.index;
+	if (hud_index != NONE)
+	{
+		weapon_build_weapon_interface_state(
+			weapon_index,
+			&weapon_state);
+		crosshairs_draw(
+			player,
+			weapon_index,
+			hud_index,
+			&weapon_state);
+		render_weapon_hud_port_zoomed_only = TRUE;
+		render_weapon_hud(
+			hud_index,
+			player->local_player_index,
+			definition,
+			&weapon_state,
+			NULL,
+			NULL,
+			NULL);
+		render_weapon_hud_port_zoomed_only = FALSE;
 	}
 }
 

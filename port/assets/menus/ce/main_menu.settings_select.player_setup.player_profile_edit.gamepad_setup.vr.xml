@@ -9,19 +9,20 @@
 	</widget>
 	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/header_profile_controller_setting" controller="1" left="35" top="11" width="605" height="59" bitmap="main_menu/settings_select/player_setup/player_profile_edit/controller_edit/header_profile_controller_setting">
 	</widget>
-	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/help" type="text" controller="1" left="68" top="350" width="482" height="60" string_list="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/help_strings" font="ui\large_ui" color="#FFFFFFFF">
+	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/help" type="text" controller="1" left="68" top="372" width="482" height="40" string_list="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/help_strings" font="ui\large_ui" color="#FFFFFFFF">
 	</widget>
 	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/options_menu" type="column_list" width="640" height="480" flags="pass_unhandled_to_focused_child up_down_tabs_children" description="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/help">
 		<data input="port settings help"/>
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/op_vr" x="54" y="73"/>
-		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/op_aim" x="54" y="103" platform="vr"/>
-		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/op_left_handed" x="54" y="133" platform="vr"/>
-		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/op_snap_turn" x="54" y="163" platform="vr"/>
-		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/op_roomscale" x="54" y="193" platform="vr"/>
-		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/op_vehicle_view" x="54" y="223" platform="vr"/>
-		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/op_vehicle_aim" x="54" y="253" platform="vr"/>
-		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/op_vehicle_steering" x="54" y="283" platform="vr"/>
-		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/op_vr_rules" x="54" y="313" platform="vr"/>
+		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/op_resolution_scale" x="54" y="100" platform="vr"/>
+		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/op_aim" x="54" y="127" platform="vr"/>
+		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/op_left_handed" x="54" y="154" platform="vr"/>
+		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/op_snap_turn" x="54" y="181" platform="vr"/>
+		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/op_roomscale" x="54" y="208" platform="vr"/>
+		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/op_vehicle_view" x="54" y="235" platform="vr"/>
+		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/op_vehicle_aim" x="54" y="262" platform="vr"/>
+		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/op_vehicle_steering" x="54" y="289" platform="vr"/>
+		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/op_vr_rules" x="54" y="316" platform="vr"/>
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/op_vr_body" x="54" y="343" platform="vr"/>
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/button_bar" y="414"/>
 	</widget>
@@ -39,11 +40,20 @@
 	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/vr_spinner" type="spinner" left="3" top="2" width="147" height="20" flags="pass_unhandled_to_focused_child left_right_tabs_items" strings="ON|OFF" setting="display.vr" values="true|false" font="ui\large_ui" color="#FF2896FF" align="center" text_y="1" header_bitmap="bitmaps/arrow_sm_left" footer_bitmap="bitmaps/arrow_sm_right" header_bounds="7 -6 19 0" footer_bounds="7 150 19 156">
 		<on event="created" run="port setting load"/>
 	</widget>
+	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/op_resolution_scale" width="512" height="28" flags="pass_unhandled_to_focused_child" bitmap="bitmaps/option_bkds" color="#FF2896FF" platform="vr">
+		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/resolution_scale_label"/>
+		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/resolution_scale_spinner" x="320" y="1"/>
+	</widget>
+	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/resolution_scale_label" type="text" controller="1" width="300" height="22" string_list="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/labels" string_index="1" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4">
+	</widget>
+	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/resolution_scale_spinner" type="spinner" left="3" top="2" width="147" height="20" flags="pass_unhandled_to_focused_child left_right_tabs_items" strings="75%|100%|125%|150%|175%|200%" setting="vr.resolution_scale" values="0.75|1.0|1.25|1.5|1.75|2.0" font="ui\large_ui" color="#FF2896FF" align="center" text_y="1" header_bitmap="bitmaps/arrow_sm_left" footer_bitmap="bitmaps/arrow_sm_right" header_bounds="7 -6 19 0" footer_bounds="7 150 19 156">
+		<on event="created" run="port setting load"/>
+	</widget>
 	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/op_aim" width="512" height="28" flags="pass_unhandled_to_focused_child" bitmap="bitmaps/option_bkds" color="#FF2896FF" platform="vr">
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/aim_label"/>
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/aim_spinner" x="320" y="1"/>
 	</widget>
-	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/aim_label" type="text" controller="1" width="300" height="22" string_list="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/labels" string_index="1" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4">
+	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/aim_label" type="text" controller="1" width="300" height="22" string_list="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/labels" string_index="2" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4">
 	</widget>
 	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/aim_spinner" type="spinner" left="3" top="2" width="147" height="20" flags="pass_unhandled_to_focused_child left_right_tabs_items" strings="HAND|HEAD" setting="vr.aim" values="hand|head" font="ui\large_ui" color="#FF2896FF" align="center" text_y="1" header_bitmap="bitmaps/arrow_sm_left" footer_bitmap="bitmaps/arrow_sm_right" header_bounds="7 -6 19 0" footer_bounds="7 150 19 156">
 		<on event="created" run="port setting load"/>
@@ -52,7 +62,7 @@
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/left_handed_label"/>
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/left_handed_spinner" x="320" y="1"/>
 	</widget>
-	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/left_handed_label" type="text" controller="1" width="300" height="22" string_list="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/labels" string_index="2" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4">
+	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/left_handed_label" type="text" controller="1" width="300" height="22" string_list="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/labels" string_index="3" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4">
 	</widget>
 	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/left_handed_spinner" type="spinner" left="3" top="2" width="147" height="20" flags="pass_unhandled_to_focused_child left_right_tabs_items" strings="RIGHT|LEFT" setting="vr.left_handed" values="false|true" font="ui\large_ui" color="#FF2896FF" align="center" text_y="1" header_bitmap="bitmaps/arrow_sm_left" footer_bitmap="bitmaps/arrow_sm_right" header_bounds="7 -6 19 0" footer_bounds="7 150 19 156">
 		<on event="created" run="port setting load"/>
@@ -61,7 +71,7 @@
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/snap_turn_label"/>
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/snap_turn_spinner" x="320" y="1"/>
 	</widget>
-	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/snap_turn_label" type="text" controller="1" width="300" height="22" string_list="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/labels" string_index="3" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4">
+	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/snap_turn_label" type="text" controller="1" width="300" height="22" string_list="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/labels" string_index="4" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4">
 	</widget>
 	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/snap_turn_spinner" type="spinner" left="3" top="2" width="147" height="20" flags="pass_unhandled_to_focused_child left_right_tabs_items" strings="SMOOTH|15|30|45|90" setting="vr.snap_turn" values="0|15|30|45|90" font="ui\large_ui" color="#FF2896FF" align="center" text_y="1" header_bitmap="bitmaps/arrow_sm_left" footer_bitmap="bitmaps/arrow_sm_right" header_bounds="7 -6 19 0" footer_bounds="7 150 19 156">
 		<on event="created" run="port setting load"/>
@@ -70,7 +80,7 @@
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/roomscale_label"/>
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/roomscale_spinner" x="320" y="1"/>
 	</widget>
-	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/roomscale_label" type="text" controller="1" width="300" height="22" string_list="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/labels" string_index="4" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4">
+	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/roomscale_label" type="text" controller="1" width="300" height="22" string_list="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/labels" string_index="5" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4">
 	</widget>
 	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/roomscale_spinner" type="spinner" left="3" top="2" width="147" height="20" flags="pass_unhandled_to_focused_child left_right_tabs_items" strings="ON|OFF" setting="vr.roomscale" values="true|false" font="ui\large_ui" color="#FF2896FF" align="center" text_y="1" header_bitmap="bitmaps/arrow_sm_left" footer_bitmap="bitmaps/arrow_sm_right" header_bounds="7 -6 19 0" footer_bounds="7 150 19 156">
 		<on event="created" run="port setting load"/>
@@ -79,7 +89,7 @@
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/vehicle_view_label"/>
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/vehicle_view_spinner" x="320" y="1"/>
 	</widget>
-	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/vehicle_view_label" type="text" controller="1" width="300" height="22" string_list="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/labels" string_index="5" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4">
+	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/vehicle_view_label" type="text" controller="1" width="300" height="22" string_list="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/labels" string_index="6" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4">
 	</widget>
 	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/vehicle_view_spinner" type="spinner" left="3" top="2" width="147" height="20" flags="pass_unhandled_to_focused_child left_right_tabs_items" strings="SEAT|CHASE" setting="vr.vehicle_view" values="first_person|chase" font="ui\large_ui" color="#FF2896FF" align="center" text_y="1" header_bitmap="bitmaps/arrow_sm_left" footer_bitmap="bitmaps/arrow_sm_right" header_bounds="7 -6 19 0" footer_bounds="7 150 19 156">
 		<on event="created" run="port setting load"/>
@@ -88,7 +98,7 @@
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/vehicle_aim_label"/>
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/vehicle_aim_spinner" x="320" y="1"/>
 	</widget>
-	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/vehicle_aim_label" type="text" controller="1" width="300" height="22" string_list="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/labels" string_index="6" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4">
+	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/vehicle_aim_label" type="text" controller="1" width="300" height="22" string_list="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/labels" string_index="7" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4">
 	</widget>
 	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/vehicle_aim_spinner" type="spinner" left="3" top="2" width="147" height="20" flags="pass_unhandled_to_focused_child left_right_tabs_items" strings="HAND|STICK|HEAD" setting="vr.vehicle_aim" values="hand|stick|head" font="ui\large_ui" color="#FF2896FF" align="center" text_y="1" header_bitmap="bitmaps/arrow_sm_left" footer_bitmap="bitmaps/arrow_sm_right" header_bounds="7 -6 19 0" footer_bounds="7 150 19 156">
 		<on event="created" run="port setting load"/>
@@ -97,7 +107,7 @@
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/vehicle_steering_label"/>
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/vehicle_steering_spinner" x="320" y="1"/>
 	</widget>
-	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/vehicle_steering_label" type="text" controller="1" width="300" height="22" string_list="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/labels" string_index="7" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4">
+	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/vehicle_steering_label" type="text" controller="1" width="300" height="22" string_list="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/labels" string_index="8" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4">
 	</widget>
 	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/vehicle_steering_spinner" type="spinner" left="3" top="2" width="147" height="20" flags="pass_unhandled_to_focused_child left_right_tabs_items" strings="STICK|AIM" setting="vr.vehicle_steering" values="drive|aim" font="ui\large_ui" color="#FF2896FF" align="center" text_y="1" header_bitmap="bitmaps/arrow_sm_left" footer_bitmap="bitmaps/arrow_sm_right" header_bounds="7 -6 19 0" footer_bounds="7 150 19 156">
 		<on event="created" run="port setting load"/>
@@ -106,7 +116,7 @@
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/vr_rules_label"/>
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/vr_rules_spinner" x="320" y="1"/>
 	</widget>
-	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/vr_rules_label" type="text" controller="1" width="300" height="22" string_list="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/labels" string_index="8" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4">
+	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/vr_rules_label" type="text" controller="1" width="300" height="22" string_list="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/labels" string_index="9" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4">
 	</widget>
 	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/vr_rules_spinner" type="spinner" left="3" top="2" width="147" height="20" flags="pass_unhandled_to_focused_child left_right_tabs_items" strings="ON|OFF" setting="network.vr_rules" values="true|false" font="ui\large_ui" color="#FF2896FF" align="center" text_y="1" header_bitmap="bitmaps/arrow_sm_left" footer_bitmap="bitmaps/arrow_sm_right" header_bounds="7 -6 19 0" footer_bounds="7 150 19 156">
 		<on event="created" run="port setting load"/>
@@ -117,7 +127,7 @@
 		<on event="left_mouse" run="mouse emit accept event"/>
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/vr_body_label"/>
 	</widget>
-	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/vr_body_label" type="text" controller="1" width="512" height="22" string_list="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/labels" string_index="9" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4">
+	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/vr_body_label" type="text" controller="1" width="512" height="22" string_list="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/labels" string_index="10" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4">
 	</widget>
 	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/button_defaults" type="text" width="128" height="24" bitmap="bitmaps/text_button_background" string_list="strings/common_button_captions" string_index="3" font="ui\small_ui" color="#FFFFFFFF" align="center" text_y="2">
 		<on event="a" run="port settings defaults"/>
@@ -131,6 +141,7 @@
 	</widget>
 	<strings name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/labels">
 		<string text="VR HEADSET:"/>
+		<string text="RESOLUTION:"/>
 		<string text="AIM WITH:"/>
 		<string text="WEAPON HAND:"/>
 		<string text="TURNING:"/>
@@ -144,6 +155,7 @@
 	<strings name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/help_strings">
 		<string text=""/>
 		<string text="Play in an OpenXR headset (Oculus, SteamVR,\nMonado). From the next start."/>
+		<string text="The eyes' pixels each way, against what the\nheadset's runtime asks. From the next start."/>
 		<string text="On foot: the controller, the weapon held in it,\nor the head."/>
 		<string text="The hand the weapon starts in, the other stick\nmoves. Pass it hand to hand: the buttons stay."/>
 		<string text="The aiming stick turns by snaps of so many\ndegrees, or smoothly."/>

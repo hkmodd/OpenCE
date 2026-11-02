@@ -2445,7 +2445,8 @@ boolean weapon_get_projectile_ray(long weapon_index, short trigger_index, real_p
 		}
 		player_aim_projectile_preview(player_index, origin, forward);
 	}
-	if (TEST_FLAG(trigger->flags, _weapon_trigger_uses_weapon_origin_bit))
+	/* port: (not from a headset's hand, at the weapon already) */
+	if (TEST_FLAG(trigger->flags, _weapon_trigger_uses_weapon_origin_bit) && !vr_render_shot_from_hand(owner_index))
 		*origin = marker.matrix.position;
 	return normalize3d(forward) != 0.0f;
 }
@@ -2570,7 +2571,9 @@ static void trigger_create_projectiles(
 			}
 		}
 
-		if (TEST_FLAG(trigger_definition->flags, _weapon_trigger_uses_weapon_origin_bit))
+		/* port: (not from a headset's hand, at the weapon already) */
+		if (TEST_FLAG(trigger_definition->flags, _weapon_trigger_uses_weapon_origin_bit) &&
+			!vr_render_shot_from_hand(owner_object_index))
 		{
 			origin= markers[marker_index].matrix.position;
 		}

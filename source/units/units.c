@@ -5037,8 +5037,8 @@ void unit_adjust_projectile_ray(
 	}
 
 	/* port: in the headset, the aiming hand's shot starts at the weapon in
-	it (no other machine in the game: port/linux/game/vr_view.c) */
-	if (vr_render_shot_origin(unit_index, origin->n))
+	it and goes along its barrel (port/linux/game/vr_view.c) */
+	if (vr_render_shot_ray(unit_index, origin->n, direction->n))
 	{
 	}
 	else if (adjust_origin)

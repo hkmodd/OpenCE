@@ -128,10 +128,18 @@ pushed less than this is still */
 #define VR_ROOM_STOP 0.03f
 #define VR_ROOM_FULL 0.50f
 #define VR_ROOM_STILL 0.15f
+/* the game's stick reads nothing up to this along each axis
+(input_xbox.c's GAMEPAD_STICK_DEAD_RANGE), and from it on, from nothing */
+#define VR_STICK_DEAD_RANGE 9000
 /* the off grip pressed this near the main hand (their grips, metres) takes
 the weapon there; it is handed over if, within VR_HANDOVER_SECONDS, the
 hands are VR_HANDOVER_APART apart, the main hand having moved more */
 #define VR_SWAP_REACH 0.15f
+/* a weapon held as a pistol: the other hand's grip this near the main hand's
+holds it too (two controllers held as two hands on a pistol, their rings
+touching, are this far apart at most), and keeps it this far (metres) */
+#define VR_SUPPORT_REACH 0.30f
+#define VR_SUPPORT_KEEP 0.38f
 #define VR_HANDOVER_APART 0.25f
 #define VR_HANDOVER_SECONDS 1.5f
 /* a grenade's throw: the hand's speed (metres a second) as its button is
@@ -355,6 +363,15 @@ static int vr_room_walk(struct vr_input const *input, struct vr_frame const *fra
 	return 1;
 }
 
+/* a walk's push as the game's stick reads it: past its dead range, or a step
+of less than about 17 cm would not move the unit at all */
+static short vr_thumb_past_dead_range(short thumb)
+{
+	long past = (long)thumb * (32767L - VR_STICK_DEAD_RANGE) / 32767L;
+
+	return (short)(thumb > 0 ? past + VR_STICK_DEAD_RANGE : thumb < 0 ? past - VR_STICK_DEAD_RANGE : 0);
+}
+
 /* the hand punched forward this frame (its last position and whether it
 is known: `position`, `valid`) */
 static int vr_punched(struct vr_input *input, struct vr_frame const *frame, struct vr_hand const *main_hand,
@@ -524,6 +541,8 @@ static void vr_swap_hands(struct vr_input *input)
 
 static void vr_grab(struct vr_input *input, int hand);
 static void vr_pull_arm(struct vr_input *input, struct vr_frame const *frame, int hand);
+/* the other hand supported a pistol at the last frame (vr_input_update) */
+static int vr_support_kept;
 static int vr_two_handed_place(struct vr_frame const *frame, int left_handed, int pistol_grip, float pitch,
 	float orientation[4]);
 
@@ -796,6 +815,7 @@ void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struc
 	unsigned char bindings[VR_ROLE_COUNT][VR_CONTROL_COUNT], gesture_bindings[VR_ROLE_COUNT][VR_CONTROL_COUNT];
 	unsigned char hand_bindings[VR_HAND_COUNT][VR_CONTROL_COUNT], hand_gestures[VR_HAND_COUNT][VR_CONTROL_COUNT];
 	int role, control, throw_gesture;
+	float kept_orientation[4];
 
 	/* (the setting's hand, from when it changes; until then the hands may
 	have swapped) */
@@ -814,6 +834,9 @@ void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struc
 		input->holding = settings->physical && settings->gestures;
 		input->gripped = input->supporting = input->off_at_weapon = input->off_holding = input->off_gripped = 0;
 	}
+	input->stick_moving = 0;
+	vr_support_kept = settings->pistol_grip && vr_two_handed(frame, input->left_handed, settings->pistol_grip,
+		settings->aim_pitch, kept_orientation) == VR_HELD_SUPPORT;
 	vr_hand_velocities(input, frame, menus ? 0.0f : seconds);
 	if (input->physical && !menus)
 		vr_physical_hands(input, frame, settings);
@@ -1043,8 +1066,8 @@ void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struc
 			move[1] = frame->hand[move_index].stick[1];
 			/* (room scale: with the off stick still, the body walks after the
 			head) */
-			input->room_walking = settings->room &&
-				move[0] * move[0] + move[1] * move[1] < VR_ROOM_STILL * VR_ROOM_STILL &&
+			input->stick_moving = move[0] * move[0] + move[1] * move[1] >= VR_ROOM_STILL * VR_ROOM_STILL;
+			input->room_walking = settings->room && !input->stick_moving &&
 				vr_room_walk(input, frame, settings->room_offset, move);
 			/* (turned to the left by move_turn: ahead of the head; driving,
 			the throttle alone) */
@@ -1052,6 +1075,11 @@ void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struc
 				move[0] = 0.0f;
 			pad->thumb[0] = vr_thumb(move[0] * cosine - move[1] * sine);
 			pad->thumb[1] = vr_thumb(move[0] * sine + move[1] * cosine);
+			if (input->room_walking)
+			{
+				pad->thumb[0] = vr_thumb_past_dead_range(pad->thumb[0]);
+				pad->thumb[1] = vr_thumb_past_dead_range(pad->thumb[1]);
+			}
 		}
 		if (settings->seat_stick)
 		{
@@ -1236,18 +1264,21 @@ static int vr_two_handed_place(struct vr_frame const *frame, int left_handed, in
 	static float const local_forward[3] = { 0.0f, 0.0f, -1.0f };
 	struct vr_hand const *main_hand = &frame->hand[left_handed ? VR_HAND_LEFT : VR_HAND_RIGHT];
 	struct vr_hand const *off_hand = &frame->hand[left_handed ? VR_HAND_RIGHT : VR_HAND_LEFT];
-	float z[3], x[3], y[3], up[3], forward[3], pointing[4], length;
+	float z[3], x[3], y[3], up[3], forward[3], pointing[4], length, support;
+	int kept = pistol_grip && vr_support_kept;
 	int axis;
 
+	/* (a pistol held up to the eye stays held, the other hand by the head) */
 	if (!main_hand->tracked || !off_hand->tracked ||
-		vr_distance(off_hand->grip.position, frame->head.position) < VR_HEAD_REACH)
+		(!kept && vr_distance(off_hand->grip.position, frame->head.position) < VR_HEAD_REACH))
 	{
 		return VR_HELD_ONE;
 	}
 	vr_hand_pointing(main_hand, pitch, pointing);
 	/* (at the main hand the off supports it: it points as the main does) */
 	length = vr_distance(main_hand->grip.position, off_hand->grip.position);
-	if (length < VR_SWAP_REACH)
+	support = !pistol_grip ? VR_SWAP_REACH : kept ? VR_SUPPORT_KEEP : VR_SUPPORT_REACH;
+	if (length < support)
 	{
 		memcpy(orientation, pointing, sizeof(pointing));
 		return VR_HELD_SUPPORT;
@@ -1408,7 +1439,19 @@ int vr_input_gamepad(struct vr_pad *pad, int menus)
 	time a button was held) */
 	if (!vr_frame_seconds(&elapsed))
 		elapsed = frame->display_period > 0.0f ? frame->display_period : 1.0f / 90.0f;
-	vr_input_update(&vr_input_state, frame, &settings, menus != 0, elapsed < 0.1 ? (float)elapsed : 0.1f, pad);	/* (the hands swapped the weapon: felt in both) */
+	{
+		int supported = vr_support_kept;
+
+		vr_input_update(&vr_input_state, frame, &settings, menus != 0, elapsed < 0.1 ? (float)elapsed : 0.1f, pad);
+		/* (both hands take hold of a pistol: felt in both, and told) */
+		if (vr_support_kept && !supported)
+		{
+			vr_haptic(VR_HAND_LEFT, 0.25f, 0.03f);
+			vr_haptic(VR_HAND_RIGHT, 0.25f, 0.03f);
+			platform_log("vr: both hands on the pistol, %.0f cm apart", (double)(100.0f *
+				vr_distance(frame->hand[VR_HAND_LEFT].grip.position, frame->hand[VR_HAND_RIGHT].grip.position)));
+		}
+	}	/* (the hands swapped the weapon: felt in both) */
 	if (vr_input_state.swaps != vr_input_swaps)
 	{
 		vr_input_swaps = vr_input_state.swaps;
@@ -1569,6 +1612,11 @@ void vr_input_weapon_came(void)
 void vr_input_aim_turn(float radians)
 {
 	vr_input_move_turn = radians;
+}
+
+int vr_input_stick_moving(void)
+{
+	return vr_input_state.stick_moving;
 }
 
 int vr_input_room_walking(void)

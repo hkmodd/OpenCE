@@ -88,7 +88,11 @@ What sets the size the world is seen at, each measured or derived:
   from the feet (0.7 to 1.3 times) to put it there: at any eye height
   (`vr.eye_height`, or the head lowered) the eyes are never inside the
   chest and the feet stay on the ground. No lid over the waist hides the
-  floor.
+  floor. A stand's stance has a rifle's, the hips and the shoulders about 30
+  degrees to the right of where the unit faces, its left foot ahead: the
+  pose is turned by as much as the two lines between the thighs and between
+  the collarbones are from square (`first_person_legs_stance`), so that the
+  body looked down at faces ahead.
 
 ## A frame
 
@@ -114,9 +118,15 @@ What sets the size the world is seen at, each measured or derived:
   head's axes, from 10 cm until 3 cm), and the game's camera's moves while
   it walks and coasts carry the body along, so the room stays still around
   the head: the unit's own physics keeps it out of walls and the network
-  sees only its input. The head reaches 60 cm from the body on foot (the
-  unit held back, or the stick moving it), 35 cm in a seat (a lean), and
-  anywhere in the menus, cinematics and while dead.
+  sees only its input. The game's stick reads nothing up to 27% along each
+  axis, so that push starts past that, as slowly as the distance asks. The
+  stick's own moves are no such moves: while it is pushed, and for 0.3 s
+  after, as the unit comes to rest (`VR_ROOM_SETTLE`), the unit does not walk
+  after the head and the camera carries no body along. (A push just after a
+  step used to carry it, a metre's worth, and at the release the unit walked
+  that back.) The head reaches 60 cm from the body on foot (the unit held
+  back, or the stick moving it), 35 cm in a seat (a lean), and anywhere in the
+  menus, cinematics and while dead.
 - The comfort vignette (`vr.vignette`, `vr_comfort`): each frame the
   world's place of LOCAL's origin (the head's place less the head's own
   offset in the room) and the heading are compared with the last frame's:
@@ -177,8 +187,8 @@ What sets the size the world is seen at, each measured or derived:
   apart, the main hand having moved more, the weapon changes hands until
   `vr.left_handed` is changed (a hand-over, after astromaddie's gesture;
   the buttons stay);
-  hands that stay together hold it with both (a pistol's grip), and the
-  off hand pulling away lets go. With `vr.hands` `"physical"` (and the
+  hands that stay together hold it with both (a pistol's grip: below), and
+  the off hand pulling away lets go. With `vr.hands` `"physical"` (and the
   gestures) the hands hold as hands do (`vr_physical_hands`): the main hand
   holds the weapon while its grip is held (a weapon that comes otherwise, at
   a new life or a switch, until the grip is pressed and let go; with
@@ -225,7 +235,12 @@ What sets the size the world is seen at, each measured or derived:
   controller), turned up by `vr.aim_pitch`; with the off hand's
   grip ahead of the main hand on a weapon not held as a pistol (by its
   label: "pistol", "plasma pistol", "needler"), from the main hand to the
-  off; with it at the main hand (supporting it), from both
+  off. A weapon held as a pistol has no such place ahead: the off grip
+  within 30 cm of the main hand's holds it, on any side of it (two
+  controllers held as two hands on a pistol, rings touching, are 15 to 25 cm
+  apart, and a hand wrapped round the other may reach past it), kept to 38
+  cm and however near the head, with a pulse in both hands; a rifle is
+  supported within 15 cm. Supporting it, it aims from both
   (`vr_two_hands_steady`): the middle of the main hand's pointing and the
   other's, turned as it was against the main hand's as it took hold, then
   smoothed against the hands' tremor (`vr_steady`, a "1 euro" filter: 1.5
@@ -237,10 +252,16 @@ What sets the size the world is seen at, each measured or derived:
   no walking bob, no sway as the player moves or turns (the hand turns the
   player) and no idle posing; firing, reloading, throwing and meleeing keep
   their animations. Once posed, while it is idle, its model's muzzle (the
-  "primary trigger" marker) is read in the camera's axes, by weapon type
-  and eased over frames: the camera is turned so that the barrel lies along
-  the aim (the stock models' already do), and the muzzle is where the shot
-  starts. Until then a fixed offset from the grip stands in.
+  "primary trigger" marker, up to 2 m from the camera: a sniper rifle's is
+  1.6 m) and the weapon's hand's wrist are read in the camera's axes, by
+  weapon type and eased over frames: the camera is turned so that the barrel
+  lies along the aim (the stock models' already do), the muzzle is where the
+  shot starts, and the camera is placed so that the barrel is over the
+  controller's grip and the wrist as far from that grip, up and back, in
+  every weapon (`vr_weapon_wrist`, the assault rifle's). Each model has the
+  hand elsewhere: a pistol's is 24 cm further ahead than a rifle's, and held
+  as a rifle it lay ahead of the player's hand, the other hand with it. Until
+  then a fixed offset from the grip stands in.
 - In the left hand the weapon is not mirrored: the left controller holds
   it as the right holds it, so it is the same weapon in either hand, and
   the camera, the muzzle and the scope keep their offsets. The arms are
@@ -250,21 +271,27 @@ What sets the size the world is seen at, each measured or derived:
   the right arm that holds it is a left arm; while the hands' model is
   drawn its triangles' winding is turned over (`halo_vr_mirror_winding`).
   The empty hands are mirrored the same way.
-- With no other machine in the game (whose players would see the shot from
-  the facing alone), `unit_adjust_projectile_ray` starts the shot at that
-  muzzle, unless a wall is between it and the eye, and `aim_assist.c` aims
-  it from there along the aim, not turned to where the eye's ray meets the
-  world (as a weapon away from the eye is on a screen). A reticle (a quad
-  layer) is held where the shot's ray (`weapon_get_projectile_ray`, the
-  game's own) meets the world, facing the head and as wide to the eye at any
-  distance, red when the game's crosshair would be; the HUD draws no
-  crosshair. The prompts' button icons are the controllers' buttons.
+- A shot has one ray, and the reticle is held on it: `vr_shot_origin` takes
+  the muzzle as the hand holds it this frame, or with anything a shot would
+  meet between the eyes and it (the barrel through a wall, or in a body) just
+  short of that, and `unit_adjust_projectile_ray` starts the shot there,
+  along the barrel, not the facing the last tick left. `aim_assist.c` aims it
+  from there along the aim, not turned to where the eye's ray meets the world
+  (as a weapon away from the eye is on a screen). A reticle (a quad layer) is
+  held where that ray meets the world, facing the head and as wide to the eye
+  at any distance, red when the game's crosshair would be; the HUD draws no
+  crosshair. In a network game too: the player's machine says where its shots
+  leave (`network_damage_set_fire_origin_source`, distributed message 93),
+  which the host's line of sight looks from when the eye had no line, and the
+  other machines see the shot from the unit, as they see any. The prompts'
+  button icons are the controllers' buttons.
 - Each arm is its own (`vr.arms`, `port/linux/game/vr_arms.c`). The game
   poses its first-person model, both arms and the weapon, from the camera
   behind the aiming hand; the model's node matrices are then posed again:
   the shoulders are the player's (22 cm under the eyes, 11 cm behind them,
-  18 cm either side of a body that turns after the head once it is 35
-  degrees off), the weapon's hand stays where the game holds the weapon
+  18 cm either side of a body that turns after the head at once past 35
+  degrees off, and within that in about 2 s, unless the head looks steeply
+  down or up), the weapon's hand stays where the game holds the weapon
   (its fingers and the weapon as animated), and the other hand holds its
   controller as the weapon's hand holds the weapon's grip, mirrored (its
   place and its palm's way, from the wrist to the middle finger and across
@@ -288,8 +315,15 @@ What sets the size the world is seen at, each measured or derived:
 - A zoomed weapon in the hand stays in it, and draws one window more,
   before the HUD's: the world from the muzzle with the zoom's field (without
   the weapon), in a square of the back buffer, copied into the scope's
-  image, a quad held on the weapon. The eyes keep their field, and the HUD
-  leaves out the zoomed view's elements (`hud_weapon.c`).
+  image, a quad facing back along the barrel: over the barrel, or on the
+  sight of a model that has one (`vr_scope_sights`: the sniper rifle's plate,
+  which lies to the barrel's right, the pistol's rear sight). The HUD's pass
+  first draws
+  the game's own zoomed view alone (`hud_weapon_port_draw_zoomed`: the
+  weapon's crosshair at its zoom, the ticks and numbers that follow the zoom)
+  and the square at its middle goes over that image; so the middle of the
+  lens is where the shot goes. The eyes keep their field, and the HUD
+  leaves out those elements (`hud_weapon.c`).
 - A vehicle's seat is seen from it (`vr.vehicle_view`, astromaddie's
   seat view): `director_choose_game_perspective` takes the first person's
   camera there for the local view only (`director_camera_deterministic`,
@@ -378,8 +412,9 @@ player plays as any player does: the hands' holding, shoulders, bare hands
 and taking with the hand all come down to the buttons and the weapon
 switches a gamepad presses, a melee strikes where the weapon aims (not
 through the fist: the host checks no strike's direction), and nothing a
-network game sends changes, so that the VR build plays standard games with
-every build of its network version (39). A VR server says so with the
+network game sends changes but where its shots leave (distributed message 93,
+which a host without it drops), so that the VR build plays standard games with
+every build of its network version. A VR server says so with the
 game's settings (a bit of the game's port switches,
 `_network_game_port_vr_rules_bit`), which every machine has, and in its LAN
 advertisement and internet listing: its version with

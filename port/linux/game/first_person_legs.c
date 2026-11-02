@@ -58,6 +58,8 @@ enum
 put its neck under the head */
 #define FIRST_PERSON_LEGS_SIZE_LEAST 0.7f
 #define FIRST_PERSON_LEGS_SIZE_MOST 1.3f
+/* a pose's stance is squared up to this far (radians: first_person_legs_stance) */
+#define FIRST_PERSON_LEGS_SQUARE_MOST 1.0f
 /* how far out of the view the waist's rim is kept (world units: 3 cm) */
 #define FIRST_PERSON_LEGS_OUT_OF_VIEW 0.01f
 /* the point the upper body folds into: the middle of the waist's rim, a
@@ -223,8 +225,45 @@ static boolean first_person_legs_waist(
 	return first_person_legs_waist_found;
 }
 
+/* how far (radians, to the left) a pose's hips and shoulders are from square
+to the way it faces: a stand's stance has a rifle's, its left foot and
+shoulder ahead, 30 degrees to the right, which looking down is a body not
+facing ahead. None if their nodes are not found, or further than
+FIRST_PERSON_LEGS_SQUARE_MOST: a turn's or a stumble's, not a stance */
+static real first_person_legs_stance(
+	struct model const *model,
+	real_matrix4x3 const *nodes,
+	long count,
+	real_vector3d const *facing)
+{
+	real across_x = 0.0f, across_y = 0.0f, turn;
+	long index;
+	short found = 0;
+
+	for (index = 0; index < count; index++)
+	{
+		char const *name = TAG_BLOCK_GET_ELEMENT(&model->nodes, index, struct model_node)->name;
+		real sign = first_person_legs_name_has(name, " l ") ? 1.0f : first_person_legs_name_has(name, " r ") ? -1.0f : 0.0f;
+
+		if (sign != 0.0f && (first_person_legs_name_has(name, "thigh") || first_person_legs_name_has(name, "clavicle")))
+		{
+			across_x += nodes[index].position.x * sign;
+			across_y += nodes[index].position.y * sign;
+			found++;
+		}
+	}
+	if (found != 4 || across_x * across_x + across_y * across_y < 1e-6f)
+		return 0.0f;
+	/* (square, from the right side to the left is the facing turned a quarter
+	to the left) */
+	turn = (real)atan2(facing->i, -facing->j) - (real)atan2(across_y, across_x);
+	turn = (real)atan2(sin(turn), cos(turn));
+	return fabs(turn) <= FIRST_PERSON_LEGS_SQUARE_MOST ? turn : 0.0f;
+}
+
 /* in a headset: the pose turned about `anchor` (the base of the neck),
-level, from the way the body faces (`facing`) to `body`, moved level so
+level, from the way the body faces (`facing`, less the stance's own turn
+`stance`) to `body`, moved level so
 that the anchor is over `under`, and grown or shrunk from the feet
 (`ground`, their height) so that the anchor is at its height: the eyes
 never inside the chest, the feet on the ground, at any height of the
@@ -234,10 +273,11 @@ static void first_person_legs_face(
 	real_point3d const *anchor,
 	real ground,
 	real_vector3d const *facing,
+	real stance,
 	float const under[3],
 	float const body[3])
 {
-	real turn = (real)atan2(body[1], body[0]) - (real)atan2(facing->j, facing->i);
+	real turn = (real)atan2(body[1], body[0]) - (real)atan2(facing->j, facing->i) + stance;
 	real c = (real)cos(turn), s = (real)sin(turn);
 	real size = anchor->z - ground > 0.01f ? (under[2] - ground) / (anchor->z - ground) : 1.0f;
 	long index;
@@ -409,7 +449,8 @@ real_matrix4x3 const *first_person_legs_node_matrices(
 		short anchor = neck != NONE ? neck : pelvis;
 
 		first_person_legs_face(count, &nodes[anchor].position,
-			nodes[foot != NONE ? foot : anchor].position.z, &object->object.forward, under, body);
+			nodes[foot != NONE ? foot : anchor].position.z, &object->object.forward,
+			first_person_legs_stance(model, nodes, count, &object->object.forward), under, body);
 	}
 	return first_person_legs_matrices;
 }
