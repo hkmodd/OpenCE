@@ -9,6 +9,8 @@ readied, which fires with that hand's trigger */
 /* the weapon of the unit's inventory slot taken into its other hand (not
 its weapon in hand; FALSE: none taken), and put back */
 boolean dual_wield_begin(long unit_index, short slot);
+/* the map is going: no unit holds anything in its other hand */
+void dual_wield_dispose_from_old_map(void);
 void dual_wield_end(long unit_index);
 /* the unit's weapon in its other hand, and its slot (NONE: none) */
 long dual_wield_weapon(long unit_index);

@@ -16,12 +16,15 @@ typedef word message_header;
 #define CEILING(n,ceiling) ((n)>(ceiling)?(ceiling):(n))
 #define PIN(n,floor,ceiling) ((n)<(floor) ? (floor) : CEILING((n),(ceiling)))
 #define DISTRIBUTED_UNIT_SCALE 32767.0f
+#define SET_FLAG(flags, bit, value) ((value) ? ((flags) |= FLAG(bit)) : ((flags) &= ~FLAG(bit)))
 struct network_game { byte cooperative_flags; };
 static struct network_game game;
 static short connection = _game_connection_local;
 static long now = 100;
 static struct network_game *network_game_get_game(void){return &game;}
 static long game_time_get(void){return now;}
+/* the host took player p's last pose a tick ago: it relays the next (a pose a tick) */
+#define TICK_PASSED(p) (network_vr_poses[(p)].taken_time=now-1)
 static boolean game_in_progress(void){return TRUE;}
 static short game_connection(void){return connection;}
 static void platform_log(char const *format, ...){(void)format;}
@@ -305,7 +308,11 @@ int main(int argc,char **argv)
   network_vr_handle_up(2,now,&entry,1);
   CHECK(sent_down[1]==1 && sent_down[3]==1,"its own player's pose sent on to the machines that see the player");
   CHECK(sent_down[2]==0,"not back to the machine it came from");
-  network_vr_handle_up(2,now,&entry,1);
+  network_vr_handle_up(2,now+1,&entry,1);
+  CHECK(sent_down[1]==1,"a second pose in the host's tick not sent on");
+  now++;
+  network_vr_handle_up(2,now+NETWORK_VR_AHEAD+1,&entry,1);
+  CHECK(sent_down[1]==1,"a pose stamped too far ahead of the host's clock refused");
   network_vr_handle_up(2,now-1,&entry,1);
   CHECK(sent_down[1]==1,"a pose no newer than the last refused");
   pose.head.i=2.0f;entry=entry_of(1,&pose);
@@ -333,6 +340,12 @@ int main(int argc,char **argv)
   now++;pose.head.k=3.0f;
   network_vr_send(distributed_player_from_byte(1),&pose);
   CHECK(sent_up==1,"a pose not fit to take not sent");
+  now++;pose=pose_of();vector_set(&pose.hands[0],0.6f,0.0f,0.6f);
+  network_vr_send(distributed_player_from_byte(1),&pose);
+  CHECK(sent_up==2,"a controller out of reach: the pose still sent");
+  CHECK(!(((struct distributed_vr_pose_message *)last_message)->entry.flags&FLAG(_network_vr_pose_left_hand_bit)) &&
+   (((struct distributed_vr_pose_message *)last_message)->entry.flags&FLAG(_network_vr_pose_right_hand_bit)),
+   "without that hand, with the other");
   CHECK(network_vr_pose_get(distributed_player_from_byte(1))==NULL,"this machine's own player's not drawn from one");
   connection=_game_connection_network_server;
   players();local[0]=TRUE;sees[1][0]=sees[2][0]=TRUE;
@@ -469,6 +482,7 @@ int main(int argc,char **argv)
    CHECK(!network_vr_carries_four(1),"a VR server's player whose pose comes, its weapons not in their places: two");
    pose.flags|=FLAG(_network_vr_pose_places_bit);
    entry=entry_of(1,&pose);
+   TICK_PASSED(1);
    network_vr_handle_up(2,now+1,&entry,1);
   }
   CHECK(network_vr_carries_four(1),"a VR server's player whose pose comes, its weapons in their places: four");
@@ -503,12 +517,14 @@ int main(int argc,char **argv)
    "through the right hand, ahead of the left: %f %f %f",point.x,point.y,point.z);
   vector_set(&pose.hands[0],0.35f,0.1f,0.5f);
   entry=entry_of(1,&pose);
+  TICK_PASSED(1);
   network_vr_handle_up(2,now+1,&entry,1);
   CHECK(network_vr_melee_point(1,&point) && fabsf(point.x-10.35f)<1e-3f && fabsf(point.y-20.1f)<1e-3f,
    "the left hand ahead: through it: %f %f",point.x,point.y);
   pose.flags=FLAG(_network_vr_pose_right_hand_bit);
   vector_set(&pose.hands[1],-0.1f,-0.1f,0.5f);
   entry=entry_of(1,&pose);
+  TICK_PASSED(1);
   network_vr_handle_up(2,now+2,&entry,1);
   CHECK(network_vr_melee_point(1,&point) && fabsf(point.x-9.9f)<1e-3f,
    "the left hand untracked: the right, even behind the head: %f",point.x);
@@ -551,6 +567,7 @@ int main(int argc,char **argv)
   CHECK(added==0,"the main hand holding: refused");
   pose.flags|=FLAG(_network_vr_pose_bare_bit);
   pose_entry=entry_of(1,&pose);
+  TICK_PASSED(1);
   network_vr_handle_up(2,now+1,&pose_entry,1);
   network_vr_handle_grab(2,&entry,1,FALSE);
   CHECK(added==0,"a request in a datagram refused");
@@ -612,6 +629,7 @@ int main(int argc,char **argv)
   network_vr_handle_grab(2,&entry,1,TRUE);
   CHECK(added==2,"the other hand holding: refused");
   pose.off_slot=NONE;pose_entry=entry_of(1,&pose);
+  TICK_PASSED(1);
   network_vr_handle_up(2,now+1,&pose_entry,1);
   network_vr_handle_grab(2,&entry,1,TRUE);
   CHECK(added==3,"the other hand empty: taken");

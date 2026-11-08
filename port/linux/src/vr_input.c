@@ -899,6 +899,26 @@ void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struc
 		input->setting_left_handed = settings->left_handed;
 		input->left_handed_valid = 1;
 	}
+	/* the runtime's own menu or another program has the controllers (the
+	session not focused): their buttons read as none, which is no letting go.
+	Nothing is pressed and the hands hold what they held; the buttons are
+	taken as they are when the focus comes back, pressed or not, without a
+	press or a release */
+	if (!frame->focused)
+	{
+		memset(pad, 0, sizeof(*pad));
+		input->turn = 0.0f;
+		input->talking = 0;
+		input->unfocused = 1;
+		return;
+	}
+	if (input->unfocused)
+	{
+		input->held[VR_HAND_LEFT] = frame->hand[VR_HAND_LEFT].buttons;
+		input->held[VR_HAND_RIGHT] = frame->hand[VR_HAND_RIGHT].buttons;
+		input->main_position_valid = input->off_position_valid = 0;
+		input->unfocused = 0;
+	}
 	/* (in a seat, dead or in the menus before play, the hands hold as the
 	game's; back on foot, the weapon is held, not by its grip) */
 	input->physical = settings->physical && settings->gestures && settings->on_foot;
@@ -916,6 +936,10 @@ void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struc
 	{
 		vr_physical_hands(input, frame, settings);
 		vr_magazine(input, frame, settings);
+		/* (a hand that held a magazine punches nothing as it comes from the
+		hip: its speed is taken over from where it is when it lets go) */
+		if (input->magazine)
+			input->off_position_valid = 0;
 	}
 	else
 	{

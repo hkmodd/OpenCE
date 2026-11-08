@@ -719,7 +719,9 @@ top in the image's row 0: so the picture's row 0, its top, is sampled for
 the image's last row, the top as OpenGL and the runtime keep it (`rows`
 -1 turns it over, for a runtime that takes the rows from the top). */
 /* the panel's and the vignette's vertices: a triangle over the whole image,
-`position` the picture's place in it (0 to 1, from its bottom left) */
+`position` the picture's place in it (0 to 1, from its top left as the
+image is shown: the game's glClipControl(GL_UPPER_LEFT) puts clip space's
+top in row 0, the shown image's bottom, for either `rows`) */
 static const char *const vr_image_vertex_text =
 	"#version 330 core\n"
 	"uniform float rows;\n"
@@ -770,7 +772,7 @@ static GLuint vr_vignette_program(void)
 		"out vec4 colour;\n"
 		"void main()\n"
 		"{\n"
-		"	vec2 slope = vec2(mix(bounds.x, bounds.y, position.x), mix(bounds.z, bounds.w, position.y));\n"
+		"	vec2 slope = vec2(mix(bounds.x, bounds.y, position.x), mix(bounds.w, bounds.z, position.y));\n"
 		"	colour = vec4(0.0, 0.0, 0.0, smoothstep(radii.x, radii.y, length(slope)));\n"
 		"}\n";
 	GLuint program = vr_image_program(fragment_text, "the vignette's");
@@ -987,7 +989,7 @@ static int vr_create_session(void)
 	XrSessionCreateInfo create;
 	XrReferenceSpaceCreateInfo space;
 	XrViewConfigurationView views[2];
-	int64_t formats[64];
+	int64_t *formats;
 	uint32_t count = 0, index;
 	long width, height, maximum_width, maximum_height;
 	double scale;
@@ -1068,10 +1070,14 @@ static int vr_create_session(void)
 	/* the image format: sRGB, as the game's pixels are */
 	if (!vr_check(xrEnumerateSwapchainFormats(vr.session, 0, &count, NULL), "listing the image formats"))
 		return 0;
-	if (count > 64)
-		count = 64;
-	if (!vr_check(xrEnumerateSwapchainFormats(vr.session, count, &count, formats), "listing the image formats"))
+	formats = calloc(count ? count : 1, sizeof(*formats));
+	if (!formats)
 		return 0;
+	if (!vr_check(xrEnumerateSwapchainFormats(vr.session, count, &count, formats), "listing the image formats"))
+	{
+		free(formats);
+		return 0;
+	}
 	vr.format = 0;
 	for (index = 0; index < count; index++)
 	{
@@ -1080,6 +1086,7 @@ static int vr_create_session(void)
 		else if (formats[index] == VR_FORMAT_RGBA8 && !vr.format)
 			vr.format = VR_FORMAT_RGBA8;
 	}
+	free(formats);
 	if (!vr.format)
 	{
 		platform_log("vr: the runtime offers no 8-bit RGBA images");
@@ -1589,7 +1596,11 @@ static void vr_read_controllers(XrTime time)
 	sync.countActiveActionSets = 1;
 	sync.activeActionSets = &active;
 	if (xrSyncActions(vr.session, &sync) != XR_SUCCESS)
+	{
+		/* (no input this frame: as unfocused, not as every button let go) */
+		vr.frame.focused = 0;
 		return;
+	}
 	for (hand = 0; hand < VR_HAND_COUNT; hand++)
 	{
 		struct vr_hand *state = &vr.frame.hand[hand];
@@ -2353,10 +2364,10 @@ static void vr_scope_finish(void);
 
 static void vr_end_frame(const XrCompositionLayerBaseHeader *const *layers, uint32_t layer_count)
 {
-	/* (held from a frame that ends with no picture) */
-	vr_scope_finish();
 	XrFrameEndInfo end;
 
+	/* (held from a frame that ends with no picture) */
+	vr_scope_finish();
 	if (vr.blink > 0.0f)
 		vr.blink -= vr.frame.display_period;
 	if (vr.simulated)
@@ -2587,16 +2598,23 @@ static GLuint vr_acquire(struct vr_swapchain *swapchain)
 	}
 	memset(&acquire, 0, sizeof(acquire));
 	acquire.type = XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO;
-	if (!vr_check(xrAcquireSwapchainImage(swapchain->handle, &acquire, &index), "xrAcquireSwapchainImage") ||
-		index >= swapchain->image_count)
-	{
+	if (!vr_check(xrAcquireSwapchainImage(swapchain->handle, &acquire, &index), "xrAcquireSwapchainImage"))
 		return 0;
-	}
 	memset(&wait, 0, sizeof(wait));
 	wait.type = XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO;
 	wait.timeout = XR_INFINITE_DURATION;
-	if (!vr_check(xrWaitSwapchainImage(swapchain->handle, &wait), "xrWaitSwapchainImage"))
+	/* (an image acquired goes back, whatever then fails: else the chain runs
+	out of them) */
+	if (index >= swapchain->image_count ||
+		!vr_check(xrWaitSwapchainImage(swapchain->handle, &wait), "xrWaitSwapchainImage"))
+	{
+		XrSwapchainImageReleaseInfo release;
+
+		memset(&release, 0, sizeof(release));
+		release.type = XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO;
+		xrReleaseSwapchainImage(swapchain->handle, &release);
 		return 0;
+	}
 	swapchain->acquired = 1;
 	swapchain->index = index;
 	return swapchain->images[index];

@@ -337,6 +337,8 @@ struct vr_input
 	the helmet still held (which then does nothing else) */
 	int talking;
 	int talk_at_helmet;
+	/* the session was not focused last frame (vr_input_update) */
+	int unfocused;
 	/* the free hand holds a magazine (taken at the hip, its grip held);
 	the press of the reload it became, and how many of each so far */
 	int magazine;

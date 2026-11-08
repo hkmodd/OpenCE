@@ -263,6 +263,7 @@ static void screen_mode_choose(long *width, float scale[2])
 	*width = 640;
 	scale[0] = scale[1] = 1.0f;
 	screen_supersampling = 1.0f;
+#ifndef HALO_GLES
 	/* the headset's eyes (display.vr): the Xbox's 640x480 drawn at their
 	resolution, the HUD and the menus kept 4:3 for their panel */
 	if (vr_screen_size(&display_width, &display_height))
@@ -271,6 +272,7 @@ static void screen_mode_choose(long *width, float scale[2])
 		scale[1] = (float)display_height / (float)SCREEN_HEIGHT;
 		return;
 	}
+#endif
 	if (platform_screen_mode(&display_width, &display_height) && display_width > 0 && display_height > 0)
 	{
 		long wanted = (SCREEN_HEIGHT * display_width + display_height / 2) / display_height;

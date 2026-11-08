@@ -89,6 +89,14 @@ static short dual_wield_find(
 	return NONE;
 }
 
+void dual_wield_dispose_from_old_map(
+	void)
+{
+	/* (the map's objects go without their units' deletion: none is held now) */
+	dual_wield_initialized = FALSE;
+	dual_wield_count = 0;
+}
+
 /* the weapon taken out of the other hand back into the inventory, as the
 game puts away its weapon in hand */
 static void dual_wield_put_back(

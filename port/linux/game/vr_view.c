@@ -492,6 +492,9 @@ static struct
 	seen (vr_input.c) */
 	unsigned long off_transfers;
 
+	/* the fire origin's source is set (vr_fire_origin) */
+	boolean fire_origin_set;
+
 	/* in a seat seen from it (vr.vehicle_view "first_person"): the vehicle
 	and the seat, the view's yaw from the vehicle's (the seat's own turn, less
 	the head's as the player sat, and the stick's turns since), and whether
@@ -2617,6 +2620,8 @@ static void vr_pose_send(
 	network_vr_send(local_player_get_player_index(local_player_index), &pose);
 }
 
+static boolean vr_fire_origin(short local_player_index, real_vector3d *offset);
+
 short vr_render_windows(
 	struct render_window *windows,
 	short window_count)
@@ -2632,6 +2637,12 @@ short vr_render_windows(
 	vr_view.stereo = FALSE;
 	vr_view.weapon_in_hand = FALSE;
 	vr_view.scope = FALSE;
+	/* (a headset that came on after the map started) */
+	if (!vr_view.fire_origin_set && vr_active())
+	{
+		network_damage_set_fire_origin_source(vr_fire_origin);
+		vr_view.fire_origin_set = TRUE;
+	}
 	csmemset(vr_view.reticle_placed, 0, sizeof(vr_view.reticle_placed));
 	for (window_index = 0; window_index < MAXIMUM_WINDOWS + 1; window_index++)
 		vr_view.pass_of_window[window_index] = _vr_render_pass_none;
@@ -4003,7 +4014,8 @@ again from the game's facing */
 void vr_view_reset(
 	void)
 {
-	if (vr_active())
+	vr_view.fire_origin_set = vr_active();
+	if (vr_view.fire_origin_set)
 		network_damage_set_fire_origin_source(vr_fire_origin);
 	vr_view.heading_valid = FALSE;
 	vr_view.unaimed_valid = FALSE;

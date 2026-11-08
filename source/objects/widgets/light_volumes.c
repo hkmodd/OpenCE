@@ -319,7 +319,10 @@ void light_volume_render(
 				short pass_count;
 				short stencil_mode = rasterizer_get_stencil_mode();
 				boolean on_the_gun = on_the_viewmodel &&
-					first_person_weapon_get_local_index(object_index) == render.local_player_index &&
+					/* port: the other hand's weapon is the player's too (its index
+					FIRST_PERSON_WEAPON_OTHER_HAND on) */
+					first_person_weapon_get_local_index(object_index) % FIRST_PERSON_WEAPON_OTHER_HAND ==
+						render.local_player_index &&
 					csstrcmp(definition->attachment_marker, "flashlight") != 0;
 
 				pass_count = on_the_gun ? 2 : 1;

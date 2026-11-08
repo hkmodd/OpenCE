@@ -30,6 +30,9 @@ void platform_log(char const *format, ...);
 
 /* a place's parts of 1/4096 of a world unit (8 world units each way) */
 #define NETWORK_VR_PLACE_SCALE 4096.0f
+/* how far ahead of the host's clock a client's pose may be stamped (two
+seconds' ticks: a client runs ahead by its latency) */
+#define NETWORK_VR_AHEAD 60
 
 /* a pose on the wire: its player, flags, the head's and hands' places
 and axes, the other hand's weapon's slot (-1: none) and its trigger (of
@@ -245,8 +248,20 @@ static void network_vr_relay(short player_index, long from_machine_index)
 void network_vr_send(long player, struct network_vr_pose const *pose)
 {
 	struct distributed_vr_pose_message message;
+	struct network_vr_pose sent = *pose;
 	long time = game_time_get();
 	short player_index = (short)DATUM_INDEX_TO_ABSOLUTE_INDEX(player);
+	short hand;
+
+	/* (a controller out of reach, set down: that hand left out, the rest sent) */
+	for (hand = 0; hand < 2; hand++)
+	{
+		if (TEST_FLAG(sent.flags, _network_vr_pose_left_hand_bit + hand) &&
+			network_vr_distance_squared(&sent.hands[hand], &sent.head) > NETWORK_VR_HAND_REACH * NETWORK_VR_HAND_REACH)
+		{
+			SET_FLAG(sent.flags, _network_vr_pose_left_hand_bit + hand, FALSE);
+		}
+	}
 
 	if (player == NONE || player_index >= MAXIMUM_TRACKED_PLAYERS || time == network_vr_sent_time ||
 		!game_in_progress() || !network_vr_server())
@@ -256,12 +271,12 @@ void network_vr_send(long player, struct network_vr_pose const *pose)
 	network_vr_sent_time = time;
 	if (game_connection() == _game_connection_network_server)
 	{
-		if (network_vr_pose_take(player_index, time, pose))
+		if (network_vr_pose_take(player_index, time, &sent))
 			network_vr_relay(player_index, NONE);
 	}
-	else if (game_connection() == _game_connection_network_client && network_vr_pose_valid(pose))
+	else if (game_connection() == _game_connection_network_client && network_vr_pose_valid(&sent))
 	{
-		network_vr_pose_pack(player_index, pose, &message.entry);
+		network_vr_pose_pack(player_index, &sent, &message.entry);
 		distributed_send(&message, _distributed_message_vr_pose_up, 1, sizeof(message), _distributed_to_host);
 	}
 }
@@ -278,6 +293,15 @@ void network_vr_handle_up(long machine_index, long game_time, void const *entrie
 	player_index = entry.player_index;
 	if (player_index >= MAXIMUM_TRACKED_PLAYERS || distributed_player_from_byte(entry.player_index) == NONE ||
 		!distributed_machine_has_player(machine_index, player_index))
+	{
+		return;
+	}
+	/* (a pose a tick, as a player sends them: no more relayed than that;
+	and none stamped so far ahead of the host's clock that it would hold the
+	player's real ones back) */
+	if ((network_vr_poses[player_index].time != NONE &&
+		network_vr_poses[player_index].taken_time == game_time_get()) ||
+		game_time > game_time_get() + NETWORK_VR_AHEAD)
 	{
 		return;
 	}

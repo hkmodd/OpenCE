@@ -234,7 +234,7 @@ symbols in this file:
 #include "units/units.h"
 #include "halo_vr.h" /* port: port/linux/game/vr_view.c */
 #include "dual_wield.h" /* port: port/linux/game/dual_wield.c */
-#include "game/player_rumble.h"
+#include "game/player_rumble.h" /* port: rumble_set_impulse_hand */
 
 #ifdef HALO_PORT_MAXIMUM_NETWORK_PLAYERS
 #include "bitmaps/bitmap_group.h"

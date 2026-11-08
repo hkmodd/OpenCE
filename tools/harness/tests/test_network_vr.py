@@ -51,6 +51,10 @@ def test_case(case):
 
 
 @pytest.mark.parametrize('fault,case', [
+    (('\tif ((network_vr_poses[player_index].time != NONE &&\n\t\tnetwork_vr_poses[player_index].taken_time == '
+      'game_time_get()) ||\n\t\tgame_time > game_time_get() + NETWORK_VR_AHEAD)\n\t{\n\t\treturn;\n\t}\n', ''), 'host'),
+    (('\t\tgame_time > game_time_get() + NETWORK_VR_AHEAD)', '\t\tFALSE)'), 'host'),
+    (('\t\t\tSET_FLAG(sent.flags, _network_vr_pose_left_hand_bit + hand, FALSE);\n', ''), 'send'),
     (('if (count != 1 || !stream || !network_vr_server())\n\t\treturn;\n\tcsmemcpy(&entry, entries, sizeof(entry));\n'
       '\tif (entry.player_index >= MAXIMUM_TRACKED_PLAYERS || entry.flags',
       'if (count != 1 || !network_vr_server())\n\t\treturn;\n\tcsmemcpy(&entry, entries, sizeof(entry));\n'

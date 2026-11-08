@@ -240,6 +240,7 @@ symbols in this file:
 #include "network_coop.h" /* port: port/linux/game/network_coop.c */
 #include "network_vr.h" /* port: port/linux/game/network_vr.c */
 #include "bots.h" /* port: port/linux/game/bots.c */
+#include "dual_wield.h" /* port: port/linux/game/dual_wield.c */
 #include "cutscene/cinematics.h" /* port: network co-op's first spawns */
 #include "editor/editor_stubs.h"
 #include "effects/effects.h"
@@ -619,8 +620,10 @@ void players_initialize_for_new_map(
 void players_dispose_from_old_map(
 	void)
 {
-	/* port: the bots of local games (port/linux/game/bots.c) */
+	/* port: the bots of local games (port/linux/game/bots.c), and the other
+	hands' weapons (port/linux/game/dual_wield.c) */
 	bots_dispose_from_old_map();
+	dual_wield_dispose_from_old_map();
 	data_make_invalid(player_data);
 	data_make_invalid(team_data);
 

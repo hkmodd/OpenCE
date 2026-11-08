@@ -470,6 +470,7 @@ static void render_window(
 		if (!VR_RENDER_WORLD())
 			interface_draw_screen();
 		rasterizer_screen_flash();
+		/* port: nor the screen's other overlays */
 		if (!VR_RENDER_WORLD())
 		{
 			/* port: the view's menus centred in it (a quarter's are 320 wide) */
