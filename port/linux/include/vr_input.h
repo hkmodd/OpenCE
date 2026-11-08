@@ -351,6 +351,27 @@ struct vr_input
 
 /* the pad of this frame's controllers; `menus` while a menu is up, and the
 seconds since the last frame */
+/* a hand's angle about `centre` (radians), from straight `outward` (0)
+toward `toward` (positive), in the plane of the two: how far it has turned
+a wheel or a pair of bars it holds */
+float vr_wheel_angle(const float hand[3], const float centre[3], const float outward[3], const float toward[3]);
+
+/* a wheel or a pair of bars the hands turn (vr_wheel_steer) */
+struct vr_wheel
+{
+	/* the hands that held it last frame (0: none), the hands' angle that
+	steers straight, and their angle last frame (radians) */
+	int held;
+	float zero;
+	float last;
+};
+
+/* the steer (-1 to 1, positive to the right) of a wheel `held` hands hold
+(0: let go, 0 steered), their angle `angle` (radians, positive turning it
+to the left): straight where they took hold, and on from where it was as a
+hand takes hold or lets go; all the way at `lock`, none within `still` */
+float vr_wheel_steer(struct vr_wheel *wheel, int held, float angle, float lock, float still);
+
 /* the rate of `rates` nearest `wanted`; 0 (no preference) for none wanted or
 none listed */
 float vr_nearest_refresh_rate(const float *rates, unsigned long count, float wanted);

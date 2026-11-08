@@ -411,7 +411,18 @@ What sets the size the world is seen at, each measured or derived:
   `vr_drive_steer`): the facing is the vehicle's forward turned in
   proportion to its sideways push up to the wheels' limits (read from the
   vehicle's definition), mirrored while it backs, and the pad's left stick
-  keeps its throttle alone. The reticle stands for the HUD's crosshair in
+  keeps its throttle alone. With `"hands"` the hands that hold the wheel or
+  the bars stand for that push (`vr_hands_steer_update`, `vr_wheel_steer`):
+  the line from the left hand to the right about the wheel's axis (ahead)
+  or the bars' (up), or with one hand its turn about the middle where the
+  two last held, straight where the hands took hold and carried on as a
+  hand takes hold or lets go, a quarter turn of the wheel (35 degrees of
+  the bars) the stick pushed all the way. Only the hands are measured: the
+  game's own turn of its wheel, which moves its biped's palms, is not, or
+  the wheel would turn itself on; a hand turning keeps hold by the rim. The
+  game then turns its wheel and its biped's hands as it would for the
+  stick, and the hands seen hold on where the biped's are. It is the facing
+  the stick would give, so it plays on any server. The reticle stands for the HUD's crosshair in
   seats, along the ray of the weapon the HUD would show (the passenger's
   own, a gunner's the vehicle's), the vehicle not in its way.
 - A cinematic (`vr.cinematics`) is seen around the head, from its camera:

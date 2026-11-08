@@ -12,8 +12,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from harness import CHECK_FAILED, build, mutated, read, run
 
 CASES = ["gameplay", "move", "menus", "menu-button", "turn", "seat", "drive", "room", "gestures", "hands", "ray",
-         "bindings", "swap", "throw", "grab", "bare", "physical", "dual", "places", "pull", "refresh-rate", "layout", "seat-secondary", "handles", "seat-switch", "talk", "reload"]
+         "bindings", "swap", "throw", "grab", "bare", "physical", "dual", "places", "pull", "refresh-rate", "wheel-steer", "wheel", "layout", "seat-secondary", "handles", "seat-switch", "talk", "reload"]
 CONTROLS = {
+    "wheel-zero-none": (("\t\twheel->zero = angle;\n", "\t\twheel->zero = 0.0f;\n"), "wheel-steer"),
+    "wheel-not-carried": (("\t\twheel->zero += atan2f(sinf(angle - wheel->last), cosf(angle - wheel->last));\n", "\t\twheel->zero += 0.0f;\n"), "wheel-steer"),
+    "wheel-not-wrapped": (("turn = atan2f(sinf(angle - wheel->zero), cosf(angle - wheel->zero));", "turn = angle - wheel->zero;"), "wheel-steer"),
+    "wheel-still-none": (("if (fabsf(turn) < still)", "if (0)"), "wheel-steer"),
+    "wheel-axes-swapped": (("return atan2f(up, out);", "return atan2f(out, up);"), "wheel"),
     "rate-first": (("if (!index || fabsf(rates[index] - wanted) < fabsf(nearest - wanted))", "if (!index)"), "refresh-rate"),
     "rate-always-asks": (("\tif (!(wanted > 0.0f))\n\t\treturn 0.0f;\n", ""), "refresh-rate"),
     "reload-anywhere": (("!input->off_at_weapon && vr_at_hip(frame, off) &&", "!input->off_at_weapon &&"), "reload"),

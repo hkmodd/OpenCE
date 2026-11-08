@@ -1937,6 +1937,47 @@ int main(int argc, char **argv)
         CHECK(!input.left_handed, "right-handed set: the right, the swap forgotten");
         return 0;
     }
+    CASE("wheel") {
+        static const float centre[3] = { 1.0f, 2.0f, 3.0f }, outward[3] = { 0.0f, -1.0f, 0.0f };
+        static const float up[3] = { 0.0f, 0.0f, 1.0f };
+        float hand[3];
+
+        hand[0] = 1.0f; hand[1] = 1.8f; hand[2] = 3.0f;
+        CHECK(close_to(vr_wheel_angle(hand, centre, outward, up), 0.0f, 0.001f), "straight out: no turn");
+        hand[1] = 2.0f - 0.2f * cosf(0.5236f); hand[2] = 3.0f + 0.2f * sinf(0.5236f);
+        CHECK(close_to(vr_wheel_angle(hand, centre, outward, up), 0.5236f, 0.001f), "raised 30 degrees");
+        hand[2] = 3.0f - 0.2f * sinf(0.5236f);
+        CHECK(close_to(vr_wheel_angle(hand, centre, outward, up), -0.5236f, 0.001f), "lowered 30 degrees");
+        /* (nearer or further along the third axis: the same turn) */
+        hand[0] = 1.3f;
+        CHECK(close_to(vr_wheel_angle(hand, centre, outward, up), -0.5236f, 0.001f), "the third axis ignored");
+        CHECK(vr_wheel_angle(centre, centre, outward, up) == 0.0f, "at the middle: no turn");
+        return 0;
+    }
+    CASE("wheel-steer") {
+        const float lock = 1.5708f, still = 0.0524f, turn = 0.5236f;
+        struct vr_wheel wheel;
+
+        memset(&wheel, 0, sizeof(wheel));
+        CHECK(vr_wheel_steer(&wheel, 0, 0.7f, lock, still) == 0.0f, "not held: straight");
+        CHECK(vr_wheel_steer(&wheel, 2, 0.2f, lock, still) == 0.0f, "taken hold of turned: straight");
+        CHECK(close_to(vr_wheel_steer(&wheel, 2, 0.2f + turn, lock, still), -0.3333f, 0.001f),
+            "a third of the lock to the left");
+        CHECK(close_to(vr_wheel_steer(&wheel, 2, 0.2f - turn, lock, still), 0.3333f, 0.001f), "and to the right");
+        CHECK(vr_wheel_steer(&wheel, 2, 0.22f, lock, still) == 0.0f, "within the dead zone: straight");
+        vr_wheel_steer(&wheel, 2, 0.2f - turn, lock, still);
+        CHECK(close_to(vr_wheel_steer(&wheel, 1, 0.9f, lock, still), 0.3333f, 0.001f),
+            "a hand lets go: on from where it was");
+        CHECK(vr_wheel_steer(&wheel, 1, 0.9f + turn, lock, still) == 0.0f, "the other turns it back");
+        CHECK(vr_wheel_steer(&wheel, 1, 0.9f - 3.0f * turn, lock, still) == 1.0f, "past the lock: all the way");
+        CHECK(vr_wheel_steer(&wheel, 0, 0.0f, lock, still) == 0.0f, "let go: straight");
+        CHECK(vr_wheel_steer(&wheel, 1, 3.0f, lock, still) == 0.0f, "taken hold of again: straight there");
+        CHECK(close_to(vr_wheel_steer(&wheel, 1, -3.0f, lock, still), -0.1802f, 0.001f),
+            "on across the half turn: %f", vr_wheel_steer(&wheel, 1, -3.0f, lock, still));
+        CHECK(vr_wheel_steer(&wheel, 1, sqrtf(-1.0f), lock, still) == 0.0f && wheel.held == 0,
+            "an angle not a number: let go");
+        return 0;
+    }
     CASE("refresh-rate") {
         static const float rates[4] = { 72.0f, 80.0f, 90.0f, 120.0f };
 

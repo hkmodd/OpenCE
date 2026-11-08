@@ -416,8 +416,9 @@ static const struct config_setting config_settings[] =
 		_platform_desktop,
 		"With display.vr, how a Warthog's or a Ghost's driver steers:\n"
 		"\"drive\", the other controller's stick (sideways turns the wheels as\n"
-		"far as it is pushed, forward and back are the throttle), or \"aim\",\n"
-		"toward where vr.vehicle_aim aims, as the game does." },
+		"far as it is pushed, forward and back are the throttle); \"hands\", as\n"
+		"\"drive\" but the hands that hold the wheel or the bars turn them; or\n"
+		"\"aim\", toward where vr.vehicle_aim aims, as the game does." },
 	{ "vr.snap_turn", _config_real, "30.0", "HALO_VR_SNAP_TURN", _environment_value, _platform_desktop,
 		"How far a push of the aiming hand's stick turns, in degrees; 0 turns\n"
 		"smoothly instead, at smooth_turn_speed." },

@@ -100,7 +100,7 @@
 	</widget>
 	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/vehicle_steering_label" type="text" controller="1" width="300" height="22" string_list="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/labels" string_index="7" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4">
 	</widget>
-	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/vehicle_steering_spinner" type="spinner" left="3" top="2" width="147" height="20" flags="pass_unhandled_to_focused_child left_right_tabs_items" strings="STICK|AIM" setting="vr.vehicle_steering" values="drive|aim" font="ui\large_ui" color="#FF2896FF" align="center" text_y="1" header_bitmap="bitmaps/arrow_sm_left" footer_bitmap="bitmaps/arrow_sm_right" header_bounds="7 -6 19 0" footer_bounds="7 150 19 156">
+	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/vehicle_steering_spinner" type="spinner" left="3" top="2" width="147" height="20" flags="pass_unhandled_to_focused_child left_right_tabs_items" strings="STICK|HANDS|AIM" setting="vr.vehicle_steering" values="drive|hands|aim" font="ui\large_ui" color="#FF2896FF" align="center" text_y="1" header_bitmap="bitmaps/arrow_sm_left" footer_bitmap="bitmaps/arrow_sm_right" header_bounds="7 -6 19 0" footer_bounds="7 150 19 156">
 		<on event="created" run="port setting load"/>
 	</widget>
 	<widget name="main_menu/settings_select/player_setup/player_profile_edit/gamepad_setup/vr/op_vr_rules" width="512" height="28" flags="pass_unhandled_to_focused_child" bitmap="bitmaps/option_bkds" color="#FF2896FF" platform="vr">
@@ -160,7 +160,7 @@
 		<string text="Step in the room and the player follows; off,\nthe head leans 35 cm at most."/>
 		<string text="Ride in the seat, the view level with the\nvehicle, or behind it as the game does."/>
 		<string text="What aims guns and flies a Banshee in a seat:\nthe controller, its stick or the head."/>
-		<string text="A Warthog's or Ghost's driver steers with the\nother stick, or toward the aim as the game does."/>
+		<string text="The other stick, the hands that hold the wheel\nor the bars, or toward the aim as the game does."/>
 		<string text="Games you host are VR servers: the browser shows\nVR, and headsets play there by the hands' rules."/>
 		<string text="The height, the arms, the aim's angle, gestures\nand grenades."/>
 		<string text="Turning, the vignette, cinematics, and the size\nand distance of the HUD and the menus."/>

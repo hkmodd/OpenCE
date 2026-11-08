@@ -274,6 +274,12 @@ a Ghost turns toward its facing however far it is (it has no wheels whose
 turn limits it: vehicles.c's update_alien_scout_physics), short of the
 hard turn (45 degrees) that slows it on the ground */
 #define VR_DRIVE_SCOUT_TURN 40.0f
+/* the hands' turn of a wheel (a Warthog's) and of a pair of bars (a
+Ghost's) that steers as far as the stick pushed all the way, and the turn
+under which they steer straight (the hands' tremor), in degrees */
+#define VR_WHEEL_LOCK 90.0f
+#define VR_BARS_LOCK 35.0f
+#define VR_STEER_STILL 3.0f
 
 /* a vehicle's definition as far as its type and its wheels' turn
 (vehicles.c's layout; its header keeps it opaque, as input_abstraction.c's
@@ -504,6 +510,16 @@ static struct
 	short seat_index;
 	real seat_yaw;
 	boolean driving;
+	/* a driver's hands on the wheel or the bars steer (vr.vehicle_steering
+	"hands": vr_hands_steer_update); whether they do this frame, and how
+	far; the wheel they turn, its middle along the vehicle's forward, left and
+	up from its origin and its rim's distance from it (world units) */
+	boolean steer_by_hands;
+	boolean hands_steer;
+	real hands_steer_value;
+	struct vr_wheel wheel;
+	real steer_hub[3];
+	real steer_radius;
 	/* a gunner's seat seen from it, aimed by the hands on the gun's handles
 	(vr_handles): the hands that hold them (a bit for each, 0 let go), the
 	gun's pivot in LOCAL space, placed as they took them, and whether they
@@ -564,6 +580,7 @@ static void vr_settings_read(
 		!strcmp(config_string("vr.vehicle_aim"), "head") ? _vr_seat_aim_head : _vr_seat_aim_hand;
 	vr_view.seat_first_person = strcmp(config_string("vr.vehicle_view"), "chase") != 0;
 	vr_view.drive = strcmp(config_string("vr.vehicle_steering"), "aim") != 0;
+	vr_view.steer_by_hands = strcmp(config_string("vr.vehicle_steering"), "hands") == 0;
 	vr_view.immersive_cinematics = strcmp(config_string("vr.cinematics"), "screen") != 0;
 	vr_view.room_scale = config_boolean("vr.roomscale");
 	vr_view.eye_height_player = strcmp(config_string("vr.eye_height"), "player") == 0;
@@ -870,6 +887,145 @@ static boolean vr_seat_view_update(
 	return TRUE;
 }
 
+static boolean vr_seat_hand_place(long unit_index, short hand, real_point3d *place);
+
+/* the middle of the wheel or the bars a driver's hands turn, in the
+world, from where vr_hands_steer_update keeps it (along the vehicle's
+forward, left and up from its origin) */
+static void vr_wheel_hub(
+	struct vehicle_datum const *vehicle,
+	real_point3d *hub)
+{
+	real_vector3d left;
+
+	cross_product3d(&vehicle->object.up, &vehicle->object.forward, &left);
+	*hub = vehicle->object.position;
+	point_from_line3d(hub, &vehicle->object.forward, vr_view.steer_hub[0], hub);
+	point_from_line3d(hub, &left, vr_view.steer_hub[1], hub);
+	point_from_line3d(hub, &vehicle->object.up, vr_view.steer_hub[2], hub);
+}
+
+/* how far a hand turning the wheel or the bars is from their rim (metres):
+from the middle, against where the hands held as they took hold */
+static real vr_wheel_rim_distance(
+	long vehicle_index,
+	short hand)
+{
+	real_point3d hub;
+	real distance;
+
+	vr_wheel_hub(vehicle_datum_get(vehicle_index), &hub);
+	distance = (real)distance3d(&vr_view.grips[hand].position, &hub) - vr_view.steer_radius;
+	return (real)fabs(distance) / VR_UNITS_PER_METRE;
+}
+
+/* the wheel or the bars turned by the hands that hold them (vr.vehicle_steering
+"hands"), once a frame after the hands take hold (vr_seat_hands_update): the
+line from the left hand to the right, about the axis of a wheel (ahead, a
+Warthog's) or of bars (up, a Ghost's), or with one hand its turn about the
+middle where the two last held (where the game seats them, a hand taking
+hold alone); straight where they took hold, as far as the stick would push
+at VR_WHEEL_LOCK or VR_BARS_LOCK (vr_wheel_steer). None of the game's turn
+of its own wheel is in it, which would turn it on */
+static void vr_hands_steer_update(
+	long vehicle_index,
+	struct unit_seat const *seat)
+{
+	struct vehicle_datum const *vehicle;
+	struct vr_vehicle_definition const *definition;
+	real_vector3d left, right, from;
+	real_vector3d const *toward;
+	real_point3d hub, places[VR_HAND_COUNT];
+	float grip[VR_HAND_COUNT][3], centre[3], side[3], ahead[3];
+	real angle;
+	short hand, held = 0, holding = NONE;
+	boolean bars;
+
+	vr_view.hands_steer = FALSE;
+	vehicle = vr_view.steer_by_hands && vr_view.seat_hands && TEST_FLAG(seat->flags, _unit_seat_driver_bit) ?
+		vehicle_datum_get(vehicle_index) : NULL;
+	definition = vehicle ?
+		(struct vr_vehicle_definition const *)tag_get(VEHICLE_DEFINITION_TAG, vehicle->definition_index) : NULL;
+	if (!definition || (definition->type != _vr_vehicle_human_jeep && definition->type != _vr_vehicle_alien_scout))
+	{
+		vr_wheel_steer(&vr_view.wheel, 0, 0.0f, 1.0f, 0.0f);
+		return;
+	}
+	bars = definition->type == _vr_vehicle_alien_scout;
+	cross_product3d(&vehicle->object.up, &vehicle->object.forward, &left);
+	right = left;
+	scale_vector3d(&right, -1.0f, &right);
+	toward = bars ? &vehicle->object.forward : &vehicle->object.up;
+	for (hand = 0; hand < VR_HAND_COUNT; hand++)
+	{
+		if (!vr_view.seat_held[hand] || !vr_view.grip_valid[hand])
+			continue;
+		grip[hand][0] = vr_view.grips[hand].position.x;
+		grip[hand][1] = vr_view.grips[hand].position.y;
+		grip[hand][2] = vr_view.grips[hand].position.z;
+		holding = hand;
+		held++;
+	}
+	if (!held)
+	{
+		vr_wheel_steer(&vr_view.wheel, 0, 0.0f, 1.0f, 0.0f);
+		return;
+	}
+	/* (the middle: between the two hands holding; taken hold of with one,
+	between where the game seats them; else where they last held) */
+	if (held == VR_HAND_COUNT || !vr_view.wheel.held)
+	{
+		if (held == VR_HAND_COUNT)
+		{
+			places[VR_HAND_LEFT] = vr_view.grips[VR_HAND_LEFT].position;
+			places[VR_HAND_RIGHT] = vr_view.grips[VR_HAND_RIGHT].position;
+		}
+		else if (!vr_seat_hand_place(vr_view.unit_index, VR_HAND_LEFT, &places[VR_HAND_LEFT]) ||
+			!vr_seat_hand_place(vr_view.unit_index, VR_HAND_RIGHT, &places[VR_HAND_RIGHT]))
+		{
+			vr_wheel_steer(&vr_view.wheel, 0, 0.0f, 1.0f, 0.0f);
+			return;
+		}
+		hub.x = (places[VR_HAND_LEFT].x + places[VR_HAND_RIGHT].x) * 0.5f;
+		hub.y = (places[VR_HAND_LEFT].y + places[VR_HAND_RIGHT].y) * 0.5f;
+		hub.z = (places[VR_HAND_LEFT].z + places[VR_HAND_RIGHT].z) * 0.5f;
+		vector_from_points3d(&vehicle->object.position, &hub, &from);
+		vr_view.steer_hub[0] = (real)dot_product3d(&from, &vehicle->object.forward);
+		vr_view.steer_hub[1] = (real)dot_product3d(&from, &left);
+		vr_view.steer_hub[2] = (real)dot_product3d(&from, &vehicle->object.up);
+		vr_view.steer_radius = (real)distance3d(held == VR_HAND_COUNT ? &places[VR_HAND_RIGHT] :
+			&vr_view.grips[holding].position, &hub);
+	}
+	vr_wheel_hub(vehicle, &hub);
+	centre[0] = hub.x;
+	centre[1] = hub.y;
+	centre[2] = hub.z;
+	ahead[0] = toward->i;
+	ahead[1] = toward->j;
+	ahead[2] = toward->k;
+	side[0] = right.i;
+	side[1] = right.j;
+	side[2] = right.k;
+	if (held == VR_HAND_COUNT)
+	{
+		angle = vr_wheel_angle(grip[VR_HAND_RIGHT], grip[VR_HAND_LEFT], side, ahead);
+	}
+	else if (holding == VR_HAND_RIGHT)
+	{
+		angle = vr_wheel_angle(grip[VR_HAND_RIGHT], centre, side, ahead);
+	}
+	else
+	{
+		side[0] = left.i;
+		side[1] = left.j;
+		side[2] = left.k;
+		angle = -vr_wheel_angle(grip[VR_HAND_LEFT], centre, side, ahead);
+	}
+	vr_view.hands_steer_value = vr_wheel_steer(&vr_view.wheel, held, angle,
+		(bars ? VR_BARS_LOCK : VR_WHEEL_LOCK) * (_pi / 180.0f), VR_STEER_STILL * (_pi / 180.0f));
+	vr_view.hands_steer = TRUE;
+}
+
 /* a driver steered by the off stick (vr.vehicle_steering "drive"), in a
 Warthog or a Ghost: the facing the vehicle's forward turned by the stick
 (vr_drive_steer), level with it, pitched as the head looks (the Ghost's guns
@@ -885,7 +1041,7 @@ static boolean vr_drive_facing(
 	struct vehicle_datum *vehicle;
 	struct vr_vehicle_definition const *definition;
 	float const *stick = frame->hand[vr_input_move_hand()].stick;
-	real yaw, pitch, level;
+	real yaw, pitch, level, steer = stick[0];
 
 	if (!vr_view.drive || !frame->controllers || !vr_seat_of(vr_view.unit_index, &vehicle_index, &seat) ||
 		!TEST_FLAG(seat->flags, _unit_seat_driver_bit))
@@ -896,11 +1052,14 @@ static boolean vr_drive_facing(
 	definition = (struct vr_vehicle_definition const *)tag_get(VEHICLE_DEFINITION_TAG, vehicle->definition_index);
 	if (definition->type != _vr_vehicle_human_jeep && definition->type != _vr_vehicle_alien_scout)
 		return FALSE;
+	/* (the hands on the wheel or the bars in place of the stick) */
+	if (vr_view.hands_steer)
+		steer = vr_view.hands_steer_value;
 	/* (a Warthog's wheels turn as far as the facing, reversed backing up, as
 	vehicles.c turns them; a Ghost turns toward it, either way) */
 	yaw = vr_yaw_of(vehicle->object.forward.n, 0.0f) + (definition->type == _vr_vehicle_alien_scout ?
-		vr_drive_steer(stick[0], VR_DRIVE_SCOUT_TURN, VR_DRIVE_SCOUT_TURN, FALSE) :
-		vr_drive_steer(stick[0], definition->turn[0], definition->turn[1], vehicle->vehicle.speed < 0.0f));
+		vr_drive_steer(steer, VR_DRIVE_SCOUT_TURN, VR_DRIVE_SCOUT_TURN, FALSE) :
+		vr_drive_steer(steer, definition->turn[0], definition->turn[1], vehicle->vehicle.speed < 0.0f));
 	level = (real)sqrt(head_forward[0] * head_forward[0] + head_forward[1] * head_forward[1]);
 	pitch = (real)atan2(head_forward[2], level);
 	facing->i = (real)(cos(yaw) * cos(pitch));
@@ -2303,7 +2462,7 @@ static void vr_seat_hands_update(
 	void)
 {
 	struct vr_frame const *frame = vr_frame_get();
-	long vehicle_index;
+	long vehicle_index = NONE;
 	struct unit_seat const *seat = NULL;
 	short hand;
 
@@ -2328,6 +2487,10 @@ static void vr_seat_hands_update(
 		{
 			vector_from_points3d(&vr_view.grips[hand].position, &place, &to);
 			distance = (real)magnitude3d(&to) / VR_UNITS_PER_METRE;
+			/* (a hand turning the wheel or the bars keeps hold by their rim,
+			however far the game has turned its own) */
+			if (held && vr_view.hands_steer)
+				distance = MIN(distance, vr_wheel_rim_distance(vehicle_index, hand));
 		}
 		vr_view.seat_hold[hand] = vr_seat_hold_eased(vr_view.seat_hold[hand], &vr_view.seat_held[hand], distance,
 			frame->display_period);
@@ -2339,6 +2502,7 @@ static void vr_seat_hands_update(
 			platform_log("vr: the %s hand takes hold of the vehicle's controls", hand == VR_HAND_LEFT ? "left" : "right");
 		}
 	}
+	vr_hands_steer_update(vehicle_index, seat);
 }
 
 /* a reticle where a shot from `origin` along `forward` meets the world, in

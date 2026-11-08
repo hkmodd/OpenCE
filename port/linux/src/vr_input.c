@@ -511,6 +511,41 @@ static int vr_at_head(struct vr_frame const *frame, struct vr_hand const *hand)
 }
 
 /* the hand at the hip */
+float vr_wheel_angle(const float hand[3], const float centre[3], const float outward[3], const float toward[3])
+{
+	float out = 0.0f, up = 0.0f;
+	int axis;
+
+	for (axis = 0; axis < 3; axis++)
+	{
+		out += (hand[axis] - centre[axis]) * outward[axis];
+		up += (hand[axis] - centre[axis]) * toward[axis];
+	}
+	return atan2f(up, out);
+}
+
+float vr_wheel_steer(struct vr_wheel *wheel, int held, float angle, float lock, float still)
+{
+	float turn;
+
+	if (held <= 0 || !(fabsf(angle) <= 10.0f) || !(lock > 0.0f))
+	{
+		wheel->held = 0;
+		return 0.0f;
+	}
+	if (!wheel->held)
+		wheel->zero = angle;
+	else if (held != wheel->held)
+		wheel->zero += atan2f(sinf(angle - wheel->last), cosf(angle - wheel->last));
+	wheel->held = held;
+	wheel->last = angle;
+	turn = atan2f(sinf(angle - wheel->zero), cosf(angle - wheel->zero));
+	if (fabsf(turn) < still)
+		return 0.0f;
+	turn = -turn / lock;
+	return turn > 1.0f ? 1.0f : turn < -1.0f ? -1.0f : turn;
+}
+
 float vr_nearest_refresh_rate(const float *rates, unsigned long count, float wanted)
 {
 	float nearest = 0.0f;
