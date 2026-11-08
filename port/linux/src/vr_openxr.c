@@ -95,6 +95,10 @@ reaches when it meets no panel, and how far short of the panel it stops
 #define VR_BEAM_SHORT 0.02f
 
 #define VR_SWAPCHAIN_IMAGES 8
+/* the refresh rates a headset lists, and the vertices of what a lens hides,
+at most (a runtime's lists are not trusted further) */
+#define VR_REFRESH_RATES 32
+#define VR_HIDDEN_VERTICES 60000
 
 #define VR_DEGREES 0.017453292519943
 
@@ -148,9 +152,16 @@ reaches when it meets no panel, and how far short of the panel it stops
 	F(xrApplyHapticFeedback) \
 	F(xrGetCurrentInteractionProfile)
 
+/* (of extensions a runtime may not have: NULL without them) */
+#define VR_OPTIONAL_FUNCTIONS(F) \
+	F(xrGetVisibilityMaskKHR) \
+	F(xrEnumerateDisplayRefreshRatesFB) \
+	F(xrRequestDisplayRefreshRateFB)
+
 #define VR_DECLARE(name) static PFN_##name name;
 VR_GLOBAL_FUNCTIONS(VR_DECLARE)
 VR_INSTANCE_FUNCTIONS(VR_DECLARE)
+VR_OPTIONAL_FUNCTIONS(VR_DECLARE)
 #undef VR_DECLARE
 
 /* ---------- structures */
@@ -266,6 +277,21 @@ static struct
 	(vr.image_rows; SteamVR's), not from the bottom as OpenGL and OpenXR keep
 	them: what is written into its images is turned over */
 	int rows_from_top;
+
+	/* what each lens hides (XR_KHR_visibility_mask), its triangles drawn nearest
+	as an eye's picture starts, so that nothing behind them is shaded */
+	GLuint hidden_program, hidden_arrays[2], hidden_buffers[2];
+	GLint hidden_bounds, hidden_depth;
+	GLsizei hidden_vertices[2];
+	int hidden_drawn;
+	/* the eyes' recommended and largest sizes, and the vr.resolution_scale they
+	are of */
+	long eyes_recommended[2], eyes_maximum[2];
+	double eyes_scale;
+	/* the vr.refresh_rate last asked for (XR_FB_display_refresh_rate), and it
+	has been asked for in this session */
+	float refresh_rate;
+	int refresh_rate_asked;
 
 	/* debug.vr_simulate: a headset of the game's own, without a runtime
 	(its images plain textures) */
@@ -542,8 +568,8 @@ static int vr_create_instance(void)
 {
 	XrExtensionProperties *extensions;
 	uint32_t count = 0, index;
-	int opengl = 0, binding = 0;
-	const char *enabled[2], *binding_extension = vr_platform_graphics_extension();
+	int opengl = 0, binding = 0, hidden = 0, refresh = 0;
+	const char *enabled[4], *binding_extension = vr_platform_graphics_extension();
 	XrInstanceCreateInfo create;
 	XrInstanceProperties properties;
 	XrResult result;
@@ -566,6 +592,10 @@ static int vr_create_instance(void)
 			opengl = 1;
 		if (binding_extension && !strcmp(extensions[index].extensionName, binding_extension))
 			binding = 1;
+		if (!strcmp(extensions[index].extensionName, XR_KHR_VISIBILITY_MASK_EXTENSION_NAME))
+			hidden = 1;
+		if (!strcmp(extensions[index].extensionName, XR_FB_DISPLAY_REFRESH_RATE_EXTENSION_NAME))
+			refresh = 1;
 	}
 	free(extensions);
 	if (!opengl)
@@ -579,8 +609,14 @@ static int vr_create_instance(void)
 		platform_log("vr: the OpenGL context is EGL's, and the OpenXR runtime has no %s", binding_extension);
 		return 0;
 	}
-	enabled[0] = XR_KHR_OPENGL_ENABLE_EXTENSION_NAME;
-	enabled[1] = binding_extension;
+	count = 0;
+	enabled[count++] = XR_KHR_OPENGL_ENABLE_EXTENSION_NAME;
+	if (binding_extension)
+		enabled[count++] = binding_extension;
+	if (hidden)
+		enabled[count++] = XR_KHR_VISIBILITY_MASK_EXTENSION_NAME;
+	if (refresh)
+		enabled[count++] = XR_FB_DISPLAY_REFRESH_RATE_EXTENSION_NAME;
 	memset(&create, 0, sizeof(create));
 	create.type = XR_TYPE_INSTANCE_CREATE_INFO;
 	strcpy(create.applicationInfo.applicationName, "OpenCE");
@@ -588,7 +624,7 @@ static int vr_create_instance(void)
 	strcpy(create.applicationInfo.engineName, "OpenCE");
 	create.applicationInfo.engineVersion = 1;
 	create.applicationInfo.apiVersion = XR_MAKE_VERSION(1, 0, 0);
-	create.enabledExtensionCount = binding_extension ? 2 : 1;
+	create.enabledExtensionCount = count;
 	create.enabledExtensionNames = enabled;
 	result = xrCreateInstance(&create, &vr.instance);
 	if (result == XR_ERROR_RUNTIME_UNAVAILABLE)
@@ -605,6 +641,19 @@ static int vr_create_instance(void)
 		return 0; \
 	}
 	VR_INSTANCE_FUNCTIONS(VR_RESOLVE)
+#undef VR_RESOLVE
+#define VR_RESOLVE(name) \
+	if (!XR_SUCCEEDED(vr.get_instance_proc_address(vr.instance, #name, (PFN_xrVoidFunction *)&name))) \
+		name = NULL;
+	if (hidden)
+	{
+		VR_RESOLVE(xrGetVisibilityMaskKHR)
+	}
+	if (refresh)
+	{
+		VR_RESOLVE(xrEnumerateDisplayRefreshRatesFB)
+		VR_RESOLVE(xrRequestDisplayRefreshRateFB)
+	}
 #undef VR_RESOLVE
 	memset(&properties, 0, sizeof(properties));
 	properties.type = XR_TYPE_INSTANCE_PROPERTIES;
@@ -683,6 +732,7 @@ static const char *const vr_image_vertex_text =
 	"}\n";
 
 static GLuint vr_image_program(const char *fragment_text, const char *what);
+static GLuint vr_build_program(const char *vertex_text, const char *fragment_text, const char *what);
 
 static GLuint vr_panel_program(void)
 {
@@ -736,7 +786,20 @@ static GLuint vr_vignette_program(void)
 rows as the runtime takes them; 0 when it does not build */
 static GLuint vr_image_program(const char *fragment_text, const char *what)
 {
-	const char *const texts[2] = { vr_image_vertex_text, fragment_text };
+	GLuint program = vr_build_program(vr_image_vertex_text, fragment_text, what);
+
+	if (!program)
+		return 0;
+	glUseProgram(program);
+	glUniform1f(glGetUniformLocation(program, "rows"), vr.rows_from_top ? -1.0f : 1.0f);
+	glUseProgram(0);
+	return program;
+}
+
+/* a program of these two texts; 0 when it does not build */
+static GLuint vr_build_program(const char *vertex_text, const char *fragment_text, const char *what)
+{
+	const char *const texts[2] = { vertex_text, fragment_text };
 	const GLenum types[2] = { GL_VERTEX_SHADER, GL_FRAGMENT_SHADER };
 	GLuint program = glCreateProgram(), shaders[2];
 	GLint status = 0;
@@ -766,10 +829,148 @@ static GLuint vr_image_program(const char *fragment_text, const char *what)
 		platform_log("vr: %s program does not link", what);
 		return 0;
 	}
-	glUseProgram(program);
-	glUniform1f(glGetUniformLocation(program, "rows"), vr.rows_from_top ? -1.0f : 1.0f);
-	glUseProgram(0);
 	return program;
+}
+
+/* what a lens hides: triangles in the plane a metre ahead, whose x and y are
+the view's tangents, at the depth given (the game's clip space, y up, depth
+0 to 1), black */
+static GLuint vr_hidden_program(void)
+{
+	static const char *const vertex_text =
+		"#version 330 core\n"
+		"layout(location = 0) in vec2 tangent;\n"
+		"uniform vec4 bounds;\n"
+		"uniform float depth;\n"
+		"void main()\n"
+		"{\n"
+		"	vec2 place = (tangent - bounds.xz) / (bounds.yw - bounds.xz);\n"
+		"	gl_Position = vec4(place * 2.0 - 1.0, depth, 1.0);\n"
+		"}\n";
+	static const char *const fragment_text =
+		"#version 330 core\n"
+		"out vec4 colour;\n"
+		"void main()\n"
+		"{\n"
+		"	colour = vec4(0.0, 0.0, 0.0, 1.0);\n"
+		"}\n";
+	GLuint program = vr_build_program(vertex_text, fragment_text, "the hidden area's");
+
+	if (!program)
+		return 0;
+	vr.hidden_bounds = glGetUniformLocation(program, "bounds");
+	vr.hidden_depth = glGetUniformLocation(program, "depth");
+	return program;
+}
+
+/* an eye's triangles, (x, y) per vertex, for vr_hidden_draw */
+static void vr_hidden_store(int eye, const float *triangles, GLsizei vertices)
+{
+	GLint bound = 0;
+
+	if (!vr.hidden_program)
+		return;
+	if (!vr.hidden_arrays[eye])
+	{
+		glGenVertexArrays(1, &vr.hidden_arrays[eye]);
+		glGenBuffers(1, &vr.hidden_buffers[eye]);
+	}
+	/* (the array holds the buffer: nothing else changes; a draw binds its own
+	array, but the game's streams expect their buffer bound) */
+	glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &bound);
+	glBindVertexArray(vr.hidden_arrays[eye]);
+	glBindBuffer(GL_ARRAY_BUFFER, vr.hidden_buffers[eye]);
+	glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(vertices * 2 * sizeof(float)), triangles, GL_STATIC_DRAW);
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, NULL);
+	glBindBuffer(GL_ARRAY_BUFFER, (GLuint)bound);
+	glBindVertexArray(0);
+	vr.hidden_vertices[eye] = vertices;
+}
+
+/* what the runtime says each lens hides (none, where it says nothing). A
+runtime's numbers are checked before they are drawn: one of them out of
+range and that eye goes without */
+static void vr_hidden_read(void)
+{
+	int eye;
+
+	if (!xrGetVisibilityMaskKHR || !config_boolean("vr.visibility_mask"))
+		return;
+	for (eye = 0; eye < 2; eye++)
+	{
+		XrVisibilityMaskKHR mask;
+		XrVector2f *vertices;
+		uint32_t *indices;
+		float *triangles;
+		uint32_t index;
+		int valid = 1;
+
+		vr.hidden_vertices[eye] = 0;
+		memset(&mask, 0, sizeof(mask));
+		mask.type = XR_TYPE_VISIBILITY_MASK_KHR;
+		if (!vr_check(xrGetVisibilityMaskKHR(vr.session, XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO, (uint32_t)eye,
+			XR_VISIBILITY_MASK_TYPE_HIDDEN_TRIANGLE_MESH_KHR, &mask), "asking what a lens hides") ||
+			!mask.vertexCountOutput || !mask.indexCountOutput || mask.indexCountOutput % 3 ||
+			mask.vertexCountOutput > VR_HIDDEN_VERTICES || mask.indexCountOutput > VR_HIDDEN_VERTICES)
+		{
+			continue;
+		}
+		vertices = malloc(mask.vertexCountOutput * sizeof(*vertices));
+		indices = malloc(mask.indexCountOutput * sizeof(*indices));
+		triangles = malloc(mask.indexCountOutput * 2 * sizeof(*triangles));
+		mask.vertexCapacityInput = mask.vertexCountOutput;
+		mask.indexCapacityInput = mask.indexCountOutput;
+		mask.vertices = vertices;
+		mask.indices = indices;
+		if (vertices && indices && triangles &&
+			vr_check(xrGetVisibilityMaskKHR(vr.session, XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO, (uint32_t)eye,
+			XR_VISIBILITY_MASK_TYPE_HIDDEN_TRIANGLE_MESH_KHR, &mask), "asking what a lens hides") &&
+			mask.vertexCountOutput <= mask.vertexCapacityInput && mask.indexCountOutput <= mask.indexCapacityInput &&
+			!(mask.indexCountOutput % 3))
+		{
+			for (index = 0; index < mask.indexCountOutput && valid; index++)
+			{
+				if (indices[index] >= mask.vertexCountOutput ||
+					!vr_finite(&vertices[indices[index]].x, 1) || !vr_finite(&vertices[indices[index]].y, 1))
+				{
+					valid = 0;
+					break;
+				}
+				triangles[index * 2] = vertices[indices[index]].x;
+				triangles[index * 2 + 1] = vertices[indices[index]].y;
+			}
+			if (valid)
+				vr_hidden_store(eye, triangles, (GLsizei)mask.indexCountOutput);
+		}
+		free(vertices);
+		free(indices);
+		free(triangles);
+	}
+	platform_log("vr: the lenses hide %d and %d triangles", (int)vr.hidden_vertices[0] / 3,
+		(int)vr.hidden_vertices[1] / 3);
+}
+
+/* the eyes' size for vr.resolution_scale, which is returned as it was taken:
+the runtime's recommended size times it */
+static double vr_eyes_size(long *width, long *height)
+{
+	double scale = config_real("vr.resolution_scale");
+
+	if (!(scale >= 0.5 && scale <= 2.0))
+		scale = 1.0;
+	*width = (long)(vr.eyes_recommended[0] * scale + 0.5);
+	*height = (long)(vr.eyes_recommended[1] * scale + 0.5);
+	if (*width > vr.eyes_maximum[0])
+		*width = vr.eyes_maximum[0];
+	if (*height > vr.eyes_maximum[1])
+		*height = vr.eyes_maximum[1];
+	/* (the game's 640x480 screen at the least) */
+	if (*width < 640)
+		*width = 640;
+	if (*height < 480)
+		*height = 480;
+	return scale;
 }
 
 static int vr_create_drawing(long width, long height);
@@ -895,22 +1096,12 @@ static int vr_create_session(void)
 	{
 		return 0;
 	}
-	scale = config_real("vr.resolution_scale");
-	if (!(scale >= 0.5 && scale <= 2.0))
-		scale = 1.0;
-	width = (long)(views[0].recommendedImageRectWidth * scale + 0.5);
-	height = (long)(views[0].recommendedImageRectHeight * scale + 0.5);
-	maximum_width = (long)views[0].maxImageRectWidth;
-	maximum_height = (long)views[0].maxImageRectHeight;
-	if (width > maximum_width)
-		width = maximum_width;
-	if (height > maximum_height)
-		height = maximum_height;
-	/* (the game's 640x480 screen at the least) */
-	if (width < 640)
-		width = 640;
-	if (height < 480)
-		height = 480;
+	vr.eyes_recommended[0] = (long)views[0].recommendedImageRectWidth;
+	vr.eyes_recommended[1] = (long)views[0].recommendedImageRectHeight;
+	vr.eyes_maximum[0] = maximum_width = (long)views[0].maxImageRectWidth;
+	vr.eyes_maximum[1] = maximum_height = (long)views[0].maxImageRectHeight;
+	vr.eyes_scale = config_real("vr.resolution_scale");
+	scale = vr_eyes_size(&width, &height);
 	for (eye = 0; eye < 2; eye++)
 	{
 		if (!vr_create_swapchain(&vr.eyes[eye], width, height))
@@ -1045,6 +1236,8 @@ static int vr_create_drawing(long width, long height)
 	vr.panel_program = vr_panel_program();
 	/* (without it, no vignette) */
 	vr.vignette_program = vr_vignette_program();
+	/* (without it, every pixel is drawn) */
+	vr.hidden_program = vr_hidden_program();
 	xgpu_gl_state_invalidate();
 	return vr.panel_program != 0;
 }
@@ -1489,6 +1682,47 @@ they point (their aim pose), as a Touch controller's (radians) */
 eyes (an adult's average, 1.75 m tall) */
 #define VR_SIMULATED_FLOOR 1.63f
 
+/* the simulated eyes' fields: left, right, up, down */
+static const struct vr_fov vr_simulated_fields[2] =
+{
+	{ -0.96f, 0.75f, 0.94f, -0.94f },
+	{ -0.75f, 0.96f, 0.94f, -0.94f }
+};
+
+/* debug.vr_simulate_hidden: what a lens might hide, the field past an ellipse
+inside it */
+static void vr_simulate_hidden(void)
+{
+	enum { SEGMENTS = 48 };
+	float triangles[SEGMENTS * 6 * 2];
+	int eye, segment, corner;
+
+	if (!config_boolean("debug.vr_simulate_hidden"))
+		return;
+	for (eye = 0; eye < 2; eye++)
+	{
+		float left = (float)tan(vr_simulated_fields[eye].left), right = (float)tan(vr_simulated_fields[eye].right);
+		float down = (float)tan(vr_simulated_fields[eye].down), up = (float)tan(vr_simulated_fields[eye].up);
+
+		for (segment = 0; segment < SEGMENTS; segment++)
+		{
+			static const int steps[6] = { 0, 0, 1, 0, 1, 1 }, rings[6] = { 0, 1, 1, 0, 1, 0 };
+
+			for (corner = 0; corner < 6; corner++)
+			{
+				float angle = (float)((segment + steps[corner]) * 2.0 * VR_DEGREES * 180.0 / SEGMENTS);
+				float reach = rings[corner] ? 3.0f : 0.97f;
+
+				triangles[(segment * 6 + corner) * 2] = (left + right) * 0.5f + (right - left) * 0.5f * reach * cosf(angle);
+				triangles[(segment * 6 + corner) * 2 + 1] = (down + up) * 0.5f + (up - down) * 0.5f * reach * sinf(angle);
+			}
+		}
+		vr_hidden_store(eye, triangles, SEGMENTS * 6);
+	}
+	platform_log("vr: the lenses hide %d and %d triangles", (int)vr.hidden_vertices[0] / 3,
+		(int)vr.hidden_vertices[1] / 3);
+}
+
 static GLuint vr_simulated_image(long width, long height)
 {
 	GLuint texture;
@@ -1509,14 +1743,15 @@ _pitch and _roll), for tests and for images of what the headset shows
 (debug.vr_dump_frame) */
 static int vr_simulate_create(void)
 {
-	double scale = config_real("vr.resolution_scale");
 	long width, height;
 	int eye;
 
-	if (!(scale >= 0.5 && scale <= 2.0))
-		scale = 1.0;
-	width = (long)(VR_SIMULATED_WIDTH * scale + 0.5);
-	height = (long)(VR_SIMULATED_HEIGHT * scale + 0.5);
+	vr.eyes_recommended[0] = VR_SIMULATED_WIDTH;
+	vr.eyes_recommended[1] = VR_SIMULATED_HEIGHT;
+	vr.eyes_maximum[0] = VR_SIMULATED_WIDTH * 2;
+	vr.eyes_maximum[1] = VR_SIMULATED_HEIGHT * 2;
+	vr.eyes_scale = config_real("vr.resolution_scale");
+	vr_eyes_size(&width, &height);
 	vr.simulated = 1;
 	vr_image_rows("simulated");
 	vr.format = VR_FORMAT_SRGB8_ALPHA8;
@@ -1546,6 +1781,7 @@ static int vr_simulate_create(void)
 	vr.beam.images[0] = vr_simulated_image(VR_BEAM_WIDTH, VR_BEAM_LENGTH);
 	if (!vr_create_drawing(width, height))
 		return 0;
+	vr_simulate_hidden();
 	vr.running = 1;
 	vr.state = XR_SESSION_STATE_FOCUSED;
 	platform_log("vr: a simulated headset (debug.vr_simulate), eyes %ldx%ld", width, height);
@@ -1719,11 +1955,6 @@ static void vr_simulate_hands(void)
 /* a still head, turned by the settings: yaw left, pitch up, roll to the left */
 static void vr_simulate_frame(void)
 {
-	static const struct vr_fov fields[2] =
-	{
-		{ -0.96f, 0.75f, 0.94f, -0.94f },
-		{ -0.75f, 0.96f, 0.94f, -0.94f }
-	};
 	float yaw = (float)(config_real("debug.vr_simulate_yaw") * VR_DEGREES);
 	float pitch = (float)(config_real("debug.vr_simulate_pitch") * VR_DEGREES);
 	float roll = (float)(config_real("debug.vr_simulate_roll") * VR_DEGREES);
@@ -1748,7 +1979,7 @@ static void vr_simulate_frame(void)
 		vr.frame.eye[eye] = vr.frame.head;
 		for (axis = 0; axis < 3; axis++)
 			vr.frame.eye[eye].position[axis] += offset[axis];
-		vr.frame.fov[eye] = fields[eye];
+		vr.frame.fov[eye] = vr_simulated_fields[eye];
 	}
 	vr.frame.display_period = 1.0f / 90.0f;
 	vr.frame.focused = 1;
@@ -1939,7 +2170,12 @@ static void vr_session_state(XrSessionState state)
 		begin.type = XR_TYPE_SESSION_BEGIN_INFO;
 		begin.primaryViewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
 		if (vr_check(xrBeginSession(vr.session, &begin), "xrBeginSession"))
+		{
 			vr.running = 1;
+			vr.refresh_rate_asked = 0;
+			vr_hidden_read();
+			xgpu_gl_state_invalidate();
+		}
 		break;
 	}
 	case XR_SESSION_STATE_STOPPING:
@@ -2001,6 +2237,15 @@ static void vr_poll_events(void)
 		case XR_TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED:
 			vr_log_profiles();
 			break;
+		case XR_TYPE_EVENT_DATA_VISIBILITY_MASK_CHANGED_KHR:
+			vr_hidden_read();
+			xgpu_gl_state_invalidate();
+			break;
+		case XR_TYPE_EVENT_DATA_DISPLAY_REFRESH_RATE_CHANGED_FB:
+			platform_log("vr: the headset now shows %.1f frames a second, from %.1f",
+				((const XrEventDataDisplayRefreshRateChangedFB *)&event)->toDisplayRefreshRate,
+				((const XrEventDataDisplayRefreshRateChangedFB *)&event)->fromDisplayRefreshRate);
+			break;
 		default:
 			break;
 		}
@@ -2008,6 +2253,90 @@ static void vr_poll_events(void)
 }
 
 /* ---------- frames */
+
+/* vr.resolution_scale changed: the eyes' new images are made before the old
+are let go, so that a runtime short of memory leaves the game as it was. No
+image is held between frames. The game's targets follow the new size at
+their next look at it (halo_screen_commit); until then the picture is scaled */
+static void vr_eyes_resize(void)
+{
+	struct vr_swapchain eyes[2];
+	double scale = config_real("vr.resolution_scale");
+	long width, height;
+	int eye;
+
+	if (scale == vr.eyes_scale)
+		return;
+	vr.eyes_scale = scale;
+	vr_eyes_size(&width, &height);
+	if (width == vr.eyes[0].width && height == vr.eyes[0].height)
+		return;
+	memset(eyes, 0, sizeof(eyes));
+	if (vr.simulated)
+	{
+		for (eye = 0; eye < 2; eye++)
+		{
+			eyes[eye].width = width;
+			eyes[eye].height = height;
+			eyes[eye].image_count = 1;
+			eyes[eye].images[0] = vr_simulated_image(width, height);
+			glDeleteTextures(1, &vr.eyes[eye].images[0]);
+		}
+	}
+	else if (vr_create_swapchain(&eyes[0], width, height) && vr_create_swapchain(&eyes[1], width, height))
+	{
+		xrDestroySwapchain(vr.eyes[0].handle);
+		xrDestroySwapchain(vr.eyes[1].handle);
+	}
+	else
+	{
+		if (eyes[0].handle != XR_NULL_HANDLE)
+			xrDestroySwapchain(eyes[0].handle);
+		if (eyes[1].handle != XR_NULL_HANDLE)
+			xrDestroySwapchain(eyes[1].handle);
+		platform_log("vr: no images of %ldx%ld: the eyes stay %ldx%ld", width, height, vr.eyes[0].width,
+			vr.eyes[0].height);
+		xgpu_gl_state_invalidate();
+		return;
+	}
+	vr.eyes[0] = eyes[0];
+	vr.eyes[1] = eyes[1];
+	platform_log("vr: eyes %ldx%ld (vr.resolution_scale %.2f)", width, height, scale);
+	xgpu_gl_state_invalidate();
+}
+
+/* vr.refresh_rate, at the session's start and when it changes: the nearest
+rate the headset has, or the runtime's own choice. It is only a request: the
+runtime's event says what came of it */
+static void vr_refresh_rate(void)
+{
+	float wanted = (float)config_real("vr.refresh_rate"), rates[VR_REFRESH_RATES], chosen;
+	uint32_t count = 0, index;
+
+	if (!xrEnumerateDisplayRefreshRatesFB || !xrRequestDisplayRefreshRateFB ||
+		(vr.refresh_rate_asked && wanted == vr.refresh_rate))
+	{
+		return;
+	}
+	vr.refresh_rate = wanted;
+	if (!vr_check(xrEnumerateDisplayRefreshRatesFB(vr.session, 0, &count, NULL), "listing the refresh rates") ||
+		count > VR_REFRESH_RATES ||
+		!vr_check(xrEnumerateDisplayRefreshRatesFB(vr.session, count, &count, rates), "listing the refresh rates"))
+	{
+		vr.refresh_rate_asked = 1;
+		return;
+	}
+	if (!vr.refresh_rate_asked)
+	{
+		for (index = 0; index < count; index++)
+			platform_log("vr: the headset can show %.1f frames a second", rates[index]);
+	}
+	chosen = vr_nearest_refresh_rate(rates, count, wanted);
+	/* (no preference, at the session's start, is what it has already) */
+	if (chosen > 0.0f || vr.refresh_rate_asked)
+		vr_check(xrRequestDisplayRefreshRateFB(vr.session, chosen), "asking for a refresh rate");
+	vr.refresh_rate_asked = 1;
+}
 
 static void vr_pose_of(const XrPosef *pose, struct vr_pose *out)
 {
@@ -2072,6 +2401,13 @@ int vr_frame_begin(void)
 		}
 		if (vr.frame_begun)
 			vr_end_frame(NULL, 0);
+		/* (debug.vr_simulate_resolution "FRAME:SCALE": as the menu sets it) */
+		if (atol(config_string("debug.vr_simulate_resolution")) == (long)vr.stereo_frames + 1 &&
+			strchr(config_string("debug.vr_simulate_resolution"), ':'))
+		{
+			config_write("vr.resolution_scale", strchr(config_string("debug.vr_simulate_resolution"), ':') + 1);
+		}
+		vr_eyes_resize();
 		vr.frame_begun = 1;
 		vr.eyes_drawn[0] = vr.eyes_drawn[1] = 0;
 		vr.scope_drawn = 0;
@@ -2081,6 +2417,9 @@ int vr_frame_begin(void)
 		vr_simulate_frame();
 		vr.stereo_frames++;
 		vr.frame.index = vr.stereo_frames;
+		/* (the pace of a run, to compare two) */
+		if (!(vr.stereo_frames % 500))
+			platform_log("vr: %lu frames, at %.2f seconds", vr.stereo_frames, (double)SDL_GetTicks() / 1000.0);
 		vr.dumping = vr_dump_due();
 		return 1;
 	}
@@ -2098,6 +2437,8 @@ int vr_frame_begin(void)
 		vr_end_frame(NULL, 0);
 	if (!vr.running)
 		return 0;
+	vr_refresh_rate();
+	vr_eyes_resize();
 
 	memset(&wait, 0, sizeof(wait));
 	wait.type = XR_TYPE_FRAME_WAIT_INFO;
@@ -2338,6 +2679,43 @@ static void vr_draw_vignette(int eye, GLuint image)
 			vr.rows_from_top, 0);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+/* the hidden area of an eye over the target just cleared: black and nearest,
+so that nothing behind it is shaded; 1 when it drew (the GL state is then
+the caller's to forget). The clip space's y is up the picture, as the eye's
+own projection's */
+int vr_hidden_draw(int eye, int x, int y, int width, int height, float nearest)
+{
+	float bounds[4];
+
+	if (eye < 0 || eye > 1 || !vr.hidden_program || !vr.hidden_vertices[eye] || !vr.frame.stereo)
+		return 0;
+	glViewport(x, y, width, height);
+	glDisable(GL_SCISSOR_TEST);
+	glDisable(GL_STENCIL_TEST);
+	glDisable(GL_CULL_FACE);
+	glDisable(GL_BLEND);
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_ALWAYS);
+	glDepthMask(GL_TRUE);
+	glDepthRange(0.0, 1.0);
+	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+	glUseProgram(vr.hidden_program);
+	bounds[0] = (float)tan(vr.frame.fov[eye].left);
+	bounds[1] = (float)tan(vr.frame.fov[eye].right);
+	bounds[2] = (float)tan(vr.frame.fov[eye].down);
+	bounds[3] = (float)tan(vr.frame.fov[eye].up);
+	glUniform4fv(vr.hidden_bounds, 1, bounds);
+	glUniform1f(vr.hidden_depth, nearest);
+	glBindVertexArray(vr.hidden_arrays[eye]);
+	glDrawArrays(GL_TRIANGLES, 0, vr.hidden_vertices[eye]);
+	/* (once: that it is drawn at all) */
+	if (!vr.hidden_drawn)
+		platform_log("vr: the hidden area drawn, %d triangles in eye %d", (int)vr.hidden_vertices[eye] / 3, eye);
+	vr.hidden_drawn = 1;
+	glUseProgram(0);
+	return 1;
 }
 
 void vr_vignette(float amount)

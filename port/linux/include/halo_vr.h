@@ -138,6 +138,7 @@ int vr_screen_size(long *width, long *height);
 /* the back buffer's picture (a texture of width by height, its rows from
 the top) is an eye's: into that eye's image */
 void vr_resolve_eye(int eye, unsigned int texture, int width, int height);
+int vr_hidden_draw(int eye, int x, int y, int width, int height, float nearest);
 /* D3DDevice_Present: the back buffer's picture is the HUD over the eyes
 drawn this frame, or (no eyes drawn) the menus' and loading screens' flat
 screen: into the panel's image, and the frame ends. Then the window: 1 if
@@ -257,6 +258,9 @@ int vr_render_pistol_grip(void);
 /* first_person_weapons.c, vr_input.c: the weapon is put away at a shoulder,
 the hands bare (it is not drawn, fires nor zooms) */
 int vr_render_bare_hands(void);
+/* vr_input.c: the weapon in the hand takes a magazine now (it has one to
+spare, its own is not full, it is not reloading) */
+int vr_render_can_reload(void);
 /* first_person_weapons.c: the headset's player, on foot with no weapon at
 all, holds up empty hands: `graph`'s nodes (the animations the hands were
 last drawn with) as posed this frame, into `matrices`; FALSE: none drawn */
@@ -370,6 +374,7 @@ void vr_render_rumble_hands(float const body[2], float const weapon[2], float co
 #define vr_render_aim_pitch() 0.0f
 #define vr_render_pistol_grip() 0
 #define vr_render_bare_hands() 0
+#define vr_render_can_reload() 0
 #define vr_render_empty_hands(graph, matrices) ((void)(graph), (void)(matrices), 0)
 #define vr_render_grab_reach(hand) 0
 #define vr_render_pull_target(hand) 0

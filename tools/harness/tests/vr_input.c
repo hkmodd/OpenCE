@@ -41,6 +41,8 @@ static struct vr_input_settings settings_of(int left_handed, float snap_angle, i
     settings.dual = 0;
     settings.places = 0;
     settings.talk_gesture = 0;
+    settings.reload_gesture = 0;
+    settings.can_reload = 0;
     settings.pull_target[VR_HAND_LEFT] = settings.pull_target[VR_HAND_RIGHT] = 0;
     vr_input_bindings_parse("", settings.bindings);
     return settings;
@@ -755,6 +757,83 @@ int main(int argc, char **argv)
         frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
         vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
         CHECK((pad.buttons & VR_PAD_RIGHT_THUMB) && pad.analog[VR_PAD_WHITE] == 0, "at the visor it zooms");
+        return 0;
+    }
+    CASE("reload") {
+        memset(&input, 0, sizeof(input));
+        settings = settings_of(0, 0.5f, 1);
+        settings.physical = 1;
+        settings.reload_gesture = settings.can_reload = 1;
+        frame_of(&frame);
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        vr_input_weapon_taken(&input);
+        frame.hand[VR_HAND_RIGHT].grip.position[1] = -0.3f;
+        frame.hand[VR_HAND_RIGHT].grip.position[2] = -0.4f;
+        /* at the hip, away from the weapon: the grip takes a magazine, and nothing is pressed yet */
+        frame.hand[VR_HAND_LEFT].grip.position[0] = -0.25f;
+        frame.hand[VR_HAND_LEFT].grip.position[1] = -0.7f;
+        frame.hand[VR_HAND_LEFT].grip.position[2] = 0.0f;
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(input.magazine && input.magazines_taken == 1, "taken at the hip (%d)", input.magazine);
+        CHECK(!pad.buttons && !pad.analog[VR_PAD_X], "nothing pressed yet");
+        /* brought to the weapon: the reload's press, once */
+        frame.hand[VR_HAND_LEFT].grip.position[0] = 0.1f;
+        frame.hand[VR_HAND_LEFT].grip.position[1] = -0.3f;
+        frame.hand[VR_HAND_LEFT].grip.position[2] = -0.45f;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(pad.analog[VR_PAD_X] == 255 && !input.magazine && input.reloads == 1, "the reload (%d)", pad.analog[VR_PAD_X]);
+        for (index = 0; index < 60; index++)
+            vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(pad.analog[VR_PAD_X] == 0 && input.reloads == 1, "one press, held on it is only a hold");
+        /* let go on the way: nothing */
+        frame.hand[VR_HAND_LEFT].buttons = 0;
+        frame.hand[VR_HAND_LEFT].grip.position[0] = -0.25f;
+        frame.hand[VR_HAND_LEFT].grip.position[1] = -0.7f;
+        frame.hand[VR_HAND_LEFT].grip.position[2] = 0.0f;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(input.magazine && input.magazines_taken == 2, "taken again");
+        frame.hand[VR_HAND_LEFT].buttons = 0;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(!input.magazine, "let go");
+        frame.hand[VR_HAND_LEFT].grip.position[0] = 0.1f;
+        frame.hand[VR_HAND_LEFT].grip.position[1] = -0.3f;
+        frame.hand[VR_HAND_LEFT].grip.position[2] = -0.45f;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(pad.analog[VR_PAD_X] == 0 && input.reloads == 1, "nothing brought, nothing reloaded");
+        /* a grip pressed elsewhere, or a weapon with nothing to take, or a weapon on the ground in reach, or the
+        setting off: no magazine */
+        frame.hand[VR_HAND_LEFT].grip.position[0] = -0.5f;
+        frame.hand[VR_HAND_LEFT].grip.position[1] = -0.2f;
+        frame.hand[VR_HAND_LEFT].grip.position[2] = -0.2f;
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(!input.magazine, "not at the hip");
+        frame.hand[VR_HAND_LEFT].buttons = 0;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        frame.hand[VR_HAND_LEFT].grip.position[0] = -0.25f;
+        frame.hand[VR_HAND_LEFT].grip.position[1] = -0.7f;
+        frame.hand[VR_HAND_LEFT].grip.position[2] = 0.0f;
+        settings.can_reload = 0;
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(!input.magazine, "nothing to take");
+        frame.hand[VR_HAND_LEFT].buttons = 0;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        settings.can_reload = 1;
+        settings.grab_reach[VR_HAND_LEFT] = 1;
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(!input.magazine, "a weapon on the ground comes first");
+        frame.hand[VR_HAND_LEFT].buttons = 0;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        settings.grab_reach[VR_HAND_LEFT] = 0;
+        settings.reload_gesture = 0;
+        frame.hand[VR_HAND_LEFT].buttons = VR_BUTTON_GRIP;
+        vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
+        CHECK(!input.magazine, "the setting off");
         return 0;
     }
     CASE("talk") {
@@ -1856,6 +1935,18 @@ int main(int argc, char **argv)
         settings.left_handed = 0;
         vr_input_update(&input, &frame, &settings, 0, SECONDS, &pad);
         CHECK(!input.left_handed, "right-handed set: the right, the swap forgotten");
+        return 0;
+    }
+    CASE("refresh-rate") {
+        static const float rates[4] = { 72.0f, 80.0f, 90.0f, 120.0f };
+
+        CHECK(close_to(vr_nearest_refresh_rate(rates, 4, 90.0f), 90.0f, 0.001f), "a rate it has");
+        CHECK(close_to(vr_nearest_refresh_rate(rates, 4, 100.0f), 90.0f, 0.001f), "the nearest under");
+        CHECK(close_to(vr_nearest_refresh_rate(rates, 4, 144.0f), 120.0f, 0.001f), "above them all");
+        CHECK(close_to(vr_nearest_refresh_rate(rates, 4, 60.0f), 72.0f, 0.001f), "below them all");
+        /* no preference, and a headset that lists none: the runtime's own */
+        CHECK(vr_nearest_refresh_rate(rates, 4, 0.0f) == 0.0f, "no preference");
+        CHECK(vr_nearest_refresh_rate(rates, 0, 90.0f) == 0.0f, "no rates");
         return 0;
     }
     CASE("seat-switch") {

@@ -107,6 +107,7 @@ void halo_vr_clear_transparent(void);
 void halo_vr_mirror_winding(int mirrored);
 void halo_vr_two_sided(int two_sided);
 void halo_vr_resolve_eye(int eye);
+void halo_vr_hidden_area(int eye);
 /* ... and a rectangle of it (the screen's coordinates) into the scope's,
 or the reticle's picture */
 void halo_vr_resolve_scope(short x0, short y0, short x1, short y1);
@@ -2879,13 +2880,18 @@ void vr_render_window_begin(
 {
 	vr_render_pass = vr_view.stereo && window_index >= 0 && window_index <= MAXIMUM_WINDOWS ?
 		vr_view.pass_of_window[window_index] : _vr_render_pass_none;
+	if (VR_RENDER_EYE())
+		halo_vr_hidden_area(vr_render_pass == _vr_render_pass_right_eye);
 }
 
 void vr_render_window_end(
 	short window_index)
 {
 	if (VR_RENDER_EYE())
+	{
+		halo_vr_hidden_area(-1);
 		halo_vr_resolve_eye(vr_render_pass == _vr_render_pass_right_eye);
+	}
 	else if (VR_RENDER_SCOPE())
 		halo_vr_resolve_scope(vr_view.scope_window.x0, vr_view.scope_window.y0, vr_view.scope_window.x1,
 			vr_view.scope_window.y1);
@@ -3750,6 +3756,23 @@ int vr_render_bare_hands(
 	void)
 {
 	return vr_view.stereo && vr_view.weapon_in_hand && vr_view.bare;
+}
+
+int vr_render_can_reload(
+	void)
+{
+	struct weapon_datum *weapon = weapon_try_and_get(vr_held_weapon());
+	struct weapon_definition *definition = weapon ? weapon_definition_get(weapon->definition_index) : NULL;
+	struct weapon_magazine const *magazine;
+
+	if (!vr_view.stereo || !vr_view.weapon_in_hand || vr_view.bare || !definition ||
+		definition->weapon.magazines.count <= 0)
+	{
+		return FALSE;
+	}
+	magazine = &weapon->weapon.magazines[0];
+	return magazine->rounds_total > 0 && magazine->state != _magazine_reloading && magazine->rounds_loaded <
+		TAG_BLOCK_GET_ELEMENT(&definition->weapon.magazines, 0, struct weapon_magazine_definition)->rounds_loaded_maximum;
 }
 
 int vr_render_grab_reach(

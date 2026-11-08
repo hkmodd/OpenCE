@@ -335,7 +335,14 @@ static const struct config_setting config_settings[] =
 
 	{ "vr.resolution_scale", _config_real, "1.0", "HALO_VR_RESOLUTION_SCALE", _environment_value, _platform_desktop,
 		"With display.vr, the eyes' resolution as a multiple of the runtime's\n"
-		"recommended one, 0.5 to 2.0. Taken up when the game starts." },
+		"recommended one, 0.5 to 2.0. Applied at once." },
+	{ "vr.refresh_rate", _config_real, "0.0", "HALO_VR_REFRESH_RATE", _environment_value, _platform_desktop,
+		"With display.vr, the frames a second asked of a headset whose runtime can\n"
+		"change them (XR_FB_display_refresh_rate): the nearest it has, at once. 0\n"
+		"leaves it to the runtime." },
+	{ "vr.visibility_mask", _config_boolean, "true", "HALO_VR_VISIBILITY_MASK", _environment_value, _platform_desktop,
+		"With display.vr, nothing is drawn where the runtime says the lenses show\n"
+		"nothing (XR_KHR_visibility_mask). Taken up when the session starts." },
 	{ "vr.image_rows", _config_string, "\"auto\"", "HALO_VR_IMAGE_ROWS", _environment_value, _platform_desktop,
 		"With display.vr, how the OpenXR runtime takes the rows of the images\n"
 		"the game gives it: \"bottom\" first, as OpenGL and OpenXR have them,\n"
@@ -437,6 +444,10 @@ static const struct config_setting config_settings[] =
 	{ "vr.grip_toggle", _config_boolean, "false", "HALO_VR_GRIP_TOGGLE", _environment_value, _platform_desktop,
 		"With vr.hands \"physical\", a press of the grip holds the weapon and\n"
 		"another lets go; false, the grip held holds it." },
+	{ "vr.reload_gesture", _config_boolean, "true", "HALO_VR_RELOAD_GESTURE", _environment_value, _platform_desktop,
+		"With display.vr and vr.hands \"physical\", the free hand's grip pressed\n"
+		"at the hip takes a magazine, and brought to the weapon, it reloads. The\n"
+		"button works too." },
 	{ "vr.throw_gesture", _config_boolean, "true", "HALO_VR_THROW_GESTURE", _environment_value, _platform_desktop,
 		"With display.vr, a grenade is thrown with the arm: its button (the\n"
 		"off trigger) held takes one, let go with the hand moving fast (1.5\n"
@@ -1404,6 +1415,13 @@ static const struct config_setting config_settings[] =
 		_platform_desktop,
 		"The simulated headset's frames 90 a second, as a runtime's, so that the\n"
 		"game's clock keeps time (a network game's client); else at once." },
+	{ "debug.vr_simulate_hidden", _config_boolean, "false", "HALO_VR_SIMULATE_HIDDEN", _environment_set_is_true,
+		_platform_desktop,
+		"The simulated headset's lenses hide the field past an ellipse inside it." },
+	{ "debug.vr_simulate_resolution", _config_string, "\"\"", "HALO_VR_SIMULATE_RESOLUTION", _environment_value,
+		_platform_desktop,
+		"FRAME:SCALE: vr.resolution_scale set at that simulated frame, as the menu\n"
+		"sets it." },
 	{ "debug.vr_simulate_yaw", _config_real, "0.0", "HALO_VR_SIMULATE_YAW", _environment_value, _platform_desktop,
 		"The simulated head's turn to the left, in degrees." },
 	{ "debug.vr_simulate_pitch", _config_real, "0.0", "HALO_VR_SIMULATE_PITCH", _environment_value,

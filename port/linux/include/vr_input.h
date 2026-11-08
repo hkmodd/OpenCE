@@ -101,6 +101,11 @@ struct vr_input_settings
 	int left_handed;
 	/* each hand's buttons' actions (vr_input_bindings_parse) */
 	unsigned char bindings[VR_ROLE_COUNT][VR_CONTROL_COUNT];
+	/* the free hand takes a magazine at the hip and brings it to the weapon
+	(vr.reload_gesture), and the weapon in the hand has one to take
+	(vr_view.c: not full, some left, not reloading) */
+	int reload_gesture;
+	int can_reload;
 	/* the off hand's trigger pressed at the helmet talks (audio.voice_chat
 	push to talk, with the gestures) */
 	int talk_gesture;
@@ -332,6 +337,11 @@ struct vr_input
 	the helmet still held (which then does nothing else) */
 	int talking;
 	int talk_at_helmet;
+	/* the free hand holds a magazine (taken at the hip, its grip held);
+	the press of the reload it became, and how many of each so far */
+	int magazine;
+	float reload_seconds;
+	unsigned long magazines_taken, reloads;
 	/* the move hand's clicks that switched a seat's view (the settings'
 	seat_switch), for vr_view.c to take */
 	unsigned long view_switches;
@@ -339,6 +349,10 @@ struct vr_input
 
 /* the pad of this frame's controllers; `menus` while a menu is up, and the
 seconds since the last frame */
+/* the rate of `rates` nearest `wanted`; 0 (no preference) for none wanted or
+none listed */
+float vr_nearest_refresh_rate(const float *rates, unsigned long count, float wanted);
+
 void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struct vr_input_settings const *settings,
 	int menus, float seconds, struct vr_pad *pad);
 

@@ -537,7 +537,7 @@ SCREENS["gamepad_setup/vr"] = {
          "Play in an OpenXR headset (Oculus, SteamVR,\nMonado). From the next start.", None),
         ("RESOLUTION:", "vr.resolution_scale",
          [("75%", "0.75"), ("100%", "1.0"), ("125%", "1.25"), ("150%", "1.5"), ("175%", "1.75"), ("200%", "2.0")],
-         "The eyes' pixels each way, against what the\nheadset's runtime asks. From the next start.", "vr"),
+         "The eyes' pixels each way, against what the\nheadset's runtime asks. Applied at once.", "vr"),
         ("AIM WITH:", "vr.aim", [("HAND", "hand"), ("HEAD", "head")],
          "On foot: the controller, the weapon held in it,\nor the head.", "vr"),
         ("WEAPON HAND:", "vr.left_handed", [("RIGHT", "false"), ("LEFT", "true")],
@@ -575,6 +575,8 @@ SCREENS["gamepad_setup/vr_body"] = {
          "PHYSICAL: hold the weapon by the grip, let go\nto put it back. GAME: always in the hand.", None),
         ("GRIP:", "vr.grip_toggle", [("HOLD", "false"), ("TOGGLE", "true")],
          "HOLD: the grip held holds the weapon. TOGGLE:\na press holds it, another lets go.", None),
+        ("RELOAD:", "vr.reload_gesture", [("BY HAND", "true"), ("BUTTON", "false")],
+         "BY HAND: grip at the hip with the free hand, bring\nthe magazine to the weapon. The button works too.", None),
         ("GRENADES:", "vr.throw_gesture", [("THROWN", "true"), ("BUTTON", "false")],
          "THROWN: hold the trigger, throw with the arm.\nBUTTON: the trigger throws at once.", None),
     ],
@@ -615,6 +617,9 @@ SCREENS["gamepad_setup/vr_view"] = {
          "The width of the panel of the menus, loading\nscreens and cutscenes on a screen.", None),
         ("MENU DISTANCE:", "vr.screen_distance", [("1.5 M", "1.5"), ("2 M", "2"), ("3 M", "3"), ("4 M", "4")],
          "How far ahead that panel is held, from where\nthe headset faces when it was last recentred.", None),
+        ("REFRESH RATE:", "vr.refresh_rate",
+         [("AUTOMATIC", "0.0"), ("72 HZ", "72.0"), ("80 HZ", "80.0"), ("90 HZ", "90.0"), ("120 HZ", "120.0")],
+         "The nearest the headset has, if its runtime can\nchange it. Applied at once.", None),
     ],
 }
 SCREENS["gamepad_setup"]["categories"] += [("VR HEADSET:", "gamepad_setup/vr", _vr_help, "desktop")]

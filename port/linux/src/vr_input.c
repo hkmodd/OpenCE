@@ -59,6 +59,14 @@ grenade in an empty one (thrown as below), and does nothing in one that
 holds the weapon too; the grips strike nothing, a punch of either hand
 does. With vr.grip_toggle a press of the grip holds, another lets go.
 
+The reload (vr.reload_gesture), with the hands as they hold. The free
+hand's grip pressed at the hip (VR_HIP_BELOW under the head, within
+VR_HIP_AROUND of it, away from the weapon and with nothing there for it to
+take) takes a magazine, if the weapon has one to take, and holds it while
+the grip is held. Brought to the weapon, where both hands would hold it, it
+presses the reload button, which any server takes as a player's own. The
+button itself works as ever.
+
 The throw (vr.throw_gesture). The grenade's button (the off trigger) held
 takes a grenade and presses nothing; let go with the hand moving faster
 than VR_THROW_SPEED it throws it, let go slowly it keeps it. The throw
@@ -170,6 +178,10 @@ more than twice it: one frame's jump is no flick */
 /* the head this far below standing crouches, and back above this rises */
 #define VR_CROUCH_DEPTH 0.30f
 #define VR_CROUCH_RISE 0.25f
+/* the hip: so far under the head at least (metres), so far from it at most,
+along the floor */
+#define VR_HIP_BELOW 0.45f
+#define VR_HIP_AROUND 0.60f
 
 static char const *const vr_binding_names[VR_BIND_COUNT] =
 {
@@ -498,6 +510,31 @@ static int vr_at_head(struct vr_frame const *frame, struct vr_hand const *hand)
 		vr_at_shoulder(frame, hand) < 0;
 }
 
+/* the hand at the hip */
+float vr_nearest_refresh_rate(const float *rates, unsigned long count, float wanted)
+{
+	float nearest = 0.0f;
+	unsigned long index;
+
+	if (!(wanted > 0.0f))
+		return 0.0f;
+	for (index = 0; index < count; index++)
+	{
+		if (!index || fabsf(rates[index] - wanted) < fabsf(nearest - wanted))
+			nearest = rates[index];
+	}
+	return nearest;
+}
+
+static int vr_at_hip(struct vr_frame const *frame, struct vr_hand const *hand)
+{
+	float x = hand->grip.position[0] - frame->head.position[0];
+	float z = hand->grip.position[2] - frame->head.position[2];
+
+	return hand->tracked && hand->grip.position[1] < frame->head.position[1] - VR_HIP_BELOW &&
+		x * x + z * z < VR_HIP_AROUND * VR_HIP_AROUND;
+}
+
 /* a grip's doing at a shoulder (VR_SHOULDER_*), for vr_view.c */
 static void vr_shoulder(struct vr_input *input, int kind, int side)
 {
@@ -505,6 +542,41 @@ static void vr_shoulder(struct vr_input *input, int kind, int side)
 	input->shoulder_side = side;
 	input->shoulder_hand = input->left_handed ? VR_HAND_LEFT : VR_HAND_RIGHT;
 	input->shoulder_grabs++;
+}
+
+/* the reload by hand (the head of this file): a magazine taken at the hip
+and brought to the weapon, or let go of on the way, which comes to nothing */
+static void vr_magazine(struct vr_input *input, struct vr_frame const *frame,
+	struct vr_input_settings const *settings)
+{
+	int main_index = input->left_handed ? VR_HAND_LEFT : VR_HAND_RIGHT;
+	int off_index = main_index == VR_HAND_LEFT ? VR_HAND_RIGHT : VR_HAND_LEFT;
+	struct vr_hand const *off = &frame->hand[off_index];
+	float apart;
+
+	if (!settings->reload_gesture || !settings->can_reload || !input->holding || input->off_holding ||
+		!off->tracked || !frame->hand[main_index].tracked || !(off->buttons & VR_BUTTON_GRIP))
+	{
+		input->magazine = 0;
+		return;
+	}
+	apart = vr_distance(off->grip.position, frame->hand[main_index].grip.position);
+	if (input->magazine)
+	{
+		if (apart < VR_SUPPORT_REACH || input->off_at_weapon)
+		{
+			input->magazine = 0;
+			input->reload_seconds = VR_PRESS_SECONDS;
+			input->reloads++;
+		}
+	}
+	else if ((off->buttons & ~input->held[off_index] & VR_BUTTON_GRIP) && apart > VR_SUPPORT_KEEP &&
+		!input->off_at_weapon && vr_at_hip(frame, off) && !settings->grab_reach[off_index] &&
+		!settings->pull_target[off_index])
+	{
+		input->magazine = 1;
+		input->magazines_taken++;
+	}
 }
 
 /* each hand's velocity of late, from its places frame to frame, smoothed
@@ -841,7 +913,14 @@ void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struc
 		settings->aim_pitch, kept_orientation) == VR_HELD_SUPPORT;
 	vr_hand_velocities(input, frame, menus ? 0.0f : seconds);
 	if (input->physical && !menus)
+	{
 		vr_physical_hands(input, frame, settings);
+		vr_magazine(input, frame, settings);
+	}
+	else
+	{
+		input->magazine = 0;
+	}
 	vr_pulls(input, frame, settings, menus, seconds);
 	if (!settings->dual)
 		input->off_holding = 0;
@@ -919,7 +998,7 @@ void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struc
 			}
 		}
 		input->snapped = 0;
-		input->melee_seconds = input->tap_seconds = input->throw_seconds = 0.0f;
+		input->melee_seconds = input->tap_seconds = input->throw_seconds = input->reload_seconds = 0.0f;
 		input->room_walking = 0;
 		input->grabbing[VR_HAND_LEFT] = input->grabbing[VR_HAND_RIGHT] = 0;
 		input->talk_at_helmet = 0;
@@ -1127,7 +1206,7 @@ void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struc
 			held or just thrown) */
 			int main_punched = vr_punched(input, frame, main_hand, input->main_position, &input->main_position_valid,
 				seconds);
-			int off_punched = input->physical && !input->supporting &&
+			int off_punched = input->physical && !input->supporting && !input->magazine &&
 				vr_punched(input, frame, off_hand, input->off_position, &input->off_position_valid, seconds);
 
 			if ((main_punched || off_punched) && input->grenade_calm <= 0.0f)
@@ -1213,6 +1292,11 @@ void vr_input_update(struct vr_input *input, struct vr_frame const *frame, struc
 		{
 			vr_bind(pad, settings->bindings[VR_ROLE_OFF][VR_CONTROL_GRIP], 1.0f);
 			input->tap_seconds -= seconds;
+		}
+		if (input->reload_seconds > 0.0f)
+		{
+			vr_bind(pad, VR_BIND_ACTION, 1.0f);
+			input->reload_seconds -= seconds;
 		}
 		if (input->throw_seconds > 0.0f)
 		{
@@ -1413,6 +1497,7 @@ static void vr_input_bindings_text(char *text, size_t size)
 		snprintf(text + used, size - used, "%s", config_string("vr.bindings"));
 }
 
+static unsigned long vr_input_magazines, vr_input_reloads;
 /* vr.bindings, as it was last read */
 static unsigned char vr_input_bindings[VR_ROLE_COUNT][VR_CONTROL_COUNT];
 static unsigned long vr_input_bindings_read_at;
@@ -1445,6 +1530,8 @@ static void vr_input_settings_read(struct vr_input_settings *settings)
 	settings->snap_angle = snap > 0.0 && snap <= 180.0 ? (float)(snap * 0.017453292519943) : 0.0f;
 	settings->turn_rate = (float)((rate > 0.0 && rate <= 720.0 ? rate : 120.0) * 0.017453292519943);
 	settings->gestures = config_boolean("vr.gestures");
+	settings->reload_gesture = config_boolean("vr.reload_gesture");
+	settings->can_reload = vr_render_can_reload();
 	settings->talk_gesture = settings->gestures && !strcmp(config_string("audio.voice_chat"), "push_to_talk");
 	settings->move_turn = vr_input_move_turn;
 	settings->seat_stick = vr_render_seat_stick();
@@ -1508,7 +1595,22 @@ int vr_input_gamepad(struct vr_pad *pad, int menus)
 			platform_log("vr: both hands on the pistol, %.0f cm apart", (double)(100.0f *
 				vr_distance(frame->hand[VR_HAND_LEFT].grip.position, frame->hand[VR_HAND_RIGHT].grip.position)));
 		}
-	}	/* (the hands swapped the weapon: felt in both) */
+	}
+	/* (a magazine taken: felt in the hand; brought to the weapon: in both) */
+	if (vr_input_state.magazines_taken != vr_input_magazines)
+	{
+		vr_input_magazines = vr_input_state.magazines_taken;
+		vr_haptic(vr_input_state.left_handed ? VR_HAND_RIGHT : VR_HAND_LEFT, 0.25f, 0.03f);
+		platform_log("vr: a magazine in the free hand");
+	}
+	if (vr_input_state.reloads != vr_input_reloads)
+	{
+		vr_input_reloads = vr_input_state.reloads;
+		vr_haptic(VR_HAND_LEFT, 0.4f, 0.05f);
+		vr_haptic(VR_HAND_RIGHT, 0.4f, 0.05f);
+		platform_log("vr: the magazine goes in: the reload");
+	}
+	/* (the hands swapped the weapon: felt in both) */
 	if (vr_input_state.swaps != vr_input_swaps)
 	{
 		vr_input_swaps = vr_input_state.swaps;

@@ -2878,6 +2878,8 @@ int halo_scoreboard_pointer_update(int offered, struct halo_ui_pointer *pointer)
 /* the triangles' winding turned over: the headset's first-person weapon
 drawn mirrored, in the left hand (halo_vr_mirror_winding) */
 static int vr_mirror_winding;
+/* (halo_vr_hidden_area) */
+static int vr_hidden_eye = -1;
 /* both faces of the triangles drawn: the headset's first-person arms, seen
 from where the stock view never sees them (halo_vr_two_sided) */
 static int vr_two_sided;
@@ -7210,6 +7212,21 @@ void WINAPI D3DDevice_Clear(DWORD count, CONST D3DRECT *rectangles, DWORD flags,
 		glClear(mask);
 		glDisable(GL_SCISSOR_TEST);
 		clear_state_forget();
+#ifndef HALO_GLES
+		/* an eye's picture starts: what its lens hides goes first, nearest */
+		if (vr_hidden_eye >= 0 && (mask & GL_DEPTH_BUFFER_BIT) && device.render_target &&
+			device.render_target->Data == device.back_buffer.Data)
+		{
+			if (vr_hidden_draw(vr_hidden_eye, x0, y0,
+				target_pixel((float)(device.viewport.X + device.viewport.Width), 0) - x0,
+				target_pixel((float)(device.viewport.Y + device.viewport.Height), 1) - y0, xgpu_reversed_depth ? 1.0f : 0.0f))
+			{
+				glBindVertexArray(device.vertex_array);
+				xgpu_gl_state_invalidate();
+			}
+			vr_hidden_eye = -1;
+		}
+#endif
 		return;
 	}
 	glEnable(GL_SCISSOR_TEST);
@@ -7804,6 +7821,13 @@ void halo_vr_mirror_winding(int mirrored)
 void halo_vr_two_sided(int two_sided)
 {
 	vr_two_sided = two_sided != 0;
+}
+
+/* the eye whose picture starts with its next clear of the depth, or -1
+(port/linux/game/vr_view.c) */
+void halo_vr_hidden_area(int eye)
+{
+	vr_hidden_eye = eye;
 }
 
 /* the headset's HUD pass starts on a clear ground (port/linux/game/vr_view.c) */

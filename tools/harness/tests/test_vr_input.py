@@ -12,8 +12,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from harness import CHECK_FAILED, build, mutated, read, run
 
 CASES = ["gameplay", "move", "menus", "menu-button", "turn", "seat", "drive", "room", "gestures", "hands", "ray",
-         "bindings", "swap", "throw", "grab", "bare", "physical", "dual", "places", "pull", "layout", "seat-secondary", "handles", "seat-switch", "talk"]
+         "bindings", "swap", "throw", "grab", "bare", "physical", "dual", "places", "pull", "refresh-rate", "layout", "seat-secondary", "handles", "seat-switch", "talk", "reload"]
 CONTROLS = {
+    "rate-first": (("if (!index || fabsf(rates[index] - wanted) < fabsf(nearest - wanted))", "if (!index)"), "refresh-rate"),
+    "rate-always-asks": (("\tif (!(wanted > 0.0f))\n\t\treturn 0.0f;\n", ""), "refresh-rate"),
+    "reload-anywhere": (("!input->off_at_weapon && vr_at_hip(frame, off) &&", "!input->off_at_weapon &&"), "reload"),
+    "reload-not-brought": (("if (apart < VR_SUPPORT_REACH || input->off_at_weapon)", "if (0)"), "reload"),
+    "reload-no-press": (("\t\t\tvr_bind(pad, VR_BIND_ACTION, 1.0f);\n\t\t\tinput->reload_seconds -= seconds;", "\t\t\tinput->reload_seconds -= seconds;"), "reload"),
+    "reload-never-ends": (("\t\t\tinput->reload_seconds -= seconds;\n", ""), "reload"),
+    "reload-kept-let-go": (("!off->tracked || !frame->hand[main_index].tracked || !(off->buttons & VR_BUTTON_GRIP))", "!off->tracked || !frame->hand[main_index].tracked)"), "reload"),
+    "reload-nothing-to-take": (("if (!settings->reload_gesture || !settings->can_reload ||", "if (!settings->reload_gesture ||"), "reload"),
+    "reload-over-a-weapon": (("!settings->grab_reach[off_index] &&\n", "\n"), "reload"),
+    "reload-setting-ignored": (("if (!settings->reload_gesture || !settings->can_reload ||", "if (!settings->can_reload ||"), "reload"),
     "talk-wind-up": (("(off_pressed & VR_BUTTON_TRIGGER) && !input->off_holding && vr_at_head(frame, off_hand)",
                       "(off_hand->buttons & VR_BUTTON_TRIGGER) && !input->off_holding && vr_at_head(frame, off_hand)"), "talk"),
     "talk-grenade-too": (("\t\t\thand_bindings[off_index][VR_CONTROL_TRIGGER] = VR_BIND_NONE;\n", ""), "talk"),
@@ -52,7 +62,7 @@ CONTROLS = {
     "places-off-take-gripped": (("input->off_gripped = vr_gripping(input, input->left_handed ? VR_HAND_RIGHT : VR_HAND_LEFT);",
                                  "input->off_gripped = 1;"), "places"),
     "places-taken-not-gripped": (("\t\tinput->gripped = vr_gripping(input, hand);\n", ""), "places"),
-    "left-handed-ignored": (("main_index = input->left_handed ? VR_HAND_LEFT : VR_HAND_RIGHT;",
+    "left-handed-ignored": (("\tmain_index = input->left_handed ? VR_HAND_LEFT : VR_HAND_RIGHT;",
                              "main_index = VR_HAND_RIGHT;"), "gameplay"),
     "grenade-on-fire": (("vr_bind_hand(pad, off_hand, hand_bindings[off_index],",
                          "vr_bind_hand(pad, main_hand, hand_bindings[off_index],"), "gameplay"),

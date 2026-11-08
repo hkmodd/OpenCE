@@ -49,6 +49,25 @@ The session draws on the game's own context with `XR_KHR_opengl_enable`
 Virtual Desktop's runtimes give Direct3D and Vulkan images only; they could
 be served later with `XR_KHR_D3D11_enable` and `WGL_NV_DX_interop2`.
 
+Two extensions are used where the runtime lists them, and nothing changes
+where it does not:
+
+- `XR_KHR_visibility_mask` (`vr.visibility_mask`): each eye's picture starts
+  with the triangles its lens hides, black and at the nearest depth, right
+  after the depth is cleared (`D3DDevice_Clear`, `vr_hidden_draw`), so nothing
+  behind them is shaded. A clear of the depth later in the picture, the fog's,
+  gives that part of the saving back and changes nothing else. A mask with an
+  index out of range or a value that is not finite is not drawn.
+- `XR_FB_display_refresh_rate` (`vr.refresh_rate`): the rates the headset has
+  go in the log, and the nearest to the setting is asked for at the session's
+  start and whenever it changes. It is a request; the runtime's event says what
+  came of it. A headset with one rate, as the Rift CV1, does not list others.
+
+`vr.resolution_scale` applies at once: between frames, the eyes' new images
+are made before the old ones are let go, so a runtime that cannot make them
+leaves the game as it was, and the game's targets follow at their next look at
+the size (`halo_screen_commit`).
+
 ## The world's size
 
 What sets the size the world is seen at, each measured or derived:
@@ -327,6 +346,13 @@ What sets the size the world is seen at, each measured or derived:
   and the square at its middle goes over that image; so the middle of the
   lens is where the shot goes. The eyes keep their field, and the HUD
   leaves out those elements (`hud_weapon.c`).
+- The reload by hand (`vr.reload_gesture`): with the hands as they hold,
+  the free hand's grip pressed at the hip, 45 cm under the head and away
+  from the weapon, takes a magazine if the weapon has one to take
+  (`vr_render_can_reload`), and brought to the weapon, where both hands
+  would hold it, it presses the reload button. It is a press of the button
+  to any server, so no message or rule goes with it, and the game's own
+  animation plays. The hand then holds the weapon, if the grip stays held.
 - A vehicle's seat is seen from it (`vr.vehicle_view`, astromaddie's
   seat view): `director_choose_game_perspective` takes the first person's
   camera there for the local view only (`director_camera_deterministic`,
@@ -532,26 +558,8 @@ the shoulders as before.
 
 ## To come
 
-Each step is a pull request of its own, with harness tests and the pixel
-check of the flat picture:
-
-1. The runtime, the stereo view, the HUD's layer and the window's mirror.
-2. The controllers, the gun held in the hand, the floating crosshair, the
-   picture-in-picture scope, the gestures (melee, flashlight, crouch,
-   holsters, two hands), haptics, the menus' pointer and the immersive
-   menus.
-3. Swapping hands, rebinding.
-4. Vehicles seen from the seat, aimed by the hand and driven by the
-   stick, immersive cinematics (moistman's: the camera anchored at each
-   cut, with a blink), and the camera kept right across seats,
-   checkpoints and loads (with 2 and 3, this branch).
-5. Other players' heads and hands online. The pose is only drawn: hit boxes,
-   shots and movement do not change. A VR player sends its head and hands
-   relative to its unit, in millimetres and smallest-three quaternions
-   (about 30 bytes a tick); the host passes them on only to players who can
-   see that player, and each machine poses the arms with two-bone IK on the
-   stock biped for the VR players near it. Everything received is checked
-   (finite, within reach, the sender's unit, rate, sequence), and
-   `HALO_PORT_NETWORK_VERSION` is raised.
-6. Comfort: height calibration (snap and smooth turning, the vignette, the
-   eyes at the player's height and the settings screen are in this branch).
+- The hands' fit by weapon, should a weapon be found to aim off in the headset:
+  a trim of the aim, by the player, per weapon.
+- A wrist that follows a vehicle's controls as the hand holds them; the wrist
+  is the controller's for now.
+- Quest standalone: the desktop builds come first.
