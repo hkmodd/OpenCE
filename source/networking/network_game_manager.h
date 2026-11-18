@@ -54,10 +54,14 @@ enum
 	/* the host is a dedicated server: its loading zones ask for most of the
 	players, not the host's (network_coop_host_dedicated) */
 	_network_game_cooperative_dedicated_bit = 2,
+	/* port: players standing on a vehicle are carried by it: the host's
+	decision for the running game, made as it starts (network_coop.c's
+	network_game_port_vehicle_riding_start) */
+	_network_game_cooperative_vehicle_riding_bit = 3,
 	/* the host's game is a VR server (network.vr_rules: the headset's players
 	play by its hands' rules, port/linux/game/vr_view.c's vr_rules_active),
 	in any game, co-op's or not */
-	_network_game_port_vr_rules_bit = 3,
+	_network_game_port_vr_rules_bit = 4,
 };
 
 struct network_game
@@ -86,6 +90,8 @@ struct network_game
 	/* port: the gametype's PC options (game_engine.h) */
 	struct game_variant_options variant_options;
 	struct network_game_local_data local_data;
+	byte mcc_content_sha256[32]; /* port: MCC-only content identity; zero for Xbox/CE */
+	byte mcc_metadata_sha256[32]; /* port: required MCC package metadata; optional art is separate */
 };
 
 /* ---------- prototypes/EXAMPLE.C */

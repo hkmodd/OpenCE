@@ -49,7 +49,7 @@ machines, 16 players) are 0x226 and 0x434. */
 /* (then the gametype's PC options, struct game_variant_options: 0x2C bytes) */
 #define HALO_PORT_NETWORK_GAME_VARIANT_OPTIONS_OFFSET (HALO_PORT_NETWORK_GAME_PLAYERS_END + 0xA)
 #define HALO_PORT_NETWORK_GAME_LOCAL_DATA_OFFSET (HALO_PORT_NETWORK_GAME_PLAYERS_END + 0x36)
-#define HALO_PORT_NETWORK_GAME_SIZE (HALO_PORT_NETWORK_GAME_PLAYERS_END + 0x3A)
+#define HALO_PORT_NETWORK_GAME_SIZE (HALO_PORT_NETWORK_GAME_PLAYERS_END + 0x3A + 64) /* MCC content and metadata SHA-256 */
 
 /* ---------- system link protocol
 
@@ -66,8 +66,18 @@ is newer (network_client_manager.c). A host advertises it, with its netcode,
 in its game's advertisement's reserved bytes (network_server_message_handler.c),
 which hosts built before there was a version send as zeros: version 0.
 Raise it with any change to what the machines send each other. */
-#define HALO_PORT_NETWORK_VERSION 41
-/* ... a VR server's (network.vr_rules: the VR branch's builds) is advertised
+/* Version 42 integrates MCC admission/sharing and shared checkpoint, boat,
+clock and scripted-pose agreement. Every map family uses the same version.
+Version 43: an MCC map's damage impulses follow the damage's direction, a
+vehicle on its side throws its riders, chat marks the host's lines, a co-op
+cutscene's sound carries how far the host has played it, and a machine's
+MCC conversion holds a round's start out of an allowance; a player standing
+on a vehicle rides it (a unit's state carries the deck it stands on, the map's
+riding choice has its own message: port/linux/NETCODE.md).
+Version 44: MCC package offers are automatic under Map Sharing, and a joiner
+may satisfy omitted base resources with its own validated local files. */
+#define HALO_PORT_NETWORK_VERSION 44
+/* A VR server's (network.vr_rules: the VR branch's builds) is advertised
 and listed with this bit set in its version, which every build that
 compares versions alone takes for a newer one and does not join; and with
 the VR extras' own revision (HALO_PORT_NETWORK_VR_REVISION), raised with any
@@ -75,7 +85,7 @@ change to what a VR server's machines send each other alone, which a VR
 build must match to join one. A host that is no VR server advertises
 HALO_PORT_NETWORK_VERSION alone and plays with any build of it. */
 #define HALO_PORT_NETWORK_VR_SERVER_BIT 0x8000
-#define HALO_PORT_NETWORK_VR_REVISION 5
+#define HALO_PORT_NETWORK_VR_REVISION 6
 /* ... the advertisement's reserved bytes: the version (a little-endian word),
 then flags, then the game's kind (an OpenCE gametype's mode, and Hardcore:
 port/linux/game/game_modes.h's game_modes_kind), for the server browser, then
@@ -112,7 +122,7 @@ header included; the per-tick update of 128 players is 3,857 */
 update of 128 players decodes to 0x1010 bytes */
 #define HALO_PORT_NETWORK_PACKET_SIZE 0x1100
 
-/* the game settings record (HALO_PORT_NETWORK_GAME_SIZE, 13,136 bytes at 128
+/* the game settings record (HALO_PORT_NETWORK_GAME_SIZE, 13,200 bytes at 128
 machines and players) does not fit one message; it is sent in pieces of
 this many bytes (4 pieces), each 3,594 bytes on the wire */
 #define HALO_PORT_NETWORK_GAME_SETTINGS_FRAGMENT_SIZE 0xE00

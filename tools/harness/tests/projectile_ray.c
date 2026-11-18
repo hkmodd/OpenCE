@@ -66,6 +66,11 @@ static void unit_adjust_projectile_ray(long unit_index, real_point3d *origin, re
 static boolean dual_wield_projectile_ray(long weapon_index, real_point3d *origin, real_vector3d *forward)
 {(void)weapon_index; (void)origin; (void)forward; return FALSE;}
 static boolean vr_render_shot_from_hand(long unit_index){(void)unit_index; return FALSE;}
+/* (not an MCC map: the game's own ray) */
+static boolean mcc_projectile_ray(long weapon_index, long owner, short trigger_index, boolean firing,
+	real_point3d *origin, real_vector3d *forward, real *velocity, long *target_index)
+{(void)weapon_index; (void)owner; (void)trigger_index; (void)firing; (void)origin; (void)forward; (void)velocity;
+	(void)target_index; return FALSE;}
 static long previewed;
 static void player_aim_projectile_preview(long player_index, real_point3d *origin, real_vector3d *forward)
 {(void)origin; (void)forward; previewed = player_index;}
