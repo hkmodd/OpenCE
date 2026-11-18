@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from harness import CHECK_FAILED, build, function, mutated, read, run, structure
+from harness import CHECK_FAILED, build, enum_with, function, mutated, read, run, structure
 
 CASES = ['melee', 'weapon', 'graph', 'within a tick', 'gap', 'not a number', 'half turn', 'large turn']
 CONTROLS = [
@@ -32,6 +32,7 @@ def generated(fault=None):
     matrices = read('source/math/matrix_math.c')
     config = '\n'.join([
         '#define MAXIMUM_LOCAL_PLAYERS 4',
+        enum_with(read('source/interface/first_person_weapons.h'), 'NUMBER_OF_FIRST_PERSON_WEAPONS'),
         re.search(r'^#define MAXIMUM_INTERPOLATED_NODES .*', source, re.M).group(),
         re.search(r'^#define FIRST_PERSON_HALF_TURN_COSINE .*', source, re.M).group(),
         re.search(r'^#define REAL_MAX .*', maths, re.M).group(),
@@ -44,7 +45,7 @@ def generated(fault=None):
           'matrix4x3_multiply']] +
         [structure(source, name) for name in
          ['interpolation_quaternion', 'interpolation_rotation', 'interpolated_first_person']] +
-        ['static struct interpolated_first_person interpolated_first_person[MAXIMUM_LOCAL_PLAYERS];'] +
+        ['static struct interpolated_first_person interpolated_first_person[NUMBER_OF_FIRST_PERSON_WEAPONS];'] +
         [function(source, name) for name in
          ['lerp', 'point_lerp', 'vector_length', 'basis_is_rotation', 'quaternion_from_basis',
           'basis_from_quaternion', 'rotation_from_matrix', 'matrix_blend_rotations', 'distance_squared',

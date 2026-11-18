@@ -108,8 +108,9 @@ def test_negative_control(control):
 
 
 def hands_hook(source):
-    """Keep the actual hook between the weapon draw and the hands draw."""
-    draw = function(source, "first_person_weapon_draw")
+    """Keep the actual hook between the weapon draw and the hands draw (first_person_weapon_draw's, for either
+    hand's weapon)."""
+    draw = function(source, "first_person_weapon_draw_weapon")
     weapon, hands = list(re.finditer(r"\brender_model\(", draw))
     call = re.search(r"viewmodel_shield_apply\(\s*render\.local_player_index,\s*unit_index,\s*"
                      r"first_person_interface->hands\.index,\s*model_node_matrices,\s*unit_functions,\s*&model_effect\);", draw)
